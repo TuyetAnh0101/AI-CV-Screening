@@ -273,6 +273,10 @@ ServiceFabricBackup/
 *.mdf
 *.ldf
 *.ndf
+*.bak
+
+# SmartCv: file CV người dùng tải lên (không đưa CV thật lên GitHub)
+Uploads/
 
 # Business Intelligence projects
 *.rdl.data

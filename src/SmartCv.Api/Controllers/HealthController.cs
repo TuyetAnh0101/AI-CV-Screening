@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCv.Infrastructure.Gemini;
-using SmartCv.Infrastructure.Persistence;
+using SmartCv.Infrastructure.Data;
 
 namespace SmartCv.Api.Controllers;
 

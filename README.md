@@ -1,82 +1,91 @@
 <div align="center">
 
-# 🤖 AI CV SCREENING
+# 🤖 SmartCv – AI CV Screening
 
 **Hệ thống sàng lọc và xếp hạng CV ứng dụng trí tuệ nhân tạo**
 
-Quản lý hồ sơ · Đánh giá ứng viên · Xếp hạng theo vị trí · So sánh phiên bản prompt
+Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị trí · So sánh phiên bản prompt
 
-![.NET](https://img.shields.io/badge/.NET-10_LTS-512BD4?logo=dotnet&logoColor=white)
-![C#](https://img.shields.io/badge/C%23-ASP.NET_Core-239120?logo=csharp&logoColor=white)
-![SQL Server](https://img.shields.io/badge/SQL_Server-EF_Core-CC2927?logo=microsoftsqlserver&logoColor=white)
-![Blazor](https://img.shields.io/badge/UI-Blazor-5C2D91?logo=blazor&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-Web_API-239120?logo=dotnet&logoColor=white)
+![EF Core](https://img.shields.io/badge/EF_Core-10.0-512BD4?logo=dotnet&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL_Server-SmartCvDb-CC2927?logo=microsoftsqlserver&logoColor=white)
 ![Gemini](https://img.shields.io/badge/AI-Google_Gemini-4285F4?logo=googlegemini&logoColor=white)
-![Status](https://img.shields.io/badge/trạng_thái-đang_phát_triển-orange)
-
-[Chức năng](#chuc-nang) · [Công nghệ](#cong-nghe) · [Cài đặt](#cai-dat) · [Chạy dự án](#chay-du-an) · [Đóng góp](#github)
+![Status](https://img.shields.io/badge/trạng_thái-đã_xong_A2-orange)
 
 </div>
 
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại:** Backend đã có solution, cấu hình kết nối SQL Server, cấu hình Gemini qua User Secrets và hai API kiểm tra kết nối. Các chức năng nghiệp vụ còn lại trong tài liệu này được mô tả **theo thiết kế**, chưa có nghĩa là đã lập trình xong.
+> **Trạng thái hiện tại (sau A2):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate` và dữ liệu mẫu**. Các chức năng nghiệp vụ (tải CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
-1. [Tổng quan](#tong-quan)
-2. [Chức năng chính](#chuc-nang)
-3. [Cách chấm điểm và đo độ chính xác](#cham-diem)
+1. [Giới thiệu](#gioi-thieu)
+2. [Mục tiêu và phạm vi](#muc-tieu)
+3. [Chức năng](#chuc-nang)
 4. [Công nghệ sử dụng](#cong-nghe)
 5. [Kiến trúc và cấu trúc thư mục](#kien-truc)
-6. [Dữ liệu và lưu trữ CV](#du-lieu)
-7. [Danh sách API](#api)
+6. [Cơ sở dữ liệu](#co-so-du-lieu)
+7. [Quy trình xử lý CV và chấm điểm](#cham-diem)
 8. [Cài đặt môi trường](#cai-dat)
-9. [Cấu hình SQL Server và Gemini](#cau-hinh)
-10. [Build, chạy và kiểm thử](#chay-du-an)
-11. [Quy trình làm việc với GitHub](#github)
-12. [Phân công công việc](#phan-cong)
-13. [Lưu ý và xử lý lỗi thường gặp](#loi-thuong-gap)
+9. [Cấu hình SQL Server và User Secrets](#cau-hinh)
+10. [Tạo database và nạp dữ liệu mẫu](#database)
+11. [Build, chạy và kiểm thử](#chay-du-an)
+12. [Danh sách API](#api)
+13. [Kết quả nghiệm thu A2](#nghiem-thu-a2)
+14. [Lộ trình phát triển](#lo-trinh)
+15. [Quy trình làm việc với Git](#git)
+16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
 
 ---
 
-<a id="tong-quan"></a>
+<a id="gioi-thieu"></a>
 
-## 1. 🎯 Tổng quan
+## 1. 🎯 Giới thiệu
 
-**AI CV Screening** hỗ trợ bộ phận nhân sự khi phải xử lý nhiều hồ sơ ứng viên. Hệ thống quản lý CV và vị trí tuyển dụng, chấm mức độ phù hợp theo tiêu chí của từng vị trí, xếp hạng ứng viên để HR tham khảo, đồng thời đo được độ chính xác của từng phiên bản system prompt.
+**SmartCv** hỗ trợ bộ phận nhân sự (HR) khi phải xử lý nhiều hồ sơ ứng viên. Hệ thống quản lý CV và vị trí tuyển dụng, chấm mức độ phù hợp theo tiêu chí của từng vị trí bằng cách kết hợp **so khớp từ khóa** và **Google Gemini**, xếp hạng ứng viên để HR tham khảo, đồng thời đo được độ chính xác của từng phiên bản system prompt so với nhãn do HR gán.
+
+Đây là dự án nhóm sinh viên, phát triển theo từng mã công việc (A – Backend/AI, B – Giao diện/kiểm thử, C – Phối hợp).
 
 > [!IMPORTANT]
 > AI chỉ **hỗ trợ** sàng lọc. Quyết định tuyển dụng cuối cùng thuộc về **HR**.
 
-### Luồng nghiệp vụ
+---
 
-```mermaid
-flowchart LR
-    A[HR chọn vị trí<br/>tuyển dụng] --> B[Tải lên<br/>một hoặc nhiều CV]
-    B --> C[Gắn CV<br/>với job]
-    C --> D[Trích xuất nội dung<br/>PdfPig / OCR]
-    D --> E[Chấm điểm<br/>Keyword + Gemini]
-    E --> F[Bảng xếp hạng<br/>và chi tiết CV]
-    F --> G[HR ra quyết định]
-```
+<a id="muc-tieu"></a>
 
-1. HR chọn vị trí tuyển dụng. Giai đoạn 1 dùng 5 job nhập sẵn; giai đoạn 2 có trang quản lý job.
-2. HR tải lên một hoặc nhiều CV.
-3. HR gắn CV với vị trí phù hợp. Một CV có thể gắn với nhiều vị trí.
-4. Hệ thống trích xuất nội dung, sau đó chấm điểm dưới nền bằng từ khóa kết hợp Gemini API.
-5. HR xem bảng xếp hạng và chi tiết đánh giá, rồi tự đưa ra quyết định.
-6. HR gán nhãn Đạt/Không đạt cho một bộ CV để so sánh chất lượng giữa các phiên bản prompt.
+## 2. 🧭 Mục tiêu và phạm vi
+
+**Mục tiêu**
+
+- Giảm thời gian đọc CV thủ công bằng cách chấm điểm và xếp hạng tự động theo từng vị trí.
+- Cho HR thấy lý do của từng điểm số: kỹ năng đạt, kỹ năng thiếu, nhận định của AI.
+- Đo và so sánh chất lượng các phiên bản prompt bằng tỷ lệ đúng so với nhãn HR.
+
+**Phạm vi giai đoạn 1**
+
+- Ba trang chính: **Tải CV**, **Kết quả**, **System prompt**.
+- Định dạng CV: PDF (có chữ hoặc scan) và ảnh PNG, JPG/JPEG.
+- Dùng 5 vị trí tuyển dụng nhập sẵn; trang quản lý job thuộc giai đoạn 2.
+
+**Ngoài phạm vi giai đoạn 1:** đăng nhập/phân quyền, xuất báo cáo, phân cụm CV, triển khai lên máy chủ (xem [Giai đoạn 2](#lo-trinh)).
 
 ---
 
 <a id="chuc-nang"></a>
 
-## 2. ✨ Chức năng chính
+## 3. ✨ Chức năng
 
-> Các chức năng dưới đây mô tả phạm vi sản phẩm. Phần nào đã lập trình xong được ghi ở mục [Phân công](#phan-cong).
+### 3.1. ✅ Đã triển khai
 
-### Giai đoạn 1: ba trang chính
+| Mã | Nội dung |
+|---|---|
+| A1 | Solution .NET 10 gồm 4 project; kết nối SQL Server; cấu hình Gemini qua User Secrets, kiểm tra cấu hình khi khởi động; 2 API kiểm tra kết nối |
+| A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql`, dữ liệu mẫu `seed.sql` (368 dòng) |
+
+### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
 | Trang | Chức năng |
 |---|---|
@@ -84,7 +93,7 @@ flowchart LR
 | 📊 **Kết quả** | Lọc theo job, xem bảng xếp hạng có màu theo mức đánh giá. Xem chi tiết từng CV: kỹ năng đạt, kỹ năng thiếu, nhận định của AI. Hiển thị trạng thái lỗi và biểu đồ số CV theo mức. |
 | 🧠 **System prompt** | Sửa prompt và lưu thành phiên bản mới (không ghi đè bản cũ). Xem lịch sử, kích hoạt một phiên bản, chạy đánh giá, so sánh tỷ lệ đúng giữa các phiên bản và xem những CV mà AI đánh giá khác HR. |
 
-### Giai đoạn 2: các trang mở rộng (đề xuất, cần chốt với quản lý)
+### 3.3. 💡 Đề xuất – giai đoạn 2 (cần chốt với quản lý)
 
 | Mã | Trang / phần | Chức năng |
 |---|---|---|
@@ -100,64 +109,26 @@ flowchart LR
 
 ---
 
-<a id="cham-diem"></a>
-
-## 3. 🧮 Cách chấm điểm và đo độ chính xác
-
-### Điểm cuối
-
-```text
-FinalScore = 30% × KeywordScore + 70% × AiScore
-```
-
-Nếu gọi AI bị lỗi, hệ thống ghi `ScoreSource = KeywordOnly` và **hiển thị rõ** điều này trên giao diện, không âm thầm dùng mỗi điểm keyword.
-
-### Mức đánh giá
-
-| Điểm cuối | Mức đánh giá |
-|:---:|---|
-| ≥ 85 | 🟢 **Rất phù hợp** |
-| 70 – < 85 | 🔵 **Phù hợp** |
-| 55 – < 70 | 🟡 **Tiềm năng** |
-| < 55 | 🔴 **Chưa phù hợp** |
-
-**Ngưỡng Đạt** mặc định là `FinalScore ≥ 70`. Ngưỡng được lưu riêng cho từng lượt chạy.
-
-### Độ chính xác của prompt (so với nhãn HR)
-
-```text
-Tỷ lệ đúng (%) = Số CV mà AI kết luận Đạt/Không đạt giống HR / Tổng số CV có nhãn × 100
-```
-
-Ví dụ: với 50 CV có nhãn, prompt A đúng 35 CV (**70%**), prompt B đúng 40 CV (**80%**).
-
-Ngoài tỷ lệ đúng, hệ thống báo thêm hai chỉ số:
-
-- **Bỏ sót**: HR đánh giá Đạt nhưng AI đánh giá Không đạt.
-- **Chọn nhầm**: HR đánh giá Không đạt nhưng AI đánh giá Đạt.
-
-> [!TIP]
-> Để so sánh công bằng, chỉ đổi **nội dung prompt**. Giữ nguyên bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Chỉ số này đo mức trùng khớp với nhãn HR; nó không phải thước đo duy nhất về chất lượng tuyển dụng.
-
----
-
 <a id="cong-nghe"></a>
 
 ## 4. 🧰 Công nghệ sử dụng
 
-| Thành phần | Công nghệ | Trạng thái |
+Phiên bản lấy theo các file `.csproj` và `global.json` hiện tại.
+
+| Thành phần | Công nghệ / package | Trạng thái |
 |---|---|---|
-| Backend | C#, ASP.NET Core Web API (.NET 10 LTS) | ✅ Đã khởi tạo |
-| Truy cập dữ liệu | Entity Framework Core, SQL Server Provider | ✅ Đã cấu hình kết nối |
-| Cơ sở dữ liệu | Microsoft SQL Server (`SmartCvDb`) | ✅ Đã kết nối · ⏳ Bảng tạo ở A2 |
-| AI | Google Gemini API | ✅ Đã cấu hình, có API kiểm tra |
-| Giao diện | Blazor (Razor, HTML, CSS) | ⏳ Tạo ở B2 |
-| Đọc PDF | PdfPig | ⏳ Dự kiến (A7) |
-| OCR | Tesseract cho .NET (eng + vie) | ⏳ Dự kiến (A7) |
-| Chạy nền | BackgroundService hoặc Hangfire | ⏳ Dự kiến (A11) |
-| Biểu đồ | Chart.js | ⏳ Dự kiến (B11) |
-| Kiểm thử | xUnit | ✅ Đã có project |
-| Quản lý mã nguồn | Git, GitHub (nhánh + Pull Request) | ✅ Đang áp dụng |
+| Nền tảng | .NET SDK 10 (`global.json`: `10.0.xxx`, `rollForward: latestFeature`) | ✅ |
+| Backend | ASP.NET Core Web API (`net10.0`), `Microsoft.AspNetCore.OpenApi` 10.0.14 | ✅ |
+| Truy cập dữ liệu | `Microsoft.EntityFrameworkCore.SqlServer` 10.0.* (hiện phân giải 10.0.14) | ✅ |
+| Migration | `Microsoft.EntityFrameworkCore.Design` 10.0.*, công cụ `dotnet-ef` | ✅ |
+| Cơ sở dữ liệu | Microsoft SQL Server, database `SmartCvDb` | ✅ |
+| AI | Google Gemini API (gọi qua `HttpClient`, cấu hình `GeminiOptions`) | ✅ Đã cấu hình · ⏳ Chấm điểm ở A10 |
+| Kiểm thử | xUnit 2.9.3, `Microsoft.NET.Test.Sdk` 17.14.1, coverlet 6.0.4 | ✅ Đã có project |
+| Giao diện | Blazor (Razor, HTML, CSS) | ⏳ B2 |
+| Đọc PDF / OCR | PdfPig, Tesseract cho .NET (`eng` + `vie`) | ⏳ A7 |
+| Chạy nền | BackgroundService hoặc Hangfire | ⏳ A11 |
+| Biểu đồ | Chart.js | ⏳ B11 |
+| Mã nguồn | Git, GitHub (nhánh + Pull Request) | ✅ |
 
 > Trước khi cài một thư viện mới, kiểm tra giấy phép và mức độ cập nhật của thư viện đó.
 
@@ -169,117 +140,166 @@ Ngoài tỷ lệ đúng, hệ thống báo thêm hai chỉ số:
 
 ```mermaid
 flowchart LR
-    HR([👤 HR]) --> WEB[SmartCv.Web<br/>Blazor]
+    HR([👤 HR]) --> WEB[SmartCv.Web<br/>Blazor – dự kiến]
     WEB -->|HTTP| API[SmartCv.Api<br/>ASP.NET Core]
-    API --> CORE[SmartCv.Core<br/>Quy tắc chấm điểm]
+    API --> CORE[SmartCv.Core<br/>Entity, hằng số, quy tắc]
     API --> INFRA[SmartCv.Infrastructure]
     INFRA --> CORE
     INFRA --> DB[(SQL Server<br/>12 bảng)]
-    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID/]
+    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID – dự kiến/]
     INFRA --> GEM[Gemini API]
 ```
 
 | Project | Vai trò |
 |---|---|
 | `SmartCv.Api` | Điểm khởi chạy, cấu hình HTTP, controllers |
-| `SmartCv.Core` | Quy tắc chấm điểm và các class dữ liệu cốt lõi. **Không phụ thuộc** project nào khác |
-| `SmartCv.Infrastructure` | EF Core / SQL Server, đọc PDF/OCR, gọi Gemini |
+| `SmartCv.Core` | Entity, hằng số trạng thái và quy tắc nghiệp vụ. **Không phụ thuộc** project nào khác |
+| `SmartCv.Infrastructure` | EF Core / SQL Server, cấu hình Gemini; sau này thêm đọc PDF/OCR, gọi Gemini |
 | `SmartCv.Tests` | Kiểm thử tự động (xUnit) |
 | `SmartCv.Web` | Giao diện Blazor *(tạo ở B2)* |
 
 ```text
 AI-CV-Screening/
-├── .github/                        # Mẫu Issue, Pull Request
-├── database/                       # Script SQL (SmartCvDb.sql), ERD
-├── docs/                           # Tài liệu dự án
+├── database/
+│   ├── SQL.sql                         # Thiết kế CSDL gốc (C2) – chỉ dùng để đối chiếu
+│   ├── seed.sql                        # Dữ liệu mẫu 12 bảng (368 dòng), trọng số 30/70
+│   ├── migration_InitialCreate.sql     # Script SQL sinh từ Migration InitialCreate
+│   ├── update_seed_weights_30_70.sql   # Chỉ dùng cho DB đã seed bằng bản cũ 40/60
+│   ├── erdplus.png                     # Sơ đồ ERD
+│   └── README.md
 ├── src/
 │   ├── SmartCv.Api/
-│   │   ├── Controllers/            # API controllers (HealthController, ...)
+│   │   ├── Controllers/HealthController.cs   # 2 API kiểm tra kết nối
 │   │   ├── Properties/launchSettings.json
-│   │   ├── Program.cs              # Cấu hình và khởi chạy API
-│   │   └── appsettings.json        # Cấu hình KHÔNG nhạy cảm
-│   ├── SmartCv.Core/               # Nghiệp vụ cốt lõi
+│   │   ├── Program.cs
+│   │   └── appsettings.json                  # Cấu hình KHÔNG nhạy cảm
+│   ├── SmartCv.Core/
+│   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
+│   │   └── Entities/                         # 12 Entity
 │   └── SmartCv.Infrastructure/
-│       ├── Gemini/                 # GeminiOptions và tích hợp Gemini
-│       ├── Persistence/            # SmartCvDbContext
-│       └── DependencyInjection.cs  # Đăng ký dịch vụ
-├── tests/
-│   └── SmartCv.Tests/              # xUnit tests
+│       ├── Data/
+│       │   ├── Configurations/               # 12 Fluent API Configuration
+│       │   ├── Migrations/                   # InitialCreate + ModelSnapshot
+│       │   └── SmartCvDbContext.cs           # DbContext duy nhất
+│       ├── Gemini/GeminiOptions.cs
+│       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini
+├── tests/SmartCv.Tests/                      # xUnit
 ├── .gitignore
-├── CONTRIBUTING.md
-├── global.json                     # Khóa phiên bản .NET SDK
-├── SmartCv.slnx                    # Solution .NET
+├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
+├── global.json
+├── SmartCv.slnx
 └── README.md
 ```
 
 ---
 
-<a id="du-lieu"></a>
+<a id="co-so-du-lieu"></a>
 
-## 6. 🗃️ Dữ liệu và lưu trữ CV
+## 6. 🗃️ Cơ sở dữ liệu
 
-Database gồm **12 bảng**, thiết kế theo ERD ký hiệu Chen. Bản chuẩn là [`database/SmartCvDb.sql`](database/SmartCvDb.sql).
+Database `SmartCvDb` gồm **12 bảng nghiệp vụ**, được tạo bằng **EF Core Migration** `20261106132922_InitialCreate`. Cấu trúc migration đã được đối chiếu và khớp với thiết kế gốc [`database/SQL.sql`](database/SQL.sql). Sơ đồ: [`database/erdplus.png`](database/erdplus.png).
 
-| Bảng | Mục đích |
-|---|---|
-| `Candidates` | Ứng viên |
-| `Jobs` | Vị trí tuyển dụng |
-| `JobSkills` | Kỹ năng của job (bắt buộc / ưu tiên) |
-| `JobSkillAliases` | Các từ khóa tương đương của một kỹ năng |
-| `Cvs` | File CV và nội dung trích xuất |
-| `Applications` | CV ứng tuyển vào job |
-| `PromptVersions` | Các phiên bản system prompt |
-| `EvaluationSets` | Bộ CV dùng để đánh giá prompt |
-| `HrLabels` | Nhãn Đạt/Không đạt do HR gán |
-| `EvaluationRuns` | Một lượt chấm (Screening hoặc PromptTest) |
-| `Evaluations` | Kết quả chấm của từng hồ sơ trong một lượt |
-| `EvaluationSkills` | Kỹ năng đạt / thiếu của từng kết quả |
+| Nhóm nghiệp vụ | Bảng | Mục đích |
+|---|---|---|
+| Vị trí tuyển dụng | `Jobs` | Vị trí, GPA và số năm kinh nghiệm tối thiểu |
+| | `JobSkills` | Kỹ năng của job: `MustHave` / `NiceToHave` |
+| | `JobSkillAliases` | Từ khóa tương đương của một kỹ năng |
+| Ứng viên và hồ sơ | `Candidates` | Ứng viên |
+| | `Cvs` | File CV, mã hash, nội dung trích xuất, trạng thái trích xuất |
+| | `Applications` | CV ứng tuyển vào job |
+| Prompt và đánh giá | `PromptVersions` | Các phiên bản system prompt |
+| | `EvaluationSets` | Bộ CV dùng để đánh giá prompt |
+| | `HrLabels` | Nhãn Đạt/Không đạt do HR gán |
+| Chấm điểm | `EvaluationRuns` | Một lượt chấm (`Screening` hoặc `PromptTest`), lưu model, trọng số, ngưỡng |
+| | `Evaluations` | Kết quả chấm của từng hồ sơ trong một lượt |
+| | `EvaluationSkills` | Kỹ năng đạt / thiếu của từng kết quả |
+
+**Đối tượng ràng buộc:** 12 PRIMARY KEY · 13 FOREIGN KEY (`NO ACTION`) · 6 UNIQUE · 25 CHECK · 18 DEFAULT · 8 index `IX_` · 1 filtered unique index.
 
 **Ràng buộc quan trọng**
 
-- Tại một thời điểm chỉ có **một** prompt đang dùng (UNIQUE có lọc trên `PromptVersions(IsActive)`).
-- Các cột UNIQUE: `Cvs(FileHash)`, `Applications(CvId, JobId)`, `Evaluations(RunId, ApplicationId)`.
-- `KeywordWeight + AiWeight = 1`. Prompt đã chạy thì không sửa nữa, mà lưu thành phiên bản mới.
-- Ngày giờ lưu theo **UTC**, khi hiển thị thì cộng 7 giờ.
+- Chỉ **một** prompt đang dùng tại một thời điểm: `UX_PromptVersions_OneActive` (UNIQUE có lọc `WHERE IsActive = 1`).
+- UNIQUE: `Jobs(Title)`, `Cvs(FileHash)`, `Applications(CvId, JobId)`, `PromptVersions(VersionName)`, `EvaluationSets(Name)`, `Evaluations(RunId, ApplicationId)`. Trong EF Core, các cột này được cấu hình là *alternate key* nên **không sửa được** sau khi đã lưu.
+- `KeywordWeight + AiWeight = 1`.
+- `PromptTest` bắt buộc có `EvaluationSetId`; `Screening` bắt buộc `EvaluationSetId` là NULL.
+- Prompt đã chạy thì không sửa nữa, mà lưu thành phiên bản mới.
+- Ngày giờ lưu theo **UTC** (`SYSUTCDATETIME()`), khi hiển thị thì cộng 7 giờ.
 
-**Nguyên tắc lưu trữ CV**
+**Nguyên tắc lưu trữ CV (thiết kế)**
 
-- File gốc lưu trên máy chủ và được đổi tên theo GUID, ví dụ `Uploads/CV/2026/11/<GUID>.pdf`.
+- File gốc lưu trên máy chủ và đổi tên theo GUID, ví dụ `Uploads/CV/2026/11/<GUID>.pdf`. `CvId` do code tạo, trùng với tên file.
 - SQL Server lưu tên file gốc, đường dẫn, mã hash SHA-256, nội dung trích xuất, ngày tải và trạng thái xử lý.
 - Thư mục `Uploads/` nằm trong `.gitignore`. **Không đưa CV thật lên GitHub.**
 - Hiện chưa có cơ chế xóa CV tự động; sẽ bổ sung khi công ty có quy định.
 
 ---
 
-<a id="api"></a>
+<a id="cham-diem"></a>
 
-## 7. 🔌 Danh sách API
+## 7. 🧮 Quy trình xử lý CV và chấm điểm
 
-### ✅ Đã triển khai (chỉ chạy ở môi trường Development)
+> [!NOTE]
+> Phần này là **thiết kế**. Code tải CV, trích xuất nội dung và chấm điểm chưa được lập trình. Quy tắc dưới đây đã được dùng để tạo và kiểm tra dữ liệu mẫu.
 
-| Phương thức | Endpoint | Mô tả |
-|:---:|---|---|
-| `GET` | `/api/health/database` | Kiểm tra kết nối SQL Server |
-| `GET` | `/api/health/gemini` | Kiểm tra API key và model Gemini (không tốn lượt sinh nội dung) |
+### 7.1. Luồng xử lý
 
-### ⏳ Dự kiến
+```mermaid
+flowchart LR
+    A[HR chọn vị trí<br/>tuyển dụng] --> B[Tải lên<br/>một hoặc nhiều CV]
+    B --> C[Gắn CV<br/>với job]
+    C --> D[Trích xuất nội dung<br/>PdfPig / OCR]
+    D --> E[Chấm điểm<br/>Keyword + Gemini]
+    E --> F[Bảng xếp hạng<br/>và chi tiết CV]
+    F --> G[HR ra quyết định]
+```
 
-> Danh sách này là định hướng thiết kế, **chưa được chốt** (C2). Có thể điều chỉnh khi lập trình.
+1. HR chọn vị trí tuyển dụng và tải lên một hoặc nhiều CV. File trùng (cùng SHA-256) bị từ chối.
+2. HR gắn CV với vị trí phù hợp. Một CV có thể gắn với nhiều vị trí.
+3. Hệ thống trích xuất nội dung: PDF có chữ (`PdfText`), PDF scan (`PdfOcr`), ảnh (`ImageOcr`). CV không trích xuất được thì ghi `ExtractionStatus = Failed` và không chấm.
+4. Một lượt chấm (`EvaluationRuns`) chạy dưới nền, ghi lại prompt, model, temperature, trọng số và ngưỡng đang dùng:
+   - **KeywordScore**: tính bằng C# từ `JobSkills` và `JobSkillAliases` (A9; công thức chi tiết chốt khi triển khai).
+   - **AiScore**: Gemini đọc CV và mô tả job, trả về JSON có cấu trúc (A10).
+5. HR xem bảng xếp hạng, chi tiết đánh giá, rồi tự đưa ra quyết định.
+6. HR gán nhãn Đạt/Không đạt cho một bộ CV để so sánh chất lượng giữa các phiên bản prompt.
 
-| Phương thức | Endpoint | Mô tả |
-|:---:|---|---|
-| `POST` | `/api/cvs/upload` | Tải một hoặc nhiều CV |
-| `POST` | `/api/applications` | Gắn CV với job |
-| `GET` | `/api/jobs` | Danh sách job |
-| `POST` | `/api/scoring/start` | Bắt đầu chấm điểm |
-| `GET` | `/api/scoring/progress` | Xem tiến độ chấm |
-| `GET` | `/api/jobs/{id}/ranking` | Bảng xếp hạng theo job |
-| `GET` | `/api/applications/{id}` | Chi tiết kết quả của một hồ sơ |
-| `GET` `POST` | `/api/prompts` | Xem hoặc tạo phiên bản prompt |
-| `POST` | `/api/prompts/{id}/activate` | Kích hoạt phiên bản prompt |
-| `POST` | `/api/hr-labels` | Nhập nhãn HR |
-| `POST` | `/api/evaluations/run` | Chạy đánh giá prompt |
-| `GET` | `/api/evaluations/compare` | So sánh hai phiên bản prompt |
+### 7.2. Công thức chính thức
+
+```text
+FinalScore = ROUND(0.30 × KeywordScore + 0.70 × AiScore, 2)
+```
+
+| Tham số | Giá trị |
+|---|---|
+| `KeywordWeight` | **0.30** |
+| `AiWeight` | **0.70** |
+| `PassThreshold` (ngưỡng Đạt) | **70** – lưu riêng cho từng lượt chạy |
+| `PredictedPass` | `FinalScore ≥ PassThreshold` |
+
+| Điểm cuối | Mức đánh giá |
+|:---:|---|
+| ≥ 85 | 🟢 **Rất phù hợp** |
+| 70 – < 85 | 🔵 **Phù hợp** |
+| 55 – < 70 | 🟡 **Tiềm năng** |
+| < 55 | 🔴 **Chưa phù hợp** |
+
+**Trường hợp đặc biệt**
+
+- **AI lỗi** (vượt hạn mức sau khi thử lại): `ScoreSource = KeywordOnly`, `AiScore = NULL`, `FinalScore = KeywordScore`. Giao diện phải **hiển thị rõ** điều này, không âm thầm dùng mỗi điểm keyword.
+- **`Failed` / `Pending`**: không có điểm, không phân loại.
+
+### 7.3. Độ chính xác của prompt (so với nhãn HR)
+
+```text
+Tỷ lệ đúng (%) = Số CV mà AI kết luận Đạt/Không đạt giống HR / Tổng số CV có nhãn × 100
+```
+
+Ngoài tỷ lệ đúng, hệ thống báo thêm:
+
+- **Bỏ sót**: HR đánh giá Đạt nhưng AI đánh giá Không đạt.
+- **Chọn nhầm**: HR đánh giá Không đạt nhưng AI đánh giá Đạt.
+
+> [!TIP]
+> Để so sánh công bằng, chỉ đổi **nội dung prompt**. Giữ nguyên bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Chỉ số này đo mức trùng khớp với nhãn HR; nó không phải thước đo duy nhất về chất lượng tuyển dụng.
 
 ---
 
@@ -289,78 +309,68 @@ Database gồm **12 bảng**, thiết kế theo ERD ký hiệu Chen. Bản chu�
 
 ### 8.1. Yêu cầu
 
-- [x] Windows và **.NET 10 SDK**
-- [x] **SQL Server** (Express hoặc Developer) và công cụ kết nối (extension *SQL Server (mssql)* cho VS Code, hoặc SSMS)
-- [x] **Git**
-- [x] **VS Code** (kèm *C# Dev Kit*) hoặc Visual Studio
-- [x] **Gemini API key** lấy từ [Google AI Studio](https://aistudio.google.com)
-- [ ] *(Khi làm OCR)* Tesseract và dữ liệu ngôn ngữ `eng`, `vie`
-
-Kiểm tra môi trường:
+- **Windows** và **.NET 10 SDK**
+- **SQL Server** (Express hoặc Developer) và công cụ kết nối: SSMS, hoặc extension *SQL Server (mssql)* cho VS Code
+- **sqlcmd** (đi kèm SQL Server / SSMS) để chạy script dữ liệu mẫu
+- **Công cụ EF Core**: `dotnet tool install --global dotnet-ef`
+- **Git**
+- **VS Code** (kèm *C# Dev Kit*) hoặc Visual Studio
+- **Gemini API key** lấy từ [Google AI Studio](https://aistudio.google.com)
+- *(Khi làm OCR – A7)* Tesseract và dữ liệu ngôn ngữ `eng`, `vie`
 
 ```powershell
-dotnet --version   # 10.0.xxx
+dotnet --version      # 10.0.xxx
+dotnet ef --version   # 10.0.xxx
 git --version
 ```
 
-### 8.2. Clone repository
+### 8.2. Clone, restore, build và test
 
 ```powershell
 git clone https://github.com/TuyetAnh0101/AI-CV-Screening.git
 cd AI-CV-Screening
+
+dotnet restore
+dotnet build
+dotnet test
 ```
 
-> [!NOTE]
-> Chỉ chạy được Backend từ nhánh `main` sau khi Pull Request cấu hình hạ tầng (A1) đã được gộp. Trước thời điểm đó, chuyển sang nhánh của A1:
-> ```powershell
-> git fetch
-> git switch feature/A1-config-infrastructure
-> ```
+> Mọi lệnh trong README chạy từ thư mục gốc `AI-CV-Screening`.
 
 ---
 
 <a id="cau-hinh"></a>
 
-## 9. 🔐 Cấu hình SQL Server và Gemini
+## 9. 🔐 Cấu hình SQL Server và User Secrets
 
-> Mọi lệnh dưới đây chạy từ thư mục gốc `AI-CV-Screening`.
+### 9.1. Chuẩn bị SQL Server
 
-### 9.1. Chuẩn bị database
-
-1. Cài SQL Server và ghi lại **tên instance** trên máy, ví dụ `localhost\SQLEXPRESS`.
-2. Tạo database **rỗng**:
-   ```sql
-   CREATE DATABASE SmartCvDb;
-   ```
-3. Kiểm tra tài khoản Windows đang dùng có quyền truy cập database. Database phải ở trạng thái `ONLINE` và `MULTI_USER`.
+1. Cài SQL Server và ghi lại **tên instance**, ví dụ `localhost\SQLEXPRESS`.
+2. Bảo đảm tài khoản Windows đang dùng có quyền tạo database (hoặc nhờ quản trị tạo sẵn database rỗng `SmartCvDb`).
 
 > [!WARNING]
-> Theo kế hoạch, các bảng được tạo bằng **EF Core Migration** (A2). **Không chạy** `SmartCvDb.sql` vào `SmartCvDb`, vì migration sau đó sẽ báo trùng bảng. Nếu cần một bản để đối chiếu, chạy script vào database khác tên, ví dụ `SmartCvDb_Script`. Không chạy lệnh cập nhật schema khi nhóm chưa thống nhất.
+> Bảng được tạo bằng **EF Core Migration**. **Không chạy** `database/SQL.sql` vào `SmartCvDb`, vì migration sau đó sẽ báo trùng bảng. Nếu cần một bản để đối chiếu, chạy script vào database khác tên, ví dụ `SmartCvDb_Script`.
 
-### 9.2. Cấu hình User Secrets
+### 9.2. User Secrets
 
-Thông tin nhạy cảm (API key, chuỗi kết nối) được lưu bằng **User Secrets**. Dữ liệu này nằm ở `%APPDATA%\Microsoft\UserSecrets\`, tức là **ngoài repo**, nên Git không thể commit nhầm. Mỗi thành viên tự đặt giá trị trên máy của mình.
+Thông tin nhạy cảm (chuỗi kết nối, API key) được lưu bằng **User Secrets**, nằm ở `%APPDATA%\Microsoft\UserSecrets\`, tức là **ngoài repo**. `SmartCv.Api.csproj` đã có sẵn `UserSecretsId`, mỗi thành viên chỉ cần đặt giá trị trên máy của mình:
 
 ```powershell
-# Chỉ chạy nếu SmartCv.Api.csproj chưa có <UserSecretsId>
-dotnet user-secrets init --project src/SmartCv.Api
-
 # Chuỗi kết nối – thay TEN_SERVER bằng tên instance trên máy bạn
 dotnet user-secrets set "ConnectionStrings:SmartCvDb" "Server=TEN_SERVER;Database=SmartCvDb;Trusted_Connection=True;TrustServerCertificate=True" --project src/SmartCv.Api
 
 # Gemini API key
 dotnet user-secrets set "Gemini:ApiKey" "YOUR_GEMINI_API_KEY" --project src/SmartCv.Api
-
-# Kiểm tra lại
-dotnet user-secrets list --project src/SmartCv.Api
 ```
 
 > [!CAUTION]
-> `YOUR_GEMINI_API_KEY` chỉ là giá trị minh họa. **Không** để lộ key thật trong ảnh chụp terminal, Issue, Pull Request hay README. Nếu key đã lộ, hãy **thu hồi key đó trong AI Studio rồi tạo key mới**. Xóa commit chứa key là chưa đủ, vì lịch sử Git vẫn còn giữ nó.
+> `TEN_SERVER` và `YOUR_GEMINI_API_KEY` chỉ là giá trị minh họa. **Không** để lộ key thật trong ảnh chụp terminal, Issue, Pull Request hay README, và tránh chạy `dotnet user-secrets list` khi đang chia sẻ màn hình. Nếu key đã lộ, hãy **thu hồi key trong AI Studio rồi tạo key mới**; xóa commit chứa key là chưa đủ vì lịch sử Git vẫn còn giữ nó.
+
+Ứng dụng kiểm tra cấu hình ngay khi khởi động: thiếu `ConnectionStrings:SmartCvDb` sẽ báo lỗi cả khi chạy API lẫn khi chạy lệnh `dotnet ef`; thiếu `Gemini:ApiKey` sẽ báo lỗi khi chạy API.
 
 ### 9.3. Cấu hình không nhạy cảm
 
-Các giá trị này nằm trong `src/SmartCv.Api/appsettings.json`:
+Nằm trong `src/SmartCv.Api/appsettings.json`:
 
 ```json
 "Gemini": {
@@ -371,100 +381,164 @@ Các giá trị này nằm trong `src/SmartCv.Api/appsettings.json`:
 }
 ```
 
-Mỗi thành viên nên tự kiểm tra xem API key của mình có dùng được model này không. Cách nhanh nhất là gọi `/api/health/gemini`.
+Mỗi thành viên nên kiểm tra API key của mình có dùng được model này không bằng cách gọi `/api/health/gemini`.
+
+---
+
+<a id="database"></a>
+
+## 10. 🛢️ Tạo database và nạp dữ liệu mẫu
+
+### 10.1. Tạo database bằng Migration
+
+```powershell
+dotnet ef database update --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+```
+
+Lệnh tạo database `SmartCvDb` (nếu chưa có), 12 bảng cùng toàn bộ ràng buộc, và ghi lịch sử vào `__EFMigrationsHistory`. Script SQL tương đương: [`database/migration_InitialCreate.sql`](database/migration_InitialCreate.sql).
+
+> Không xóa, sửa hay tạo lại migration `InitialCreate` đã áp dụng. Thay đổi schema sau này phải thêm migration mới và báo cả nhóm.
+
+### 10.2. Nạp dữ liệu mẫu (chỉ cho database mới)
+
+```powershell
+sqlcmd -S TEN_SERVER -d SmartCvDb -E -C -b -I -f 65001 -i database/seed.sql
+```
+
+| Tham số | Ý nghĩa |
+|---|---|
+| `-E` | Windows Authentication |
+| `-C` | Tin chứng chỉ máy chủ (môi trường phát triển) |
+| `-b` | Dừng và trả mã lỗi khi có lỗi |
+| `-I` | Bật `QUOTED_IDENTIFIER` – cần cho bảng có filtered index (script cũng tự bật) |
+| `-f 65001` | Đọc file UTF-8 để giữ đúng tiếng Việt |
+
+- Script chèn **368 dòng** trong một transaction; lỗi thì ROLLBACK toàn bộ.
+- Nếu bảng `Jobs` đã có dữ liệu, script **dừng và không chèn gì** (`CSDL đã có dữ liệu, bỏ qua seed.sql.`). **Không chạy lại** seed trên database đã có dữ liệu.
+- Database đã seed bằng **bản cũ 40/60**: chạy một lần [`database/update_seed_weights_30_70.sql`](database/update_seed_weights_30_70.sql) (cùng tham số `sqlcmd`). Script kiểm tra trước, chạy trong transaction và chạy lại không làm thay đổi gì thêm.
+
+### 10.3. Kiểm tra database và Migration
+
+```powershell
+# Migration đã áp dụng (không còn chữ "Pending")
+dotnet ef migrations list --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+
+# Model và migration đồng bộ
+dotnet ef migrations has-pending-model-changes --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+```
+
+```sql
+-- Lịch sử migration: 1 dòng 20261106132922_InitialCreate
+SELECT * FROM __EFMigrationsHistory;
+
+-- Số ràng buộc: PK 12, FK 13, UNIQUE 6, CHECK 25, DEFAULT 18
+SELECT type_desc, COUNT(*) AS SoLuong
+FROM sys.objects
+WHERE type IN ('PK', 'F', 'UQ', 'C', 'D')
+  AND OBJECT_NAME(parent_object_id) <> '__EFMigrationsHistory'
+GROUP BY type_desc;
+
+-- Số dòng từng bảng (tổng 368 sau khi seed)
+SELECT t.name AS Bang, SUM(p.rows) AS SoDong
+FROM sys.tables t
+JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1)
+WHERE t.name <> '__EFMigrationsHistory'
+GROUP BY t.name ORDER BY t.name;
+```
 
 ---
 
 <a id="chay-du-an"></a>
 
-## 10. 🚀 Build, chạy và kiểm thử
-
-### 10.1. Restore và build
+## 11. 🚀 Build, chạy và kiểm thử
 
 ```powershell
-dotnet restore
 dotnet build
-```
-
-### 10.2. Chạy API
-
-```powershell
 dotnet run --project src/SmartCv.Api --launch-profile https
 ```
 
-Theo `launchSettings.json` hiện tại, API chạy tại:
+Theo `launchSettings.json`, API chạy tại `https://localhost:7269` và `http://localhost:5156` (môi trường `Development`). Luôn lấy URL mà terminal in ra ở dòng `Now listening on:`.
 
-| Giao thức | URL |
-|---|---|
-| HTTPS | `https://localhost:7269` |
-| HTTP | `http://localhost:5156` |
-
-> Port có thể khác tùy nhánh bạn đang dùng. Luôn lấy URL mà terminal in ra ở dòng `Now listening on:`.
-
-Kiểm tra kết nối:
-
-```http
-GET https://localhost:7269/api/health/database
-GET https://localhost:7269/api/health/gemini
-```
-
-Kết quả mong đợi:
-
-```json
-{ "status": "OK", "server": "localhost\\SQLEXPRESS", "database": "SmartCvDb" }
-{ "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx" }
-```
-
-Nếu Windows chưa tin chứng chỉ HTTPS dùng khi phát triển:
-
-```powershell
-dotnet dev-certs https --trust
-```
-
-Muốn dừng API, nhấn `Ctrl + C` trong terminal.
-
-### 10.3. Chạy kiểm thử
+Nếu Windows chưa tin chứng chỉ HTTPS dùng khi phát triển: `dotnet dev-certs https --trust`. Muốn dừng API, nhấn `Ctrl + C`.
 
 ```powershell
 dotnet test
 ```
 
-> Project hiện chỉ có bài kiểm thử xUnit cơ bản. Unit test cho phần tính điểm và tỷ lệ đúng sẽ được viết ở A18.
+> Project test hiện chỉ có một bài kiểm thử mẫu. Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
 
 ---
 
-<a id="github"></a>
+<a id="api"></a>
 
-## 11. 🌿 Quy trình làm việc với GitHub
+## 12. 🔌 Danh sách API
 
-- 🚫 **Không push trực tiếp** vào `main`.
-- 🌱 Mỗi tính năng làm trên một nhánh riêng: `feature/<mã-việc>-<mô-tả>`, ví dụ `feature/A4-upload-cv`. Nhánh sửa lỗi đặt tên `fix/<mô-tả>`.
-- 👀 Mỗi Pull Request phải được **thành viên còn lại review** trước khi merge.
+### ✅ Đã triển khai (chỉ chạy ở môi trường Development, môi trường khác trả `404`)
 
-```powershell
-# 1. Tạo nhánh từ main mới nhất
-git switch main
-git pull origin main
-git switch -c feature/<mã-việc>-<mô-tả>
+| Phương thức | Endpoint | Mô tả |
+|:---:|---|---|
+| `GET` | `/api/health/database` | Mở kết nối tới SQL Server, trả tên server và database |
+| `GET` | `/api/health/gemini` | Kiểm tra API key và model Gemini (chỉ hỏi thông tin model, không tốn lượt sinh nội dung); key trả về đã được che |
 
-# 2. Làm việc, sau đó kiểm tra trước khi commit
-git status
-git add .
-git diff --cached --name-only    # xem lại danh sách file sẽ commit
-git grep -n "AIza"               # phải KHÔNG có kết quả
+Kết quả mong đợi (`503` kèm thông báo lỗi nếu không kết nối được):
 
-# 3. Commit và đẩy lên GitHub
-git commit -m "feat(A4): mô tả ngắn gọn"
-git push -u origin feature/<mã-việc>-<mô-tả>
+```json
+{ "status": "OK", "server": "TEN_SERVER", "database": "SmartCvDb" }
+{ "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx" }
 ```
 
-Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi gì và cách kiểm tra. Quy định chi tiết xem tại [CONTRIBUTING.md](CONTRIBUTING.md).
+Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`.
+
+### ⏳ Dự kiến
+
+> Danh sách này là định hướng thiết kế, **chưa được chốt** (C2) và có thể điều chỉnh khi lập trình.
+
+| Phương thức | Endpoint | Mô tả | Mã việc |
+|:---:|---|---|:---:|
+| `POST` | `/api/cvs/upload` | Tải một hoặc nhiều CV | A4 – A6 |
+| `GET` | `/api/jobs` | Danh sách job | – |
+| `POST` | `/api/applications` | Gắn CV với job | A8 |
+| `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
+| `GET` | `/api/scoring/progress` | Xem tiến độ chấm | A13 |
+| `GET` | `/api/jobs/{id}/ranking` | Bảng xếp hạng theo job | A13 |
+| `GET` | `/api/applications/{id}` | Chi tiết kết quả của một hồ sơ | A13 |
+| `GET` `POST` | `/api/prompts` | Xem hoặc tạo phiên bản prompt | A14 |
+| `POST` | `/api/prompts/{id}/activate` | Kích hoạt phiên bản prompt | A14 |
+| `POST` | `/api/hr-labels` | Nhập nhãn HR | A15 |
+| `POST` | `/api/evaluations/run` | Chạy đánh giá prompt | A16 |
+| `GET` | `/api/evaluations/compare` | So sánh hai phiên bản prompt | A17 |
 
 ---
 
-<a id="phan-cong"></a>
+<a id="nghiem-thu-a2"></a>
 
-## 12. 👥 Phân công công việc
+## 13. ✅ Kết quả nghiệm thu A2
+
+Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và `seed.sql`.
+
+| Hạng mục | Kết quả |
+|---|---|
+| Mã nguồn | 12 Entity · 1 `SmartCvDbContext` (`SmartCv.Infrastructure.Data`) · 12 Configuration · đã bỏ DbContext trùng trong `Persistence` |
+| Migration | `20261106132922_InitialCreate` đã áp dụng; không còn pending model changes |
+| Schema | 12 bảng + `__EFMigrationsHistory`; 12 PK, 13 FK, 6 UNIQUE, 25 CHECK, 18 DEFAULT, 8 `IX_`, 1 `UX_`; tên, kiểu dữ liệu, độ dài, NULL/NOT NULL khớp `SQL.sql` |
+| Ràng buộc | CHECK, FK, UNIQUE đều bật và được tin cậy; thử vi phạm (2 prompt active, trùng FileHash, tổng trọng số ≠ 1, sai quy tắc `EvaluationSetId`, FK không tồn tại) đều bị chặn; `DBCC CHECKCONSTRAINTS` không có vi phạm |
+| Dữ liệu mẫu | 368 dòng – xem bảng dưới |
+| Chấm điểm | 4/4 lượt chấm dùng 0.30/0.70; 32/32 kết quả `Combined` đúng công thức, FitLabel và PredictedPass; `KeywordOnly` giữ nguyên 56.67; `Failed`/`Pending` không có điểm |
+| So sánh prompt | `v1-co-ban` **70%** · `v2-tieu-chi-ro-rang` **80%** (tính lại từ `HrLabels`, khớp giá trị lưu) |
+| Build / Test | `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt 1/1 |
+
+| Bảng | Dòng | Bảng | Dòng | Bảng | Dòng |
+|---|---:|---|---:|---|---:|
+| Jobs | 5 | Cvs | 12 | HrLabels | 10 |
+| JobSkills | 29 | Applications | 13 | EvaluationRuns | 4 |
+| JobSkillAliases | 52 | PromptVersions | 2 | Evaluations | 36 |
+| Candidates | 12 | EvaluationSets | 1 | EvaluationSkills | 192 |
+
+---
+
+<a id="lo-trinh"></a>
+
+## 14. 🗺️ Lộ trình phát triển
 
 | Thành viên | Vai trò | Phạm vi |
 |---|---|---|
@@ -474,52 +548,97 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 
 ### Thứ tự thực hiện giai đoạn 1
 
-| Bước | Nội dung | Mã việc |
-|:---:|---|---|
-| 1 | Thiết kế | C1, C2, C3, B1 |
-| 2 | Dựng nền | A1 – A3, B2 |
-| 3 | Trang tải CV | A4 – A8, B3 – B5 |
-| 4 | Trang kết quả | A9 – A13, B6 – B10 |
-| 5 | Trang prompt | A14 – A17, B12 – B16 |
-| 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 |
+| Bước | Nội dung | Mã việc | Trạng thái |
+|:---:|---|---|---|
+| 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
+| 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2 · ⏳ A3, B2 |
+| 3 | Trang tải CV | A4 – A8, B3 – B5 | ⏳ |
+| 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
+| 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
+| 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 | ⏳ |
 
-> Cập nhật tên thành viên và tiến độ vào bảng trên khi nhóm đã thống nhất chính thức.
+### Việc tiếp theo của Backend
+
+| Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
+|---|---|
+| **A3** | Nhập sẵn 5 job. `seed.sql` đã có 5 job làm dữ liệu mẫu; nhóm cần chốt cách nhập chính thức cho môi trường chạy thật |
+| A4 – A6 | API tải CV, kiểm tra định dạng, dung lượng, file trùng, lưu file |
+| A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
+| A8 | API gắn CV với job |
+| A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
+| A10 | Gọi Gemini, JSON có cấu trúc, thử lại, xử lý vượt hạn mức |
+| A11, A12 | Chấm điểm dưới nền, lưu điểm kèm phiên bản prompt |
+| A13 | API tiến độ, bảng xếp hạng, chi tiết CV |
+| A14 – A17 | API phiên bản prompt, nhãn HR, chạy đánh giá, so sánh prompt |
+| A18 | Unit test tính điểm và tỷ lệ đúng |
+
+> Cập nhật tên thành viên và tiến độ vào các bảng trên khi nhóm đã thống nhất chính thức.
+
+---
+
+<a id="git"></a>
+
+## 15. 🌿 Quy trình làm việc với Git
+
+- 🚫 **Không push trực tiếp** vào `main` (nhánh đã được bảo vệ).
+- 🌱 Mỗi việc làm trên một nhánh riêng tạo từ `main`: `feature/<mã-việc>-<mô-tả>`, ví dụ `feature/A2-entities-migration`, `feature/A4-upload-cv`. Sửa lỗi: `fix/<mô-tả>`; tài liệu: `docs/<mô-tả>`.
+- ✍️ Commit theo mẫu `loai(pham-vi): mo ta ngan`, với `loai` là `feat`, `fix`, `docs`, `test`, `refactor`, `style`. Ví dụ: `feat(A2): complete entities, EF Core migration and database seed`.
+- 👀 Mỗi Pull Request phải được **thành viên còn lại review và Approve** trước khi merge; merge xong thì xóa nhánh.
+
+```powershell
+# 1. Tạo nhánh từ main mới nhất
+git switch main
+git pull origin main
+git switch -c feature/<mã-việc>-<mô-tả>
+
+# 2. Chỉ stage đúng các file của công việc, rồi xem lại
+git status
+git add <đường-dẫn-file-hoặc-thư-mục>
+git diff --cached --name-only    # danh sách file sẽ commit
+git diff --cached                # nội dung: không có API key, mật khẩu, chuỗi kết nối
+
+# 3. Commit và đẩy lên GitHub
+git commit -m "feat(A4): mô tả ngắn gọn"
+git push -u origin feature/<mã-việc>-<mô-tả>
+```
+
+Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi gì và cách kiểm tra. Quy định chi tiết, danh sách nhánh và tiêu chí review xem tại [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 <a id="loi-thuong-gap"></a>
 
-## 13. 🛠️ Lưu ý và xử lý lỗi thường gặp
+## 16. 🛠️ Xử lý lỗi thường gặp và bảo mật
 
 | Hiện tượng | Cách kiểm tra / xử lý |
 |---|---|
 | `A network-related or instance-specific error` | Kiểm tra tên instance. Mở `services.msc` xem dịch vụ **SQL Server (…)** có đang chạy không. |
-| `Cannot open database "SmartCvDb"` | Database chưa được tạo (xem mục 9.1), hoặc tài khoản không có quyền. |
-| `The certificate chain was issued by an authority that is not trusted` | Thêm `TrustServerCertificate=True` vào chuỗi kết nối. |
-| Database báo `SINGLE_USER` | Kiểm tra các phiên đang kết nối. Chỉ đổi sang `MULTI_USER` khi bạn có quyền và hiểu việc đó ảnh hưởng gì tới các phiên khác. |
-| `OptionsValidationException` khi khởi động | Chưa đặt User Secrets, hoặc gõ sai tên khóa. Tên đúng là `Gemini:ApiKey` và `ConnectionStrings:SmartCvDb`. |
+| `Cannot open database "SmartCvDb"` | Database chưa được tạo (chạy `dotnet ef database update`), hoặc tài khoản không có quyền. |
+| `The certificate chain was issued by an authority that is not trusted` | Thêm `TrustServerCertificate=True` vào chuỗi kết nối, hoặc `-C` với `sqlcmd`. |
+| `There is already an object named ...` khi chạy migration | Bảng đã được tạo thủ công bằng `SQL.sql`. Báo nhóm trước khi xử lý; không tự ý xóa database đang dùng chung. |
+| `Msg 1934 ... 'QUOTED_IDENTIFIER'` khi chạy script | Thêm `-I` vào lệnh `sqlcmd`. |
+| Tiếng Việt bị lỗi font sau khi seed | Thêm `-f 65001` để `sqlcmd` đọc file UTF-8. |
+| `CSDL đã có dữ liệu, bỏ qua seed.sql.` | Database đã có dữ liệu mẫu, không cần chạy lại. |
+| `InvalidOperationException` về `ConnectionStrings:SmartCvDb` hoặc `OptionsValidationException` khi khởi động | Chưa đặt User Secrets hoặc gõ sai tên khóa. Tên đúng là `ConnectionStrings:SmartCvDb` và `Gemini:ApiKey`. |
 | Gemini trả về `400` / `403` | API key sai, đã bị thu hồi, hoặc dự án Google chưa bật Gemini API. |
-| Gemini trả về `404` | Tên model không còn đúng. Kiểm tra lại trên AI Studio rồi sửa `Gemini:Model`. |
+| Gemini trả về `404` | Tên model không còn đúng. Kiểm tra trên AI Studio rồi sửa `Gemini:Model`. |
 | Lỗi chứng chỉ HTTPS | Chạy `dotnet dev-certs https --trust`. |
-| `dotnet build` có cảnh báo `NU1902` / `NU1903` | Package có lỗ hổng bảo mật. Nâng lên bản đã vá; **không tắt cảnh báo** để che lỗi. |
-| Thiếu bảng nghiệp vụ | Kiểm tra migration hoặc script đã được nhóm thống nhất chưa. Không tự ý xóa hay tạo lại database đang dùng chung. |
+| Cảnh báo `NU1902` / `NU1903` khi build | Package có lỗ hổng bảo mật. Nâng lên bản đã vá; **không tắt cảnh báo** để che lỗi. |
 
 ### 🔒 Bảo mật và dữ liệu
 
 - Không commit Gemini API key, mật khẩu, chuỗi kết nối chứa bí mật, file `.env` hoặc User Secrets.
-- Không commit thư mục build (`bin/`, `obj/`) hay CV thật trong `Uploads/`.
+- Không commit thư mục build (`bin/`, `obj/`), file backup database (`*.bak`) hay CV thật trong `Uploads/`.
 - Luôn xem lại `git diff --cached` trước khi commit.
-- Chỉ dùng CV mà nhóm có quyền xử lý. Hạn chế ghi thông tin cá nhân vào log và dữ liệu mẫu.
+- Chỉ dùng CV mà nhóm có quyền xử lý. Dữ liệu mẫu trong `seed.sql` là dữ liệu giả lập.
 - Khi thay đổi cấu hình chung, schema hoặc API contract, báo cho cả nhóm và cập nhật tài liệu.
 
 ---
 
 <div align="center">
 
-**AI CV Screening** · Built with .NET & Gemini
+**SmartCv – AI CV Screening** · Built with .NET & Gemini
 
 *Tài liệu được cập nhật theo tiến độ phát triển của nhóm.*
-
-[⬆ Về đầu trang](#-ai-cv-screening)
 
 </div>
