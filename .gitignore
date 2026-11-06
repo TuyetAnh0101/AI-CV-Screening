@@ -275,8 +275,14 @@ ServiceFabricBackup/
 *.ndf
 *.bak
 
-# SmartCv: file CV người dùng tải lên (không đưa CV thật lên GitHub)
-Uploads/
+# SmartCv: file CV người dùng tải lên (không đưa CV thật lên GitHub).
+# Chỉ chặn thư mục lưu file (CvUpload:StorageRoot = "Uploads/CV", tính từ thư mục chạy của Api),
+# KHÔNG chặn các thư mục mã nguồn tên Uploads (src/SmartCv.Core/Uploads, src/SmartCv.Infrastructure/Uploads).
+/Uploads/
+/src/SmartCv.Api/Uploads/
+
+# File thử dung lượng lớn tạo tạm khi kiểm thử A4 (Thử 6)
+/test-files/*-qua-lon*
 
 # Business Intelligence projects
 *.rdl.data

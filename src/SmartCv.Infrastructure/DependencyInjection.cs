@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCv.Core.Options;
+using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Uploads;
 
 namespace SmartCv.Infrastructure;
 
@@ -30,6 +33,11 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
             client.Timeout = TimeSpan.FromSeconds(60);
         });
+
+        // A4: tải CV. Đọc mục "CvUpload" trong appsettings.json.
+        // Scoped vì A6 sẽ dùng SmartCvDbContext (cũng Scoped) trong service này.
+        services.Configure<CvUploadOptions>(configuration.GetSection(CvUploadOptions.SectionName));
+        services.AddScoped<ICvUploadService, CvUploadService>();
 
         return services;
     }
