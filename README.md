@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A3):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs` và bộ dữ liệu demo**. Các chức năng nghiệp vụ (tải CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A4):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo** và **API `POST /api/cvs/upload` nhận một hoặc nhiều file** (mới nhận file, chưa kiểm tra và chưa lưu). Các chức năng nghiệp vụ còn lại (kiểm tra/lưu CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -34,7 +34,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 10. [Tạo database và nạp dữ liệu](#database)
 11. [Build, chạy và kiểm thử](#chay-du-an)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2, A3](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3, A4](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -85,6 +85,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | A1 | Solution .NET 10 gồm 4 project; kết nối SQL Server; cấu hình Gemini qua User Secrets, kiểm tra cấu hình khi khởi động; 2 API kiểm tra kết nối |
 | A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql` |
 | A3 | Dữ liệu nền 5 Jobs, 29 JobSkills, 52 JobSkillAliases (`JobSeedData` + `HasData`) nạp tự động qua Migration `SeedJobs`; tách dữ liệu demo sang `seed_demo.sql` (282 dòng); script kiểm tra `check_jobs.sql`; unit test dữ liệu nền |
+| A4 | API `POST /api/cvs/upload` nhận một hoặc nhiều file qua `multipart/form-data`, trả thông tin từng file với trạng thái `Received`; giới hạn số file và dung lượng request đọc từ `appsettings.json`; hợp đồng dùng chung `CvUploadResponse` cho giao diện Blazor. **Chưa** kiểm tra định dạng/dung lượng/file trùng (A5), **chưa** lưu file và ghi bảng `Cvs` (A6) |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -173,12 +174,17 @@ AI-CV-Screening/
 ├── src/
 │   ├── SmartCv.Api/
 │   │   ├── Controllers/HealthController.cs   # 2 API kiểm tra kết nối
+│   │   ├── Endpoints/CvEndpoints.cs          # POST /api/cvs/upload (Minimal API)
 │   │   ├── Properties/launchSettings.json
-│   │   ├── Program.cs
-│   │   └── appsettings.json                  # Cấu hình KHÔNG nhạy cảm
+│   │   ├── CvUpload.http                     # Thử API tải CV bằng REST Client
+│   │   ├── Program.cs                        # Giới hạn dung lượng request (Kestrel, FormOptions)
+│   │   └── appsettings.json                  # Cấu hình KHÔNG nhạy cảm (Gemini, CvUpload)
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
-│   │   └── Entities/                         # 12 Entity
+│   │   ├── Contracts/CvUploadResponse.cs     # Hợp đồng API tải CV, dùng chung với Blazor
+│   │   ├── Entities/                         # 12 Entity
+│   │   ├── Options/CvUploadOptions.cs        # Giới hạn tải CV
+│   │   └── Uploads/                          # CvUploadFile, ICvUploadService
 │   └── SmartCv.Infrastructure/
 │       ├── Data/
 │       │   ├── Configurations/               # 12 Fluent API Configuration
@@ -186,8 +192,10 @@ AI-CV-Screening/
 │       │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
 │       │   └── SmartCvDbContext.cs           # DbContext duy nhất
 │       ├── Gemini/GeminiOptions.cs
-│       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini
-├── tests/SmartCv.Tests/                      # xUnit (JobSeedDataTests: dữ liệu nền, migration)
+│       ├── Uploads/CvUploadService.cs        # Xử lý file tải lên (A4: Received)
+│       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
+├── test-files/                               # CV GIẢ để thử API tải CV (không đặt CV thật)
+├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests
 ├── .gitignore
 ├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
 ├── global.json
@@ -233,7 +241,7 @@ Database `SmartCvDb` gồm **12 bảng nghiệp vụ**, được tạo bằng **
 
 - File gốc lưu trên máy chủ và đổi tên theo GUID, ví dụ `Uploads/CV/2026/11/<GUID>.pdf`. `CvId` do code tạo, trùng với tên file.
 - SQL Server lưu tên file gốc, đường dẫn, mã hash SHA-256, nội dung trích xuất, ngày tải và trạng thái xử lý.
-- Thư mục `Uploads/` nằm trong `.gitignore`. **Không đưa CV thật lên GitHub.**
+- Thư mục lưu file (`/Uploads/`, `src/SmartCv.Api/Uploads/`) nằm trong `.gitignore`; các thư mục mã nguồn tên `Uploads` trong `src/` vẫn được commit bình thường. **Không đưa CV thật lên GitHub.**
 - Hiện chưa có cơ chế xóa CV tự động; sẽ bổ sung khi công ty có quy định.
 
 ---
@@ -382,10 +390,18 @@ Nằm trong `src/SmartCv.Api/appsettings.json`:
   "Temperature": 0.2,
   "MaxCvCharacters": 12000,
   "MaxRetries": 2
+},
+"CvUpload": {
+  "MaxFileSizeMB": 10,
+  "MaxFilesPerRequest": 20,
+  "AllowedExtensions": [ ".pdf", ".png", ".jpg", ".jpeg" ],
+  "StorageRoot": "Uploads/CV"
 }
 ```
 
 Mỗi thành viên nên kiểm tra API key của mình có dùng được model này không bằng cách gọi `/api/health/gemini`.
+
+Mục `CvUpload` quyết định giới hạn của API tải CV (xem [mục 12.2](#api-upload)). `MaxFilesPerRequest` có hiệu lực ngay từ A4; `MaxFileSizeMB` hiện chỉ dùng để tính giới hạn tổng của request, việc từ chối từng file quá lớn và kiểm tra `AllowedExtensions` là của A5; `StorageRoot` dùng ở A6. Có thể ghi đè tạm bằng biến môi trường, ví dụ `CvUpload__MaxFilesPerRequest=2`, mà không phải sửa file.
 
 ---
 
@@ -511,7 +527,9 @@ Nếu Windows chưa tin chứng chỉ HTTPS dùng khi phát triển: `dotnet dev
 dotnet test
 ```
 
-> `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server. Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
+> - `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server.
+> - `CvUploadServiceTests` kiểm tra service tải CV ở mức A4: một/nhiều file, bỏ đường dẫn trong tên file, trạng thái `Received`, số lượng, hủy request, giới hạn mặc định. Khi làm A5, A6 cần cập nhật các test ghi chú "A4".
+> - Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
 
 ---
 
@@ -519,7 +537,7 @@ dotnet test
 
 ## 12. 🔌 Danh sách API
 
-### ✅ Đã triển khai (chỉ chạy ở môi trường Development, môi trường khác trả `404`)
+### 12.1. ✅ API kiểm tra kết nối (A1 – chỉ chạy ở Development, môi trường khác trả `404`)
 
 | Phương thức | Endpoint | Mô tả |
 |:---:|---|---|
@@ -533,15 +551,109 @@ Kết quả mong đợi (`503` kèm thông báo lỗi nếu không kết nối �
 { "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx" }
 ```
 
-Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`.
+Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json` (đã có `/api/cvs/upload` với các mã 200, 400, 413).
 
-### ⏳ Dự kiến
+<a id="api-upload"></a>
+
+### 12.2. ✅ API tải CV – `POST /api/cvs/upload` (A4)
+
+Nhận **một hoặc nhiều** file CV trong một request. Ở A4 API **chỉ nhận file và trả thông tin từng file**: chưa kiểm tra định dạng, chưa lưu file, chưa ghi database.
+
+**Request**
+
+```text
+POST /api/cvs/upload
+Content-Type: multipart/form-data
+Mỗi file là một phần có name="files" (nhiều file thì lặp lại phần "files")
+```
+
+**Giới hạn** (đọc từ mục `CvUpload` trong `appsettings.json`)
+
+| Giới hạn | Giá trị mặc định | Khi vượt |
+|---|---|---|
+| Số file mỗi request (`MaxFilesPerRequest`) | 20 | `400` "Quá nhiều file" |
+| Dung lượng cả request = `MaxFileSizeMB` × `MaxFilesPerRequest` + 1 MiB | 10 × 20 + 1 = **201 MiB** | `413 Payload Too Large`, do máy chủ Kestrel trả, không có nội dung |
+| Dung lượng từng file (`MaxFileSizeMB`) | 10 MiB | ⏳ A5 mới từ chối (`TooLarge`) |
+| Đuôi file (`AllowedExtensions`) | `.pdf`, `.png`, `.jpg`, `.jpeg` | ⏳ A5 mới từ chối (`InvalidFormat`) |
+
+> Giới hạn 201 MiB được đặt cho Kestrel nên áp dụng cho **mọi** endpoint của API. Nếu sau này chạy sau IIS, Nginx hoặc proxy khác, phải cấu hình thêm giới hạn của proxy đó (ví dụ IIS mặc định chỉ nhận khoảng 28,6 MB).
+
+**Response 200** (JSON, tên trường viết thường chữ đầu) – ví dụ thực tế khi gửi 3 file:
+
+```json
+{
+  "totalFiles": 3,
+  "successCount": 3,
+  "failedCount": 0,
+  "files": [
+    { "fileName": "cv-mau-1.pdf", "sizeBytes": 1421,  "contentType": "application/pdf", "status": "Received", "cvId": null, "errorCode": null, "errorMessage": null },
+    { "fileName": "cv-mau-2.png", "sizeBytes": 8625,  "contentType": "image/png",       "status": "Received", "cvId": null, "errorCode": null, "errorMessage": null },
+    { "fileName": "cv-mau-4.jpg", "sizeBytes": 17619, "contentType": "image/jpeg",      "status": "Received", "cvId": null, "errorCode": null, "errorMessage": null }
+  ]
+}
+```
+
+- `fileName`: tên file gốc **đã bỏ phần đường dẫn** client gửi kèm (ví dụ `C:\Users\...\cv.pdf` → `cv.pdf`). Không dùng tên này để lưu file.
+- `contentType`: do client khai báo, chưa được kiểm tra.
+- `successCount`: số file **chưa bị từ chối**. Ở A4 không có nghĩa là file đã được lưu.
+- Từ A5, một request có thể vừa có file hợp lệ vừa có file bị từ chối; API vẫn trả **200**, mỗi file tự mang `status` riêng.
+
+**Trạng thái từng file** (`SmartCv.Core.Contracts.CvUploadStatuses`)
+
+| `status` | Ý nghĩa | Từ khi nào |
+|---|---|---|
+| `Received` | Đã nhận, **chưa** kiểm tra, **chưa** lưu. `cvId`, `errorCode`, `errorMessage` đều `null` | ✅ A4 (hiện tại mọi file đều ở trạng thái này) |
+| `Accepted` | Hợp lệ và đã lưu file + bảng `Cvs`; `cvId` có giá trị | ⏳ A5 – A6 |
+| `Rejected` | Bị từ chối; xem `errorCode`: `EmptyFile`, `InvalidFormat`, `TooLarge`, `Duplicate` (`CvUploadErrorCodes`) | ⏳ A5 |
+
+**Response lỗi**
+
+| Mã | Khi nào | Nội dung |
+|:---:|---|---|
+| `400` | Không có file nào trong trường `files` | ProblemDetails, `"title": "Chưa chọn file"` |
+| `400` | Quá `MaxFilesPerRequest` file | ProblemDetails, `"title": "Quá nhiều file"` |
+| `413` | Request vượt giới hạn dung lượng tổng | Không có nội dung (Kestrel chặn trước khi chạy code) |
+| `415` | Request không phải `multipart/form-data` | Không có nội dung |
+
+```json
+{ "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1", "title": "Chưa chọn file", "status": 400,
+  "detail": "Hãy gửi ít nhất một file CV trong trường \"files\" (multipart/form-data)." }
+```
+
+**Thử bằng `curl.exe`** (chạy API trước, đứng ở gốc repo; file CV giả nằm trong `test-files/`)
+
+> Trong PowerShell phải gõ **`curl.exe`**, vì `curl` là tên tắt của `Invoke-WebRequest`. `-k` bỏ qua kiểm tra chứng chỉ HTTPS trên localhost, `-F "files=@..."` gửi một file (lặp lại cho nhiều file), `-i` in cả dòng trạng thái.
+
+```powershell
+# Một file
+curl.exe -k -F "files=@test-files/cv-mau-1.pdf" https://localhost:7269/api/cvs/upload
+
+# Nhiều file
+curl.exe -k -F "files=@test-files/cv-mau-1.pdf" -F "files=@test-files/cv-mau-2.png" -F "files=@test-files/cv-mau-4.jpg" https://localhost:7269/api/cvs/upload
+
+# Không có file -> 400
+curl.exe -k -i -F "note=khong co file" https://localhost:7269/api/cvs/upload
+```
+
+Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) bằng extension **REST Client** (Huachao Mao) và bấm **Send Request**.
+
+**Ghi chú bảo mật:** endpoint đang tắt kiểm tra antiforgery (`.DisableAntiforgery()`) và **chưa có xác thực**. Điều này chấp nhận được ở giai đoạn hiện tại vì API không dùng cookie đăng nhập (không có phiên để kẻ xấu lợi dụng qua CSRF), và được giao diện Blazor gọi từ phía máy chủ. Khi làm đăng nhập (M6) bằng cookie phải xem lại: bật antiforgery hoặc dùng token trong header, và yêu cầu xác thực cho endpoint này.
+
+#### Tích hợp giao diện Blazor (B3, B5)
+
+- Dùng chung class `SmartCv.Core.Contracts.CvUploadResponse` / `CvUploadItemResult` (project Web tham chiếu `SmartCv.Core`), không tự định nghĩa lại để tránh lệch tên trường.
+- Mỗi file thêm vào `MultipartFormDataContent` với tên phần **`files`**: `content.Add(part, "files", file.Name)`.
+- `IBrowserFile.OpenReadStream()` mặc định chỉ cho đọc **500 KB**: phải truyền `maxAllowedSize` bằng giới hạn API (10 MiB = `10 * 1024 * 1024`).
+- Nên lọc trước ở giao diện: tối đa 20 file, mỗi file ≤ 10 MiB, `accept=".pdf,.png,.jpg,.jpeg"`; API vẫn là nơi kiểm tra cuối cùng (A5).
+- Hiển thị theo `status` của từng file; từ A5 dựa vào `errorCode` để hiện thông báo tiếng Việt.
+
+### 12.3. ⏳ Dự kiến
 
 > Danh sách này là định hướng thiết kế, **chưa được chốt** (C2) và có thể điều chỉnh khi lập trình.
 
 | Phương thức | Endpoint | Mô tả | Mã việc |
 |:---:|---|---|:---:|
-| `POST` | `/api/cvs/upload` | Tải một hoặc nhiều CV | A4 – A6 |
+| `POST` | `/api/cvs/upload` (bổ sung) | Kiểm tra định dạng, dung lượng, file trùng; lưu file và ghi bảng `Cvs` | A5, A6 |
 | `GET` | `/api/jobs` | Danh sách job | – |
 | `POST` | `/api/applications` | Gắn CV với job | A8 |
 | `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
@@ -595,6 +707,23 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ li�
 | An toàn | Dòng trùng khóa nhưng khác nội dung → migration dừng và ROLLBACK; rollback bị chặn khi dữ liệu nền đang được dùng; chạy `database update` lần hai: *No migrations were applied* |
 | Build / Test | `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt 10/10 (thêm 9 test dữ liệu nền và migration) |
 
+<a id="nghiem-thu-a4"></a>
+
+### 13.3. A4 – API `POST /api/cvs/upload`
+
+Thử thật bằng `curl.exe` trên `https://localhost:7269` (profile `https`), dùng CV giả trong `test-files/`:
+
+| # | Trường hợp | Mong đợi | Thực tế |
+|:---:|---|---|---|
+| 1 | 1 file PDF | 200, `totalFiles` = 1, `Received` | ✅ 200, `totalFiles` 1, `cv-mau-1.pdf`, 1421 byte, `application/pdf`, `Received` |
+| 2 | PDF + PNG + JPG | 200, `totalFiles` = 3 | ✅ 200, 3 file, `application/pdf` / `image/png` / `image/jpeg` |
+| 3 | Không có file | 400 "Chưa chọn file" | ✅ 400 ProblemDetails "Chưa chọn file" |
+| 4 | File `.txt` | 200, `Received` (A5 mới từ chối) | ✅ 200, `text/plain`, `Received` |
+| 5 | 3 file khi giới hạn tạm = 2 (biến môi trường `CvUpload__MaxFilesPerRequest=2`) | 400 "Quá nhiều file" | ✅ 400 "Mỗi lần chỉ được tải tối đa 2 file, bạn đã gửi 3 file."; gửi 2 file vẫn 200; `appsettings.json` giữ nguyên 20 |
+| 6 | 1 file giả 250 MB | 413 | ✅ 413 ngay khi curl gửi header (`Expect: 100-continue`, 0 byte nội dung). Khi client gửi luôn nội dung (không `Expect`), máy chủ trả 413 sau khoảng 1,4 MB rồi đóng kết nối. API vẫn hoạt động bình thường sau đó; file thử đã xóa |
+
+Kiểm tra thêm: tên file kèm đường dẫn `C:\Users\hr\Desktop\cv-mau-3.pdf` → `cv-mau-3.pdf`; request JSON → 415; `/api/health/database`, `/api/health/gemini` vẫn 200; OpenAPI có `/api/cvs/upload` (200, 400, 413); không tạo thư mục `Uploads`, bảng `Cvs` không đổi (database vẫn 368 dòng, 2 migration). `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **22/22** (thêm 12 test `CvUploadServiceTests`).
+
 ---
 
 <a id="lo-trinh"></a>
@@ -613,7 +742,7 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ li�
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
 | 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3 · ⏳ B2 |
-| 3 | Trang tải CV | A4 – A8, B3 – B5 | ⏳ |
+| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4 · ⏳ A5 – A8, B3 – B5 |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
 | 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 | ⏳ |
@@ -622,7 +751,8 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ li�
 
 | Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
 |---|---|
-| **A4 – A6** | API tải CV, kiểm tra định dạng, dung lượng, file trùng, lưu file |
+| **A5** | Trong `CvUploadService` (chỗ `TODO A5`): từ chối file rỗng, sai đuôi, sai nội dung thật (magic bytes), quá `MaxFileSizeMB`, trùng SHA-256 → `Rejected` + `errorCode` |
+| **A6** | Trong `CvUploadService` (chỗ `TODO A6`): lưu `Uploads/CV/yyyy/MM/<GUID>.ext`, ghi bảng `Cvs`, trả `Accepted` + `cvId` |
 | A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
 | A8 | API gắn CV với job |
 | A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
@@ -686,6 +816,12 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Gemini trả về `400` / `403` | API key sai, đã bị thu hồi, hoặc dự án Google chưa bật Gemini API. |
 | Gemini trả về `404` | Tên model không còn đúng. Kiểm tra trên AI Studio rồi sửa `Gemini:Model`. |
 | Lỗi chứng chỉ HTTPS | Chạy `dotnet dev-certs https --trust`. |
+| Tải CV trả `404` | Sai đường dẫn (đúng là `/api/cvs/upload`, có chữ `s`) hoặc thiếu `app.MapCvEndpoints()` trong `Program.cs`. |
+| Tải CV trả `415` hoặc `400` *Expected a supported form media type* | Request không phải `multipart/form-data`. Với curl phải dùng `-F`, không dùng `-d`. |
+| Tải CV trả `413` với file nhỏ | Giới hạn trong `Program.cs` (Kestrel, `FormOptions`) bị thiếu, hoặc proxy phía trước (IIS, Nginx) có giới hạn thấp hơn. |
+| Tải CV trả `400` "Chưa chọn file" dù đã gửi | Tên phần multipart không phải `files`; trong REST Client thì sai `boundary` hoặc sai đường dẫn `< ../../test-files/...`. |
+| `Invoke-WebRequest: A parameter cannot be found that matches parameter name 'F'` | Đã gõ `curl` thay vì `curl.exe` trong PowerShell. |
+| Blazor báo *exceeds the maximum of 512000 bytes* | Chưa truyền `maxAllowedSize` cho `IBrowserFile.OpenReadStream()` (xem [mục 12.2](#api-upload)). |
 | Cảnh báo `NU1902` / `NU1903` khi build | Package có lỗ hổng bảo mật. Nâng lên bản đã vá; **không tắt cảnh báo** để che lỗi. |
 
 ### 🔒 Bảo mật và dữ liệu

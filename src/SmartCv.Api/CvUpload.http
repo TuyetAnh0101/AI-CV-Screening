@@ -1,0 +1,53 @@
+### Thử API tải CV bằng tiện ích REST Client trong VS Code (nhà phát hành: Huachao Mao)
+### Bấm chữ "Send Request" hiện phía trên mỗi khối POST.
+### Cổng lấy theo profile "https" trong Properties/launchSettings.json. File mẫu nằm trong thư mục test-files/ ở gốc repo.
+
+@host = https://localhost:7269
+
+### 1) Gửi 1 file PDF
+POST {{host}}/api/cvs/upload
+Content-Type: multipart/form-data; boundary=----SmartCvBoundary
+
+------SmartCvBoundary
+Content-Disposition: form-data; name="files"; filename="cv-mau-1.pdf"
+Content-Type: application/pdf
+
+< ../../test-files/cv-mau-1.pdf
+------SmartCvBoundary--
+
+### 2) Gửi 2 file cùng lúc (PDF + PNG)
+POST {{host}}/api/cvs/upload
+Content-Type: multipart/form-data; boundary=----SmartCvBoundary
+
+------SmartCvBoundary
+Content-Disposition: form-data; name="files"; filename="cv-mau-1.pdf"
+Content-Type: application/pdf
+
+< ../../test-files/cv-mau-1.pdf
+------SmartCvBoundary
+Content-Disposition: form-data; name="files"; filename="cv-mau-2.png"
+Content-Type: image/png
+
+< ../../test-files/cv-mau-2.png
+------SmartCvBoundary--
+
+### 3) Không gửi file nào -> phải trả 400 "Chưa chọn file"
+POST {{host}}/api/cvs/upload
+Content-Type: multipart/form-data; boundary=----SmartCvBoundary
+
+------SmartCvBoundary
+Content-Disposition: form-data; name="note"
+
+khong co file
+------SmartCvBoundary--
+
+### 4) File sai định dạng (.txt) -> A4 vẫn trả 200, status "Received" (A5 mới từ chối)
+POST {{host}}/api/cvs/upload
+Content-Type: multipart/form-data; boundary=----SmartCvBoundary
+
+------SmartCvBoundary
+Content-Disposition: form-data; name="files"; filename="file-sai-dinh-dang.txt"
+Content-Type: text/plain
+
+< ../../test-files/file-sai-dinh-dang.txt
+------SmartCvBoundary--
