@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SmartCv.Core\SmartCv.Core.csproj" />
+    <ProjectReference Include="..\..\src\SmartCv.Infrastructure\SmartCv.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

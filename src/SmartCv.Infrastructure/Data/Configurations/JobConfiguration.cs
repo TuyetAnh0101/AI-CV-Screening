@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SmartCv.Core.Entities;
+using SmartCv.Infrastructure.Data.Seed;
 
 namespace SmartCv.Infrastructure.Data.Configurations;
 
@@ -31,5 +32,8 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
             .HasDefaultValue(true, "DF_Jobs_IsActive").ValueGeneratedNever();
 
         b.Property(x => x.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()", "DF_Jobs_CreatedAt");
+
+        // A3: dữ liệu nền, nạp qua migration SeedJobs
+        b.HasData(JobSeedData.Jobs);
     }
 }

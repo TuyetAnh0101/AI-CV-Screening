@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SmartCv.Core.Entities;
+using SmartCv.Infrastructure.Data.Seed;
 
 namespace SmartCv.Infrastructure.Data.Configurations;
 
@@ -21,5 +22,8 @@ public class JobSkillAliasConfiguration : IEntityTypeConfiguration<JobSkillAlias
             .HasForeignKey(x => new { x.JobId, x.SkillCode })
             .HasConstraintName("FK_JobSkillAliases_JobSkills")
             .OnDelete(DeleteBehavior.Restrict);
+
+        // A3: dữ liệu nền, nạp qua migration SeedJobs
+        b.HasData(JobSeedData.JobSkillAliases);
     }
 }
