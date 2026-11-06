@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartCv.Api/SmartCv.Api.csproj" />
+    <Project Path="src/SmartCv.Core/SmartCv.Core.csproj" />
+    <Project Path="src/SmartCv.Infrastructure/SmartCv.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartCv.Tests/SmartCv.Tests.csproj" />
+  </Folder>
+</Solution>
