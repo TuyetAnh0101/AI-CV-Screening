@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A2):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate` và dữ liệu mẫu**. Các chức năng nghiệp vụ (tải CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A3):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs` và bộ dữ liệu demo**. Các chức năng nghiệp vụ (tải CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -31,10 +31,10 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 7. [Quy trình xử lý CV và chấm điểm](#cham-diem)
 8. [Cài đặt môi trường](#cai-dat)
 9. [Cấu hình SQL Server và User Secrets](#cau-hinh)
-10. [Tạo database và nạp dữ liệu mẫu](#database)
+10. [Tạo database và nạp dữ liệu](#database)
 11. [Build, chạy và kiểm thử](#chay-du-an)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -83,7 +83,8 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | Mã | Nội dung |
 |---|---|
 | A1 | Solution .NET 10 gồm 4 project; kết nối SQL Server; cấu hình Gemini qua User Secrets, kiểm tra cấu hình khi khởi động; 2 API kiểm tra kết nối |
-| A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql`, dữ liệu mẫu `seed.sql` (368 dòng) |
+| A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql` |
+| A3 | Dữ liệu nền 5 Jobs, 29 JobSkills, 52 JobSkillAliases (`JobSeedData` + `HasData`) nạp tự động qua Migration `SeedJobs`; tách dữ liệu demo sang `seed_demo.sql` (282 dòng); script kiểm tra `check_jobs.sql`; unit test dữ liệu nền |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -162,8 +163,10 @@ flowchart LR
 AI-CV-Screening/
 ├── database/
 │   ├── SQL.sql                         # Thiết kế CSDL gốc (C2) – chỉ dùng để đối chiếu
-│   ├── seed.sql                        # Dữ liệu mẫu 12 bảng (368 dòng), trọng số 30/70
+│   ├── seed_demo.sql                   # Dữ liệu demo 9 bảng (282 dòng), trọng số 30/70 – chạy tay, tùy chọn
+│   ├── check_jobs.sql                  # Kiểm tra dữ liệu nền 5 job / 29 kỹ năng / 52 từ khóa
 │   ├── migration_InitialCreate.sql     # Script SQL sinh từ Migration InitialCreate
+│   ├── migration_SeedJobs.sql          # Script SQL sinh từ Migration SeedJobs
 │   ├── update_seed_weights_30_70.sql   # Chỉ dùng cho DB đã seed bằng bản cũ 40/60
 │   ├── erdplus.png                     # Sơ đồ ERD
 │   └── README.md
@@ -179,11 +182,12 @@ AI-CV-Screening/
 │   └── SmartCv.Infrastructure/
 │       ├── Data/
 │       │   ├── Configurations/               # 12 Fluent API Configuration
-│       │   ├── Migrations/                   # InitialCreate + ModelSnapshot
+│       │   ├── Migrations/                   # InitialCreate, SeedJobs + ModelSnapshot
+│       │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
 │       │   └── SmartCvDbContext.cs           # DbContext duy nhất
 │       ├── Gemini/GeminiOptions.cs
 │       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini
-├── tests/SmartCv.Tests/                      # xUnit
+├── tests/SmartCv.Tests/                      # xUnit (JobSeedDataTests: dữ liệu nền, migration)
 ├── .gitignore
 ├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
 ├── global.json
@@ -387,25 +391,38 @@ Mỗi thành viên nên kiểm tra API key của mình có dùng được model 
 
 <a id="database"></a>
 
-## 10. 🛢️ Tạo database và nạp dữ liệu mẫu
+## 10. 🛢️ Tạo database và nạp dữ liệu
 
-### 10.1. Tạo database bằng Migration
+### 10.1. Hai loại dữ liệu
+
+| Loại | Nội dung | Nạp bằng | Khi nào |
+|---|---|---|---|
+| **Dữ liệu nền** | 5 Jobs · 29 JobSkills · 52 JobSkillAliases | Migration `SeedJobs` – **tự động** khi chạy `dotnet ef database update` | Mọi môi trường |
+| **Dữ liệu demo** | 12 Candidates · 12 Cvs · 13 Applications · 2 PromptVersions · 1 EvaluationSet · 10 HrLabels · 4 EvaluationRuns · 36 Evaluations · 192 EvaluationSkills (282 dòng) | `database/seed_demo.sql` – **chạy tay**, tùy chọn | Khi cần demo, chụp màn hình báo cáo |
+
+Tổng khi có cả hai: 86 + 282 = **368 dòng**. 12 CV demo chỉ có bản ghi trong database, không có file thật trong `Uploads/`.
+
+**5 job được nạp sẵn**
+
+| JobId | Vị trí | GPA tối thiểu | Kinh nghiệm tối thiểu (năm) | MustHave | NiceToHave | Từ khóa |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|
+| 1 | Backend Developer (.NET) | 2.50 | 0.5 | 3 | 3 | 11 |
+| 2 | Frontend Developer (Blazor) | 2.50 | 0.0 | 3 | 3 | 11 |
+| 3 | AI Engineer Intern | 3.00 | 0.0 | 3 | 3 | 9 |
+| 4 | Tester (QA) | – | 0.0 | 3 | 2 | 9 |
+| 5 | Business Analyst | 2.80 | 1.0 | 3 | 3 | 12 |
+
+### 10.2. Thành viên mới: thiết lập database
 
 ```powershell
+# 1. Tạo database, 12 bảng và dữ liệu nền (InitialCreate + SeedJobs)
 dotnet ef database update --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+
+# 2. (Tùy chọn) Nạp dữ liệu demo
+sqlcmd -S TEN_SERVER -d SmartCvDb -E -C -b -I -f 65001 -i database/seed_demo.sql
 ```
 
-Lệnh tạo database `SmartCvDb` (nếu chưa có), 12 bảng cùng toàn bộ ràng buộc, và ghi lịch sử vào `__EFMigrationsHistory`. Script SQL tương đương: [`database/migration_InitialCreate.sql`](database/migration_InitialCreate.sql).
-
-> Không xóa, sửa hay tạo lại migration `InitialCreate` đã áp dụng. Thay đổi schema sau này phải thêm migration mới và báo cả nhóm.
-
-### 10.2. Nạp dữ liệu mẫu (chỉ cho database mới)
-
-```powershell
-sqlcmd -S TEN_SERVER -d SmartCvDb -E -C -b -I -f 65001 -i database/seed.sql
-```
-
-| Tham số | Ý nghĩa |
+| Tham số `sqlcmd` | Ý nghĩa |
 |---|---|
 | `-E` | Windows Authentication |
 | `-C` | Tin chứng chỉ máy chủ (môi trường phát triển) |
@@ -413,22 +430,51 @@ sqlcmd -S TEN_SERVER -d SmartCvDb -E -C -b -I -f 65001 -i database/seed.sql
 | `-I` | Bật `QUOTED_IDENTIFIER` – cần cho bảng có filtered index (script cũng tự bật) |
 | `-f 65001` | Đọc file UTF-8 để giữ đúng tiếng Việt |
 
-- Script chèn **368 dòng** trong một transaction; lỗi thì ROLLBACK toàn bộ.
-- Nếu bảng `Jobs` đã có dữ liệu, script **dừng và không chèn gì** (`CSDL đã có dữ liệu, bỏ qua seed.sql.`). **Không chạy lại** seed trên database đã có dữ liệu.
-- Database đã seed bằng **bản cũ 40/60**: chạy một lần [`database/update_seed_weights_30_70.sql`](database/update_seed_weights_30_70.sql) (cùng tham số `sqlcmd`). Script kiểm tra trước, chạy trong transaction và chạy lại không làm thay đổi gì thêm.
+- Chỉ bước 1 là đủ để có 5 job, 29 kỹ năng và 52 từ khóa; **không cần chạy file SQL nào**.
+- `seed_demo.sql` chèn 282 dòng trong một transaction; lỗi thì ROLLBACK toàn bộ.
+- `seed_demo.sql` **dừng và không chèn gì** khi chưa có 5 job nền (chưa chạy bước 1) hoặc khi bất kỳ bảng demo nào đã có dữ liệu. **Không chạy lại** trên database đã có dữ liệu demo.
+- Script SQL tương đương của từng migration: [`database/migration_InitialCreate.sql`](database/migration_InitialCreate.sql), [`database/migration_SeedJobs.sql`](database/migration_SeedJobs.sql).
 
-### 10.3. Kiểm tra database và Migration
+> Không xóa, sửa hay tạo lại các migration đã áp dụng (`InitialCreate`, `SeedJobs`). Thay đổi schema hoặc dữ liệu nền sau này phải thêm migration mới và báo cả nhóm.
+
+### 10.3. Máy đã có dữ liệu từ A2
+
+Database tạo ở A2 và đã chạy `seed.sql` cũ (368 dòng) **chỉ cần chạy lại bước 1**:
 
 ```powershell
-# Migration đã áp dụng (không còn chữ "Pending")
+dotnet ef database update --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+```
+
+Migration `SeedJobs` được viết để chạy an toàn trên database đã có dữ liệu:
+
+- Dòng nền đã có và **đúng nội dung** thì giữ nguyên (kể cả `CreatedAt` cũ); chỉ chèn phần còn thiếu.
+- Dòng **trùng khóa nhưng khác nội dung** (ví dụ job bị sửa tay): migration dừng với lỗi `SeedJobs: ...`, ROLLBACK, không ghi đè. Báo nhóm để xử lý, **không** tự xóa dữ liệu.
+- Không cần xóa database, không chạy lại `seed_demo.sql`, không sửa tay bảng `__EFMigrationsHistory`.
+- Rollback (`dotnet ef database update InitialCreate`) chỉ gỡ dữ liệu nền khi chưa có hồ sơ/lượt chấm nào dùng tới; ngược lại sẽ báo lỗi và không xóa gì.
+- Database đã seed bằng **bản cũ 40/60**: chạy thêm một lần [`database/update_seed_weights_30_70.sql`](database/update_seed_weights_30_70.sql) (cùng tham số `sqlcmd`). Script kiểm tra trước, chạy trong transaction và chạy lại không làm thay đổi gì thêm.
+
+### 10.4. Sửa dữ liệu nền về sau
+
+1. Sửa trong [`src/SmartCv.Infrastructure/Data/Seed/JobSeedData.cs`](src/SmartCv.Infrastructure/Data/Seed/JobSeedData.cs). Chỉ dùng giá trị cố định, **không** dùng `DateTime.Now`, `DateTime.UtcNow`, `Guid.NewGuid()`.
+2. Tạo migration mới, ví dụ `dotnet ef migrations add UpdateJobSkills ...`. Kiểm tra file sinh ra chỉ có `InsertData` / `UpdateData` / `DeleteData` đúng phần đã sửa; nếu cần chạy trên database đã có dữ liệu, xử lý an toàn như `SeedJobs`.
+3. **Không** sửa job/kỹ năng bằng tay trong SSMS (code và database sẽ lệch nhau) và **không** sửa migration `SeedJobs`.
+4. Xóa một kỹ năng đã được dùng trong `EvaluationSkills` sẽ bị khóa ngoại chặn – đây là chủ ý, để không mất lịch sử chấm.
+
+### 10.5. Kiểm tra database và Migration
+
+```powershell
+# Có InitialCreate và SeedJobs, không còn chữ "Pending"
 dotnet ef migrations list --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
 
 # Model và migration đồng bộ
 dotnet ef migrations has-pending-model-changes --project src/SmartCv.Infrastructure --startup-project src/SmartCv.Api --context SmartCv.Infrastructure.Data.SmartCvDbContext
+
+# Dữ liệu nền: số dòng, MustHave/NiceToHave từng job, kỹ năng thiếu từ khóa, tiếng Việt
+sqlcmd -S TEN_SERVER -E -C -I -f 65001 -i database/check_jobs.sql
 ```
 
 ```sql
--- Lịch sử migration: 1 dòng 20261106132922_InitialCreate
+-- Lịch sử migration: 20261106132922_InitialCreate, 20261106142155_SeedJobs
 SELECT * FROM __EFMigrationsHistory;
 
 -- Số ràng buộc: PK 12, FK 13, UNIQUE 6, CHECK 25, DEFAULT 18
@@ -438,7 +484,7 @@ WHERE type IN ('PK', 'F', 'UQ', 'C', 'D')
   AND OBJECT_NAME(parent_object_id) <> '__EFMigrationsHistory'
 GROUP BY type_desc;
 
--- Số dòng từng bảng (tổng 368 sau khi seed)
+-- Số dòng từng bảng (86 nếu chỉ có dữ liệu nền, 368 nếu có thêm dữ liệu demo)
 SELECT t.name AS Bang, SUM(p.rows) AS SoDong
 FROM sys.tables t
 JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1)
@@ -465,7 +511,7 @@ Nếu Windows chưa tin chứng chỉ HTTPS dùng khi phát triển: `dotnet dev
 dotnet test
 ```
 
-> Project test hiện chỉ có một bài kiểm thử mẫu. Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
+> `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server. Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
 
 ---
 
@@ -512,9 +558,11 @@ Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`
 
 <a id="nghiem-thu-a2"></a>
 
-## 13. ✅ Kết quả nghiệm thu A2
+## 13. ✅ Kết quả nghiệm thu
 
-Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và `seed.sql`.
+### 13.1. A2 – Entity, Migration InitialCreate, dữ liệu mẫu
+
+Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ liệu mẫu.
 
 | Hạng mục | Kết quả |
 |---|---|
@@ -534,6 +582,19 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và `seed.sql
 | JobSkillAliases | 52 | PromptVersions | 2 | Evaluations | 36 |
 | Candidates | 12 | EvaluationSets | 1 | EvaluationSkills | 192 |
 
+<a id="nghiem-thu-a3"></a>
+
+### 13.2. A3 – Dữ liệu nền qua Migration SeedJobs
+
+| Hạng mục | Kết quả |
+|---|---|
+| Mã nguồn | `Data/Seed/JobSeedData.cs` (5 / 29 / 52, ngày seed cố định 2026-11-01 UTC); `HasData` trong 3 Configuration, giữ nguyên toàn bộ cấu hình A2 |
+| Migration | `20261106142155_SeedJobs` chỉ chứa dữ liệu, **không** thay đổi schema; snapshot chứa `HasData`; không còn pending model changes |
+| Database mới | Chỉ chạy `dotnet ef database update` (không chạy file SQL nào): 2 migration, Jobs 5, JobSkills 29, JobSkillAliases 52; mỗi job 3 MustHave, NiceToHave 3 (Tester 2); từ khóa 11/11/9/9/12; không có kỹ năng thiếu từ khóa; tiếng Việt đúng. Chạy thêm `seed_demo.sql` → 368 dòng, v1 70%, v2 80% |
+| Database A2 có sẵn 368 dòng | `SeedJobs` áp dụng bình thường; dữ liệu 12 bảng **giống hệt từng byte** trước và sau; vẫn 368 dòng, 0.30/0.70, v1 70%, v2 80%; `DBCC CHECKCONSTRAINTS` không vi phạm |
+| An toàn | Dòng trùng khóa nhưng khác nội dung → migration dừng và ROLLBACK; rollback bị chặn khi dữ liệu nền đang được dùng; chạy `database update` lần hai: *No migrations were applied* |
+| Build / Test | `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt 10/10 (thêm 9 test dữ liệu nền và migration) |
+
 ---
 
 <a id="lo-trinh"></a>
@@ -551,7 +612,7 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và `seed.sql
 | Bước | Nội dung | Mã việc | Trạng thái |
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
-| 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2 · ⏳ A3, B2 |
+| 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3 · ⏳ B2 |
 | 3 | Trang tải CV | A4 – A8, B3 – B5 | ⏳ |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
@@ -561,8 +622,7 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và `seed.sql
 
 | Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
 |---|---|
-| **A3** | Nhập sẵn 5 job. `seed.sql` đã có 5 job làm dữ liệu mẫu; nhóm cần chốt cách nhập chính thức cho môi trường chạy thật |
-| A4 – A6 | API tải CV, kiểm tra định dạng, dung lượng, file trùng, lưu file |
+| **A4 – A6** | API tải CV, kiểm tra định dạng, dung lượng, file trùng, lưu file |
 | A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
 | A8 | API gắn CV với job |
 | A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
@@ -618,7 +678,10 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | `There is already an object named ...` khi chạy migration | Bảng đã được tạo thủ công bằng `SQL.sql`. Báo nhóm trước khi xử lý; không tự ý xóa database đang dùng chung. |
 | `Msg 1934 ... 'QUOTED_IDENTIFIER'` khi chạy script | Thêm `-I` vào lệnh `sqlcmd`. |
 | Tiếng Việt bị lỗi font sau khi seed | Thêm `-f 65001` để `sqlcmd` đọc file UTF-8. |
-| `CSDL đã có dữ liệu, bỏ qua seed.sql.` | Database đã có dữ liệu mẫu, không cần chạy lại. |
+| `CSDL đã có dữ liệu demo ..., bỏ qua seed_demo.sql.` | Database đã có dữ liệu demo, không cần chạy lại. |
+| `Chưa có 5 job nền. Hãy chạy "dotnet ef database update" trước.` | Chạy migration trước khi nạp dữ liệu demo, hoặc kiểm tra đang kết nối đúng database. |
+| `SeedJobs: ... khác dữ liệu nền` khi `database update` | Job/kỹ năng trong database đã bị sửa tay. Migration đã ROLLBACK, không mất gì. Báo nhóm để thống nhất dữ liệu; không tự xóa database. |
+| `Violation of PRIMARY KEY constraint 'PK_Jobs'` | Đang dùng migration cũ không có kiểm tra an toàn. Lấy code mới nhất từ `main` rồi chạy lại. |
 | `InvalidOperationException` về `ConnectionStrings:SmartCvDb` hoặc `OptionsValidationException` khi khởi động | Chưa đặt User Secrets hoặc gõ sai tên khóa. Tên đúng là `ConnectionStrings:SmartCvDb` và `Gemini:ApiKey`. |
 | Gemini trả về `400` / `403` | API key sai, đã bị thu hồi, hoặc dự án Google chưa bật Gemini API. |
 | Gemini trả về `404` | Tên model không còn đúng. Kiểm tra trên AI Studio rồi sửa `Gemini:Model`. |
@@ -630,7 +693,7 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 - Không commit Gemini API key, mật khẩu, chuỗi kết nối chứa bí mật, file `.env` hoặc User Secrets.
 - Không commit thư mục build (`bin/`, `obj/`), file backup database (`*.bak`) hay CV thật trong `Uploads/`.
 - Luôn xem lại `git diff --cached` trước khi commit.
-- Chỉ dùng CV mà nhóm có quyền xử lý. Dữ liệu mẫu trong `seed.sql` là dữ liệu giả lập.
+- Chỉ dùng CV mà nhóm có quyền xử lý. Dữ liệu demo trong `seed_demo.sql` là dữ liệu giả lập.
 - Khi thay đổi cấu hình chung, schema hoặc API contract, báo cho cả nhóm và cập nhật tài liệu.
 
 ---

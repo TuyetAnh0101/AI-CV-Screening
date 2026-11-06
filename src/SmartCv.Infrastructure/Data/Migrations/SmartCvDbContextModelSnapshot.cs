@@ -501,6 +501,57 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                             t.HasCheckConstraint("CK_Jobs_MinYearsExperience", "MinYearsExperience >= 0");
                         });
+
+                    b.HasData(
+                        new
+                        {
+                            JobId = 1,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Phát triển Web API bằng ASP.NET Core, làm việc với SQL Server và Entity Framework Core.",
+                            IsActive = true,
+                            MinGpa = 2.50m,
+                            MinYearsExperience = 0.5m,
+                            Title = "Backend Developer (.NET)"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Xây dựng giao diện Blazor, kết nối API, đảm bảo giao diện thân thiện và responsive.",
+                            IsActive = true,
+                            MinGpa = 2.50m,
+                            MinYearsExperience = 0.0m,
+                            Title = "Frontend Developer (Blazor)"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Tích hợp mô hình ngôn ngữ lớn (Gemini), viết prompt và đánh giá chất lượng đầu ra.",
+                            IsActive = true,
+                            MinGpa = 3.00m,
+                            MinYearsExperience = 0.0m,
+                            Title = "AI Engineer Intern"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Thiết kế test case, kiểm thử chức năng và API, ghi nhận và theo dõi lỗi.",
+                            IsActive = true,
+                            MinYearsExperience = 0.0m,
+                            Title = "Tester (QA)"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Thu thập, phân tích yêu cầu, mô hình hóa nghiệp vụ và làm cầu nối giữa khách hàng với đội phát triển.",
+                            IsActive = true,
+                            MinGpa = 2.80m,
+                            MinYearsExperience = 1.0m,
+                            Title = "Business Analyst"
+                        });
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.JobSkill", b =>
@@ -529,6 +580,211 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_JobSkills_SkillType", "SkillType IN (N'MustHave', N'NiceToHave')");
                         });
+
+                    b.HasData(
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "csharp",
+                            DisplayName = "C#",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "aspnetcore",
+                            DisplayName = "ASP.NET Core",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "sqlserver",
+                            DisplayName = "SQL Server",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "efcore",
+                            DisplayName = "Entity Framework Core",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "git",
+                            DisplayName = "Git",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "docker",
+                            DisplayName = "Docker",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "blazor",
+                            DisplayName = "Blazor",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "html_css",
+                            DisplayName = "HTML/CSS",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "csharp",
+                            DisplayName = "C#",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "bootstrap",
+                            DisplayName = "Bootstrap",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "figma",
+                            DisplayName = "Figma",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "javascript",
+                            DisplayName = "JavaScript",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "python",
+                            DisplayName = "Python",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "machine_learning",
+                            DisplayName = "Machine Learning",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "llm_api",
+                            DisplayName = "LLM API",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "prompt_engineering",
+                            DisplayName = "Prompt Engineering",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "sql",
+                            DisplayName = "SQL",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "nlp",
+                            DisplayName = "NLP",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "manual_testing",
+                            DisplayName = "Kiểm thử thủ công",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "bug_tracking",
+                            DisplayName = "Quản lý lỗi",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "sql",
+                            DisplayName = "SQL",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "automation_testing",
+                            DisplayName = "Kiểm thử tự động",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "api_testing",
+                            DisplayName = "Kiểm thử API",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "requirement_analysis",
+                            DisplayName = "Phân tích yêu cầu",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "uml",
+                            DisplayName = "UML",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "communication",
+                            DisplayName = "Giao tiếp",
+                            SkillType = "MustHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "sql",
+                            DisplayName = "SQL",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "figma",
+                            DisplayName = "Figma",
+                            SkillType = "NiceToHave"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "english",
+                            DisplayName = "Tiếng Anh",
+                            SkillType = "NiceToHave"
+                        });
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.JobSkillAlias", b =>
@@ -548,6 +804,320 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasName("PK_JobSkillAliases");
 
                     b.ToTable("JobSkillAliases", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "csharp",
+                            Alias = "C Sharp"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "csharp",
+                            Alias = "CSharp"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "aspnetcore",
+                            Alias = "ASP.NET"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "aspnetcore",
+                            Alias = "Web API"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "sqlserver",
+                            Alias = "MSSQL"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "sqlserver",
+                            Alias = "T-SQL"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "efcore",
+                            Alias = "EF Core"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "efcore",
+                            Alias = "Entity Framework"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "git",
+                            Alias = "GitHub"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "git",
+                            Alias = "GitLab"
+                        },
+                        new
+                        {
+                            JobId = 1,
+                            SkillCode = "docker",
+                            Alias = "Container"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "blazor",
+                            Alias = "Razor"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "blazor",
+                            Alias = "Blazor WebAssembly"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "html_css",
+                            Alias = "HTML5"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "html_css",
+                            Alias = "CSS3"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "csharp",
+                            Alias = "C Sharp"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "csharp",
+                            Alias = "CSharp"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "bootstrap",
+                            Alias = "Bootstrap 5"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "figma",
+                            Alias = "UI/UX"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "figma",
+                            Alias = "Wireframe"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "javascript",
+                            Alias = "JS"
+                        },
+                        new
+                        {
+                            JobId = 2,
+                            SkillCode = "javascript",
+                            Alias = "TypeScript"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "python",
+                            Alias = "Python3"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "machine_learning",
+                            Alias = "ML"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "machine_learning",
+                            Alias = "Học máy"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "llm_api",
+                            Alias = "Gemini"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "llm_api",
+                            Alias = "OpenAI API"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "prompt_engineering",
+                            Alias = "Prompt"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "sql",
+                            Alias = "MySQL"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "sql",
+                            Alias = "SQL Server"
+                        },
+                        new
+                        {
+                            JobId = 3,
+                            SkillCode = "nlp",
+                            Alias = "Xử lý ngôn ngữ tự nhiên"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "manual_testing",
+                            Alias = "Manual Test"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "manual_testing",
+                            Alias = "Test case"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "bug_tracking",
+                            Alias = "Jira"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "bug_tracking",
+                            Alias = "GitHub Issues"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "sql",
+                            Alias = "MySQL"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "sql",
+                            Alias = "SQL Server"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "automation_testing",
+                            Alias = "Selenium"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "automation_testing",
+                            Alias = "Playwright"
+                        },
+                        new
+                        {
+                            JobId = 4,
+                            SkillCode = "api_testing",
+                            Alias = "Postman"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "requirement_analysis",
+                            Alias = "Requirement"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "requirement_analysis",
+                            Alias = "BRD"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "uml",
+                            Alias = "Use case"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "uml",
+                            Alias = "BPMN"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "communication",
+                            Alias = "Communication"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "communication",
+                            Alias = "Thuyết trình"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "sql",
+                            Alias = "MySQL"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "sql",
+                            Alias = "SQL Server"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "figma",
+                            Alias = "Wireframe"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "figma",
+                            Alias = "Mockup"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "english",
+                            Alias = "IELTS"
+                        },
+                        new
+                        {
+                            JobId = 5,
+                            SkillCode = "english",
+                            Alias = "TOEIC"
+                        });
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.PromptVersion", b =>
