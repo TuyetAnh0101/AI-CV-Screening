@@ -216,7 +216,7 @@ AI-CV-Screening/
 │       ├── appsettings.Development.json      # ApiBaseUrl = https://localhost:7269/
 │       └── Program.cs                        # AddSmartCvApiClients(...)
 ├── test-files/                               # CV GIẢ để thử API tải CV (không đặt CV thật)
-├── tests/SmartCv.Tests/                      # xUnit: dữ liệu nền, tải CV, API job, service gọi API của Web
+├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests, JobEndpointsTests, WebApiClientTests
 ├── .vscode/tasks.json                        # Task "Chạy API + Web" cho VS Code
 ├── .gitignore
 ├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
