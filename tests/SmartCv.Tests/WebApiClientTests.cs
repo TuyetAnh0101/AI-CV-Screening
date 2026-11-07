@@ -137,12 +137,8 @@ public class WebApiClientTests
 
     private static (WebApplicationFactory<Program> Api, CvApiClient Client) CvClientAgainstRealApi()
     {
-        var api = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-        {
-            b.UseEnvironment("Development");   // API tải CV chỉ bật ở Development (A4)
-            b.UseSetting("ConnectionStrings:SmartCvDb", "Server=(local);Database=SmartCv_Test_NotUsed;Trusted_Connection=True");
-            b.UseSetting("Gemini:ApiKey", "test-not-a-real-key");
-        });
+        // API tải CV chỉ bật ở Development (A4); database InMemory (A5 tra trùng trong bảng Cvs)
+        var api = TestSupport.ApiFactory();
         return (api, new CvApiClient(api.CreateClient(), NullLogger<CvApiClient>.Instance));
     }
 
@@ -155,8 +151,8 @@ public class WebApiClientTests
         // CV 1 MB > 500 KB mặc định của Blazor: chứng minh client đã truyền maxAllowedSize = 10 MB
         var result = await client.UploadAsync(
         [
-            new FakeBrowserFile("cv-mau-1.pdf", "application/pdf", new byte[1024 * 1024]),
-            new FakeBrowserFile("cv-mau-2.png", "image/png", new byte[100]),
+            new FakeBrowserFile("cv-mau-1.pdf", "application/pdf", TestSupport.Pdf("cv-mau-1", 1024 * 1024)),
+            new FakeBrowserFile("cv-mau-2.png", "image/png", TestSupport.Png("cv-mau-2")),
         ]);
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
@@ -164,6 +160,26 @@ public class WebApiClientTests
         Assert.Equal(["cv-mau-1.pdf", "cv-mau-2.png"], result.Data.Files.Select(f => f.FileName));
         Assert.Equal(1024 * 1024, result.Data.Files[0].SizeBytes);
         Assert.All(result.Data.Files, f => Assert.Equal(CvUploadStatuses.Received, f.Status));
+    }
+
+    [Fact]
+    public async Task CvApiClient_receives_A5_rejections_per_file()
+    {
+        // B5 dựa vào status, errorCode, errorMessage của từng file; HTTP vẫn 200 nên IsSuccess = true
+        var (api, client) = CvClientAgainstRealApi();
+        using var _ = api;
+
+        var result = await client.UploadAsync(
+        [
+            new FakeBrowserFile("cv.pdf", "application/pdf", TestSupport.Pdf("hop-le")),
+            new FakeBrowserFile("gia-mao.pdf", "application/pdf", "Day khong phai CV"u8.ToArray()),
+        ]);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal((2, 1, 1), (result.Data!.TotalFiles, result.Data.SuccessCount, result.Data.FailedCount));
+        Assert.Equal(CvUploadStatuses.Rejected, result.Data.Files[1].Status);
+        Assert.Equal(CvUploadErrorCodes.InvalidFormat, result.Data.Files[1].ErrorCode);
+        Assert.Contains("Nội dung không phải file PDF", result.Data.Files[1].ErrorMessage);
     }
 
     [Fact]

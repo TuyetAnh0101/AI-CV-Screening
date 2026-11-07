@@ -1,0 +1,9 @@
+# CV và file thử phải giữ nguyên từng byte: không đổi xuống dòng (LF/CRLF) khi checkout.
+# Nếu Git coi PDF nhỏ là văn bản, core.autocrlf=true trên Windows sẽ làm đổi nội dung,
+# đổi mã SHA-256 và làm sai kiểm tra file trùng (A5).
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.docx binary
+test-files/** binary
