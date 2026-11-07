@@ -1,0 +1,100 @@
+@*
+    B3: "Danh sách CV" (Component Data trong Figma).
+    Cột: ô tích | Tên file (+ dòng phụ) | Dung lượng | Trạng thái | Thao tác (menu ⋯: Xem file gốc, Xóa khỏi danh sách).
+*@
+
+<div class="cv-table-wrap">
+    <table class="cv-table">
+        <thead>
+            <tr>
+                <th class="col-check">
+                    <input type="checkbox" class="sc-check" aria-label="Chọn tất cả CV đã tải lên"
+                           checked="@AllSelected" disabled="@(!SelectableItems.Any())"
+                           @onchange="e => OnToggleAll.InvokeAsync((bool)e.Value!)" />
+                </th>
+                <th>Tên file</th>
+                <th class="col-size">Dung lượng</th>
+                <th class="col-status">Trạng thái</th>
+                <th class="col-actions">Thao tác</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Items.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="empty-row">Chưa có CV nào. Kéo thả file vào ô phía trên để bắt đầu.</td>
+                </tr>
+            }
+            @for (var i = 0; i < Items.Count; i++)
+            {
+                var item = Items[i];
+                var (text, variant) = StatusText.ForUpload(item.State);
+                // Hai dòng cuối mở menu lên trên để không bị cắt ở đáy bảng
+                var dropUp = Items.Count > 2 && i >= Items.Count - 2;
+                <tr class="@(item.State is UploadItemState.Invalid or UploadItemState.Rejected ? "is-error" : null)" @key="item.LocalId">
+                    <td class="col-check">
+                        <input type="checkbox" class="sc-check" aria-label="Chọn @item.FileName"
+                               checked="@(item.Selected && item.CanAnalyze)" disabled="@(!item.CanAnalyze)"
+                               @onchange="e => OnToggle.InvokeAsync((item, (bool)e.Value!))" />
+                    </td>
+                    <td class="col-name">
+                        <div class="file-name" title="@item.FileName">@item.FileName</div>
+                        <div class="file-sub">@SubLine(item)</div>
+                    </td>
+                    <td class="col-size">@StatusText.FileSize(item.SizeBytes)</td>
+                    <td class="col-status">
+                        @if (item.State == UploadItemState.Uploading)
+                        {
+                            <span class="spinner-border spinner-border-sm text-secondary me-1" aria-hidden="true"></span>
+                        }
+                        <StatusBadge Text="@text" Variant="variant" Title="@item.Message" />
+                    </td>
+                    <td class="col-actions">
+                        <div class="row-menu">
+                            <button type="button" class="menu-btn" aria-label="Thao tác với @item.FileName"
+                                    aria-haspopup="menu" aria-expanded="@(openMenu == item.LocalId ? "true" : "false")"
+                                    title="@(item.State == UploadItemState.Uploading ? "Đang tải lên, vui lòng chờ" : "Thao tác")"
+                                    disabled="@(item.State == UploadItemState.Uploading)"
+                                    @onclick="() => openMenu = openMenu == item.LocalId ? null : item.LocalId">
+                                <img src="images/icons/dots.svg" width="20" height="20" alt="" />
+                            </button>
+                            @if (openMenu == item.LocalId)
+                            {
+                                <div class="menu-pop @(dropUp ? "drop-up" : null)" role="menu">
+                                    @if (item.CvId is not null && !string.IsNullOrEmpty(ApiBaseUrl))
+                                    {
+                                        <a class="menu-item" role="menuitem" href="@($"{ApiBaseUrl}api/cvs/{item.CvId}/file")"
+                                           target="_blank" rel="noopener" @onclick="() => openMenu = null">Xem file gốc</a>
+                                    }
+                                    <button type="button" class="menu-item danger" role="menuitem"
+                                            @onclick="async () => { openMenu = null; await OnRemove.InvokeAsync(item); }">Xóa khỏi danh sách</button>
+                                </div>
+                            }
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private Guid? openMenu;   // dòng đang mở menu ⋯
+
+    [Parameter, EditorRequired] public List<UploadItem> Items { get; set; } = [];
+    [Parameter] public EventCallback<UploadItem> OnRemove { get; set; }
+    [Parameter] public EventCallback<(UploadItem Item, bool Selected)> OnToggle { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleAll { get; set; }
+    [Parameter] public string? ApiBaseUrl { get; set; }   // mở file gốc (A6): {ApiBaseUrl}api/cvs/{cvId}/file
+
+    private IEnumerable<UploadItem> SelectableItems => Items.Where(i => i.CanAnalyze);
+    private bool AllSelected => SelectableItems.Any() && SelectableItems.All(i => i.Selected);
+
+    // Dòng phụ dưới tên file (Figma: chữ 13px dưới tên đậm 15px)
+    private static string SubLine(UploadItem item) => item.State switch
+    {
+        UploadItemState.Uploading => $"{item.Extension} • đang gửi lên máy chủ...",
+        UploadItemState.Uploaded => $"{item.Extension} • sẵn sàng phân tích",
+        _ => item.Message ?? item.Extension
+    };
+}

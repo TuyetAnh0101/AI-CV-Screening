@@ -1,0 +1,28 @@
+@*
+    B3: ô kéo thả (Component Dropzone trong Figma).
+    <InputFile> TRONG SUỐT phủ kín ô: kéo file vào ô là thả vào InputFile, bấm vào ô là mở hộp chọn file. Không cần JavaScript.
+    Khi đang tải lên, InputFile bị khóa để người dùng không chọn lại file: chọn lại sẽ làm các IBrowserFile cũ không đọc được nữa.
+*@
+
+<div class="dropzone @(dragging ? "is-dragging" : null) @(Disabled ? "is-disabled" : null)"
+     @ondragenter="() => dragging = true"
+     @ondragleave="() => dragging = false"
+     @ondrop="() => dragging = false">
+
+    <img src="images/icons/upload-cloud.svg" width="40" height="40" alt="" class="dz-icon" />
+    <p class="dz-title">@(Disabled ? "Đang tải lên..." : "Tải CV lên để phân tích")</p>
+    <p class="dz-hint">Kéo thả file vào đây hoặc <span>bấm để chọn file</span></p>
+
+    <InputFile OnChange="OnFilesSelected" multiple accept="@Accept" disabled="@Disabled"
+               class="dz-input" title="" aria-label="Chọn file CV" />
+</div>
+<p class="dz-caption">@Caption</p>
+
+@code {
+    private bool dragging;
+
+    [Parameter, EditorRequired] public EventCallback<InputFileChangeEventArgs> OnFilesSelected { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string Accept { get; set; } = ".pdf,.png,.jpg,.jpeg";
+    [Parameter] public string? Caption { get; set; }
+}

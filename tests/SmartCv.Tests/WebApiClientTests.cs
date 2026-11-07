@@ -139,7 +139,8 @@ public class WebApiClientTests
     {
         // API tải CV chỉ bật ở Development (A4); database InMemory (A5 tra trùng trong bảng Cvs)
         var api = TestSupport.ApiFactory();
-        return (api, new CvApiClient(api.CreateClient(), NullLogger<CvApiClient>.Instance));
+        return (api, new CvApiClient(api.CreateClient(),
+            Microsoft.Extensions.Options.Options.Create(new SmartCv.Core.Options.CvUploadOptions()), NullLogger<CvApiClient>.Instance));
     }
 
     [Fact]
@@ -199,9 +200,5 @@ public class WebApiClientTests
         Assert.Equal("Mỗi lần chỉ được tải tối đa 20 file, bạn đã gửi 21 file.", result.ErrorMessage);
     }
 
-    [Fact]
-    public void CvApiClient_limit_matches_api_option()
-    {
-        Assert.Equal(CvApiClient.MaxFileSizeBytes, new SmartCv.Core.Options.CvUploadOptions().MaxFileSizeBytes);
-    }
+
 }

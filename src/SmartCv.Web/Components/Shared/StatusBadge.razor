@@ -1,0 +1,18 @@
+@* Nhãn trạng thái dạng viên thuốc (Component/Badge trong Figma): nền nhạt, chữ đậm 12px. *@
+
+<span class="status-badge @VariantClass" title="@Title">@Text</span>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter] public BadgeVariant Variant { get; set; } = BadgeVariant.Neutral;
+    [Parameter] public string? Title { get; set; }
+
+    private string VariantClass => Variant switch
+    {
+        BadgeVariant.Success => "is-success",
+        BadgeVariant.Info => "is-info",
+        BadgeVariant.Warning => "is-warning",
+        BadgeVariant.Danger => "is-danger",
+        _ => "is-neutral"
+    };
+}
