@@ -1,0 +1,21 @@
+@* Khung báo lỗi dùng chung. Có nút "Thử lại" nếu truyền OnRetry. *@
+
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert alert-danger d-flex align-items-start gap-3" role="alert">
+        <div class="flex-grow-1">
+            <strong>@Title</strong>
+            <div>@Message</div>
+        </div>
+        @if (OnRetry.HasDelegate)
+        {
+            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="OnRetry">Thử lại</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string Title { get; set; } = "Có lỗi xảy ra";
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

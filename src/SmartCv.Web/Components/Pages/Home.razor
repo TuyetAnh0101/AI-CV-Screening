@@ -1,0 +1,98 @@
+@page "/"
+@inject JobApiClient JobApi
+
+<PageHeader Title="Trang chủ" Subtitle="Tải CV, chấm điểm bằng keyword và Gemini, xem bảng xếp hạng theo từng vị trí." />
+
+@* 3 lối tắt tới 3 trang chính của giai đoạn 1 *@
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <a class="quick-card" href="upload">
+            <h2>1. Tải CV</h2>
+            <p>Kéo thả nhiều file PDF, PNG, JPG; chọn vị trí ứng tuyển; bắt đầu chấm.</p>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a class="quick-card" href="results">
+            <h2>2. Kết quả</h2>
+            <p>Bảng xếp hạng theo job, màu theo mức đánh giá, xem chi tiết từng CV.</p>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a class="quick-card" href="prompts">
+            <h2>3. System prompt</h2>
+            <p>Sửa prompt, lưu phiên bản, so sánh tỷ lệ đúng với nhãn của HR.</p>
+        </a>
+    </div>
+</div>
+
+@* Danh sách job lấy từ API: dùng để kiểm tra B2 đã gọi được API *@
+<section class="card-panel">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Vị trí đang tuyển</h2>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync" disabled="@loading">Tải lại</button>
+    </div>
+
+    @if (loading)
+    {
+        <LoadingIndicator Text="Đang tải danh sách vị trí..." />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Title="Không tải được danh sách vị trí" Message="@error" OnRetry="LoadAsync" />
+    }
+    else if (jobs is { Count: 0 })
+    {
+        <p class="text-secondary mb-0">Chưa có vị trí nào đang tuyển.</p>
+    }
+    else if (jobs is not null)
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Vị trí</th>
+                        <th>Kỹ năng bắt buộc</th>
+                        <th class="text-end">GPA tối thiểu</th>
+                        <th class="text-end">Kinh nghiệm tối thiểu</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in jobs)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@job.Title</td>
+                            <td>
+                                @foreach (var skill in job.Skills.Where(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                                {
+                                    <span class="badge text-bg-light border me-1">@skill.DisplayName</span>
+                                }
+                            </td>
+                            <td class="text-end">@(job.MinGpa?.ToString("0.00") ?? "Không yêu cầu")</td>
+                            <td class="text-end">@job.MinYearsExperience.ToString("0.#") năm</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private List<JobDto>? jobs;
+    private string? error;
+    private bool loading = true;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+
+        var result = await JobApi.GetJobsAsync();
+        if (result.IsSuccess) jobs = result.Data;
+        else error = result.ErrorMessage;
+
+        loading = false;
+    }
+}

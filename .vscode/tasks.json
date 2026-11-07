@@ -1,0 +1,28 @@
+{
+  // Chạy API và Web chỉ bằng một lệnh: Ctrl+Shift+P -> "Tasks: Run Task" -> "Chạy API + Web"
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Chạy API",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/SmartCv.Api", "--launch-profile", "https"],
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "group": "smartcv" }
+    },
+    {
+      "label": "Chạy Web (tự tải lại)",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["watch", "--project", "src/SmartCv.Web", "--launch-profile", "https"],
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "group": "smartcv" }
+    },
+    {
+      "label": "Chạy API + Web",
+      "dependsOn": ["Chạy API", "Chạy Web (tự tải lại)"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

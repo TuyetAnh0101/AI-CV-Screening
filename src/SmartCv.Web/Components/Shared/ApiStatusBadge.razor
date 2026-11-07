@@ -1,0 +1,26 @@
+@* Huy hiệu trên thanh trên cùng: cho biết giao diện có kết nối được API không. Bấm vào để kiểm tra lại. *@
+@inject HealthApiClient HealthApi
+
+<button type="button" class="api-status @CssClass" @onclick="CheckAsync" disabled="@checking"
+        title="Bấm để kiểm tra lại kết nối API">
+    <span class="dot"></span>
+    @Text
+</button>
+
+@code {
+    private bool? online;      // null = đang kiểm tra lần đầu
+    private bool checking;
+
+    private string CssClass => online switch { true => "online", false => "offline", _ => "checking" };
+    private string Text => checking || online is null ? "Đang kiểm tra..."
+                         : online == true ? "Đã kết nối API" : "Mất kết nối API";
+
+    protected override Task OnInitializedAsync() => CheckAsync();
+
+    private async Task CheckAsync()
+    {
+        checking = true;
+        online = await HealthApi.IsApiOnlineAsync();
+        checking = false;
+    }
+}

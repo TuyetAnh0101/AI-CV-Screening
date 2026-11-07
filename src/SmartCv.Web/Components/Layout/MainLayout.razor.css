@@ -1,0 +1,83 @@
+/* Bố cục: thanh menu bên trái cố định, nội dung bên phải. Màn hình hẹp (< 768px): menu nằm trên cùng. */
+
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 250px;
+    flex-shrink: 0;
+    background: var(--brand-dark);
+    color: #fff;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.main-area {
+    flex: 1;
+    min-width: 0;            /* để bảng rộng không đẩy vỡ bố cục */
+    display: flex;
+    flex-direction: column;
+    background: var(--page-bg);
+}
+
+.topbar {
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 1.5rem;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.topbar-title {
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.content {
+    padding: 1.5rem;
+    max-width: 1400px;
+    width: 100%;
+}
+
+@media (max-width: 767.98px) {
+    .app-shell { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: static; }
+    .topbar { padding: 0 1rem; }
+    .topbar-title { font-size: .9rem; }
+    .content { padding: 1rem; }
+}
+
+/* Khung lỗi mặc định của Blazor: ẩn cho tới khi có lỗi */
+#blazor-error-ui {
+    background: #fff3cd;
+    color: #664d03;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, .2);
+    display: none;
+    left: 0;
+    padding: .6rem 1.25rem .7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .reload { margin-left: .5rem; }
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: .75rem;
+    top: .5rem;
+}

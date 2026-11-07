@@ -1,0 +1,13 @@
+@page "/upload"
+
+<PageHeader Title="Tải CV" Subtitle="Kéo thả nhiều file PDF, PNG, JPG; chọn vị trí; bắt đầu chấm điểm." />
+
+<div class="card-panel placeholder-panel">
+    <p class="mb-2">Trang đang được xây dựng. Các phần sẽ làm:</p>
+    <ul class="mb-0">
+        <li><strong>B3</strong>: ô kéo thả, danh sách file đã chọn, nút xóa (dùng <code>CvApiClient.UploadAsync</code>)</li>
+        <li><strong>B4</strong>: chọn job cho CV (dùng <code>JobApiClient.GetJobsAsync</code>)</li>
+        <li><strong>B5</strong>: báo lỗi sai định dạng, quá lớn, file trùng</li>
+        <li><strong>B6</strong>: nút bắt đầu chấm và thanh tiến độ</li>
+    </ul>
+</div>

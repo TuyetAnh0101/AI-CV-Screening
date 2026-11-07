@@ -1,0 +1,26 @@
+@* Bố cục chung của mọi trang: thanh menu bên trái, thanh trên cùng, vùng nội dung. *@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
+
+    <div class="main-area">
+        <header class="topbar">
+            <span class="topbar-title">Sàng lọc hồ sơ ứng viên ứng dụng AI</span>
+            <ApiStatusBadge />
+        </header>
+
+        <main class="content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@* Khung báo lỗi mặc định của Blazor (bị ẩn, chỉ hiện khi giao diện gặp lỗi không xử lý được) *@
+<div id="blazor-error-ui" data-nosnippet>
+    Đã có lỗi xảy ra trên giao diện.
+    <a href="." class="reload">Tải lại trang</a>
+    <span class="dismiss">🗙</span>
+</div>

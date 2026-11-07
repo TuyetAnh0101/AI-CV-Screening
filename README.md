@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A4):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, hai API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo** và **API `POST /api/cvs/upload` nhận một hoặc nhiều file** (mới nhận file, chưa kiểm tra và chưa lưu). Các chức năng nghiệp vụ còn lại (kiểm tra/lưu CV, chấm điểm, xếp hạng, quản lý prompt, giao diện) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A4 và B2):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file** (mới nhận file, chưa kiểm tra và chưa lưu) và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (kiểm tra/lưu CV, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -32,9 +32,9 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 8. [Cài đặt môi trường](#cai-dat)
 9. [Cấu hình SQL Server và User Secrets](#cau-hinh)
 10. [Tạo database và nạp dữ liệu](#database)
-11. [Build, chạy và kiểm thử](#chay-du-an)
+11. [Build, chạy và kiểm thử](#chay-du-an) – gồm [giao diện SmartCv.Web](#web)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2, A3, A4](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3, A4, B2](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -86,6 +86,8 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql` |
 | A3 | Dữ liệu nền 5 Jobs, 29 JobSkills, 52 JobSkillAliases (`JobSeedData` + `HasData`) nạp tự động qua Migration `SeedJobs`; tách dữ liệu demo sang `seed_demo.sql` (282 dòng); script kiểm tra `check_jobs.sql`; unit test dữ liệu nền |
 | A4 | API `POST /api/cvs/upload` nhận một hoặc nhiều file qua `multipart/form-data`, trả thông tin từng file với trạng thái `Received`; giới hạn số file và dung lượng request đọc từ `appsettings.json`; hợp đồng dùng chung `CvUploadResponse` cho giao diện Blazor. Bảo mật: giới hạn 201 MiB chỉ cho endpoint này, Rate Limiting (429), endpoint chỉ bật ở Development cho đến khi có xác thực (M6). **Chưa** kiểm tra định dạng/dung lượng/file trùng (A5), **chưa** lưu file và ghi bảng `Cvs` (A6) |
+| A (tiền đề B2) | API `GET /api/health`, `GET /api/jobs` (`activeOnly`), `GET /api/jobs/{id}` (404 khi không có); hợp đồng dùng chung `JobDto`, `JobSkillDto` |
+| B2 | Dự án **SmartCv.Web** (Blazor Web App, Interactive Server): bố cục sidebar + thanh trên cùng, menu 4 mục (thu thành ☰ dưới 768px), huy hiệu trạng thái API, component dùng chung (`PageHeader`, `ErrorAlert`, `LoadingIndicator`, `ApiStatusBadge`), service gọi API (`HealthApiClient`, `JobApiClient`, `CvApiClient`) trả `ApiResult<T>` với thông báo lỗi tiếng Việt. Trang chủ hiện 5 job thật từ API; trang Tải CV, Kết quả, System prompt **mới là khung** cho B3–B16 |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -125,8 +127,8 @@ Phiên bản lấy theo các file `.csproj` và `global.json` hiện tại.
 | Migration | `Microsoft.EntityFrameworkCore.Design` 10.0.*, công cụ `dotnet-ef` | ✅ |
 | Cơ sở dữ liệu | Microsoft SQL Server, database `SmartCvDb` | ✅ |
 | AI | Google Gemini API (gọi qua `HttpClient`, cấu hình `GeminiOptions`) | ✅ Đã cấu hình · ⏳ Chấm điểm ở A10 |
-| Kiểm thử | xUnit 2.9.3, `Microsoft.NET.Test.Sdk` 17.14.1, coverlet 6.0.4 | ✅ Đã có project |
-| Giao diện | Blazor (Razor, HTML, CSS) | ⏳ B2 |
+| Kiểm thử | xUnit 2.9.3, `Microsoft.NET.Test.Sdk` 17.14.1, coverlet 6.0.4, `Microsoft.AspNetCore.Mvc.Testing` 10.0.14 | ✅ |
+| Giao diện | Blazor Web App (`net10.0`), chế độ **Interactive Server** cho mọi trang, Bootstrap có sẵn trong mẫu | ✅ Khung B2 · ⏳ Chức năng B3–B16 |
 | Đọc PDF / OCR | PdfPig, Tesseract cho .NET (`eng` + `vie`) | ⏳ A7 |
 | Chạy nền | BackgroundService hoặc Hangfire | ⏳ A11 |
 | Biểu đồ | Chart.js | ⏳ B11 |
@@ -142,8 +144,9 @@ Phiên bản lấy theo các file `.csproj` và `global.json` hiện tại.
 
 ```mermaid
 flowchart LR
-    HR([👤 HR]) --> WEB[SmartCv.Web<br/>Blazor – dự kiến]
-    WEB -->|HTTP| API[SmartCv.Api<br/>ASP.NET Core]
+    HR([👤 HR]) -->|trình duyệt, SignalR| WEB[SmartCv.Web<br/>Blazor Interactive Server]
+    WEB -->|HttpClient, HTTPS| API[SmartCv.Api<br/>ASP.NET Core]
+    WEB -.->|chỉ dùng DTO| CORE
     API --> CORE[SmartCv.Core<br/>Entity, hằng số, quy tắc]
     API --> INFRA[SmartCv.Infrastructure]
     INFRA --> CORE
@@ -158,7 +161,7 @@ flowchart LR
 | `SmartCv.Core` | Entity, hằng số trạng thái và quy tắc nghiệp vụ. **Không phụ thuộc** project nào khác |
 | `SmartCv.Infrastructure` | EF Core / SQL Server, cấu hình Gemini; sau này thêm đọc PDF/OCR, gọi Gemini |
 | `SmartCv.Tests` | Kiểm thử tự động (xUnit) |
-| `SmartCv.Web` | Giao diện Blazor *(tạo ở B2)* |
+| `SmartCv.Web` | Giao diện Blazor (B2). Chỉ tham chiếu `SmartCv.Core` (dùng chung DTO), **không** tham chiếu Infrastructure, **không** kết nối database: mọi dữ liệu lấy qua `SmartCv.Api` |
 
 ```text
 AI-CV-Screening/
@@ -177,7 +180,8 @@ AI-CV-Screening/
 │   │   ├── Endpoints/
 │   │   │   ├── CvEndpoints.cs                # POST /api/cvs/upload: giới hạn dung lượng riêng, chỉ bật ở Development
 │   │   │   ├── CvUploadEndpointOptions.cs    # CvUpload:Endpoint (bật/tắt, giới hạn tần suất)
-│   │   │   └── CvUploadRateLimiting.cs       # Rate Limiting cho API tải CV (429)
+│   │   │   ├── CvUploadRateLimiting.cs       # Rate Limiting cho API tải CV (429)
+│   │   │   └── JobEndpoints.cs               # GET /api/health, /api/jobs, /api/jobs/{id}
 │   │   ├── Properties/launchSettings.json
 │   │   ├── CvUpload.http                     # Thử API tải CV bằng REST Client
 │   │   ├── Program.cs                        # Đăng ký dịch vụ, pipeline (UseRateLimiter)
@@ -185,21 +189,35 @@ AI-CV-Screening/
 │   │   └── appsettings.Development.json      # Bật API tải CV khi phát triển
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
-│   │   ├── Contracts/CvUploadResponse.cs     # Hợp đồng API tải CV, dùng chung với Blazor
+│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, JobDto
 │   │   ├── Entities/                         # 12 Entity
 │   │   ├── Options/CvUploadOptions.cs        # Giới hạn tải CV
 │   │   └── Uploads/                          # CvUploadFile, ICvUploadService
-│   └── SmartCv.Infrastructure/
-│       ├── Data/
-│       │   ├── Configurations/               # 12 Fluent API Configuration
-│       │   ├── Migrations/                   # InitialCreate, SeedJobs + ModelSnapshot
-│       │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
-│       │   └── SmartCvDbContext.cs           # DbContext duy nhất
-│       ├── Gemini/GeminiOptions.cs
-│       ├── Uploads/CvUploadService.cs        # Xử lý file tải lên (A4: Received)
-│       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
+│   ├── SmartCv.Infrastructure/
+│   │   ├── Data/
+│   │   │   ├── Configurations/               # 12 Fluent API Configuration
+│   │   │   ├── Migrations/                   # InitialCreate, SeedJobs + ModelSnapshot
+│   │   │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
+│   │   │   └── SmartCvDbContext.cs           # DbContext duy nhất
+│   │   ├── Gemini/GeminiOptions.cs
+│   │   ├── Uploads/CvUploadService.cs        # Xử lý file tải lên (A4: Received)
+│   │   └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
+│   └── SmartCv.Web/                          # Giao diện Blazor (B2)
+│       ├── Components/
+│       │   ├── App.razor                     # Khung HTML (lang="vi"), InteractiveServer cho HeadOutlet + Routes
+│       │   ├── Routes.razor                  # Định tuyến, trang NotFound
+│       │   ├── _Imports.razor                # @using dùng chung (Core.Contracts, Services, Shared, Helpers)
+│       │   ├── Layout/                       # MainLayout (sidebar + topbar), NavMenu (4 mục, ☰), ReconnectModal
+│       │   ├── Pages/                        # Home, Upload, Results, Prompts, Error, NotFound
+│       │   └── Shared/                       # PageHeader, ErrorAlert, LoadingIndicator, ApiStatusBadge
+│       ├── Services/                         # ApiResult, ApiClientBase, Health/Job/CvApiClient, đăng ký DI
+│       ├── Helpers/FitLevel.cs               # 4 mức đánh giá 85 / 70 / 55
+│       ├── wwwroot/app.css                   # CSS chung: biến màu, 4 màu mức đánh giá
+│       ├── appsettings.Development.json      # ApiBaseUrl = https://localhost:7269/
+│       └── Program.cs                        # AddSmartCvApiClients(...)
 ├── test-files/                               # CV GIẢ để thử API tải CV (không đặt CV thật)
-├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests
+├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests, JobEndpointsTests, WebApiClientTests
+├── .vscode/tasks.json                        # Task "Chạy API + Web" cho VS Code
 ├── .gitignore
 ├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
 ├── global.json
@@ -556,7 +574,85 @@ dotnet test
 > - `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server.
 > - `CvUploadServiceTests` kiểm tra service tải CV ở mức A4: một/nhiều file, bỏ đường dẫn trong tên file, trạng thái `Received`, số lượng, hủy request, giới hạn mặc định. Khi làm A5, A6 cần cập nhật các test ghi chú "A4".
 > - `CvUploadEndpointTests` chạy API trong bộ nhớ (`WebApplicationFactory`, cấu hình giả, không kết nối database, không gọi Gemini): 200/400 qua HTTP, Production trả 404 và chặn bật nhầm, chỉ endpoint tải CV có giới hạn 201 MiB, 429 khi vượt tần suất, endpoint khác không bị giới hạn.
+> - `JobEndpointsTests`: `GET /api/health` trả `ok` không cần database; route `/api/jobs`, `/api/jobs/{id}` được đăng ký đúng một lần, không đè route `/api/health/database`, `/api/health/gemini`.
+> - `WebApiClientTests` (B2): service gọi API của Web đổi 400/404/413/415/429/500, mất kết nối, quá thời gian thành câu tiếng Việt, không đưa nội dung lỗi kỹ thuật ra giao diện; `CvApiClient.UploadAsync` gọi đúng API tải CV thật (A4) trong bộ nhớ.
 > - Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
+
+<a id="web"></a>
+
+### 11.1. Giao diện SmartCv.Web (B2)
+
+**Kiến trúc:** `SmartCv.Web` là **Blazor Web App** chạy chế độ **Interactive Server**: code C# chạy trên máy chủ Web, trình duyệt nhận cập nhật giao diện qua SignalR. Web gọi `SmartCv.Api` bằng `HttpClient` **từ phía máy chủ**, nên không cần mở CORS cho API.
+
+```text
+Trang .razor ──@inject──> JobApiClient ──HTTPS GET api/jobs──> SmartCv.Api ──EF Core──> SQL Server
+     ▲                         │
+     └──── ApiResult<T> ───────┘  (IsSuccess + Data, hoặc ErrorMessage tiếng Việt)
+```
+
+**Cấu hình `ApiBaseUrl`.** Địa chỉ API đặt trong `src/SmartCv.Web/appsettings.Development.json`:
+
+```json
+"ApiBaseUrl": "https://localhost:7269/"
+```
+
+- Cổng lấy từ profile `https` trong `src/SmartCv.Api/Properties/launchSettings.json` (**cổng của API**, không phải cổng của Web 7258). Kết thúc bằng `/`.
+- `appsettings.json` **không** có `ApiBaseUrl`: môi trường khác Development phải cấu hình riêng (biến môi trường `ApiBaseUrl=...`), thiếu thì Web báo lỗi rõ ràng khi khởi động.
+- Web kiểm tra chứng chỉ HTTPS của API như bình thường. Nếu báo lỗi chứng chỉ, chạy `dotnet dev-certs https --trust`; **không** tắt kiểm tra chứng chỉ trong code.
+
+**Chạy API và Web cùng lúc**
+
+```powershell
+# Terminal 1: API (https://localhost:7269)
+dotnet run --project src/SmartCv.Api --launch-profile https
+
+# Terminal 2: Web, tự tải lại khi sửa .razor/.css (https://localhost:7258)
+dotnet watch --project src/SmartCv.Web --launch-profile https
+```
+
+Hoặc trong VS Code: `Ctrl + Shift + P` → **Tasks: Run Task** → **Chạy API + Web** (file `.vscode/tasks.json`). Mở địa chỉ Web mà terminal in ra ở dòng `Now listening on:`.
+
+**Bốn trang**
+
+| Trang | Route | Nội dung hiện tại (B2) | Việc tiếp theo |
+|---|---|---|---|
+| Trang chủ | `/` | 3 lối tắt; bảng **Vị trí đang tuyển** lấy từ `GET /api/jobs` (vị trí, kỹ năng bắt buộc, GPA, kinh nghiệm); có trạng thái đang tải / lỗi + nút Thử lại / rỗng, nút Tải lại | – |
+| Tải CV | `/upload` | Khung, ghi việc sẽ làm | ⏳ B3 – B6 |
+| Kết quả | `/results` | Khung + xem trước 4 màu mức đánh giá | ⏳ B7 – B11 |
+| System prompt | `/prompts` | Khung, ghi việc sẽ làm | ⏳ B12 – B16 |
+
+Địa chỉ không tồn tại (ví dụ `/abc`) hiện trang **Not Found** mặc định của mẫu Blazor.
+
+**Component dùng chung** (`Components/Shared/`)
+
+| Component | Dùng để |
+|---|---|
+| `PageHeader` | Tiêu đề trang, mô tả, khu vực nút bên phải (`Actions`); đổi tiêu đề tab trình duyệt (`Tên trang · SmartCV`) |
+| `ErrorAlert` | Khung báo lỗi tiếng Việt; có nút **Thử lại** khi truyền `OnRetry` |
+| `LoadingIndicator` | Vòng quay "Đang tải..." |
+| `ApiStatusBadge` | Huy hiệu trên thanh trên cùng: *Đang kiểm tra...* / *Đã kết nối API* / *Mất kết nối API*; bấm để kiểm tra lại (`GET /api/health`) |
+
+**Service gọi API** (`Services/`, đăng ký bằng `builder.Services.AddSmartCvApiClients(builder.Configuration)` trong `Program.cs` của Web)
+
+| Service | API | Thời gian chờ |
+|---|---|---|
+| `HealthApiClient.IsApiOnlineAsync` | `GET /api/health` | 5 giây |
+| `JobApiClient.GetJobsAsync`, `GetJobAsync` | `GET /api/jobs`, `GET /api/jobs/{id}` | 30 giây |
+| `CvApiClient.UploadAsync` | `POST /api/cvs/upload` (dựng sẵn cho B3, chưa có trang dùng) | 5 phút |
+
+- Mọi hàm trả `ApiResult<T>` (`IsSuccess`, `Data`, `ErrorMessage`, `StatusCode`), không ném lỗi ra trang. `ApiClientBase` đổi lỗi thành câu tiếng Việt: ưu tiên `detail` trong ProblemDetails của API; nếu không có thì dùng câu mặc định cho 400, 404, 413, 415, 429, 500; mất kết nối và quá thời gian chờ có câu riêng. Chi tiết kỹ thuật chỉ ghi vào log của Web.
+- Mọi hàm nhận `CancellationToken`. DTO dùng chung từ `SmartCv.Core.Contracts` (`JobDto`, `CvUploadResponse`).
+- Thêm service mới (B7, B12...): tạo class kế thừa `ApiClientBase`, thêm một dòng `Add<TenClient>(...)` trong `ServiceCollectionExtensions.cs`.
+- Mức đánh giá: `Helpers/FitLevel.FromScore(score)` (≥ 85 Rất phù hợp, ≥ 70 Phù hợp, ≥ 55 Tiềm năng, < 55 Chưa phù hợp) và `FitLevel.CssClass(label)` cho 4 màu trong `app.css`.
+
+> Mỗi lần mở trang, `GET /api/jobs` có thể được gọi **2 lần** (prerender rồi dựng lại khi kết nối tương tác sẵn sàng). Không phải lỗi với API đọc dữ liệu. Hành động **ghi** (tải CV, bắt đầu chấm) chỉ gọi khi người dùng bấm nút, không gọi trong `OnInitializedAsync`.
+
+**Lưu ý khi tích hợp API tải CV (B3) và xác thực (M6)**
+
+- `CvApiClient.UploadAsync` gửi mỗi file với tên phần `files`, đọc file bằng `IBrowserFile.OpenReadStream(maxAllowedSize: 10 MiB)` (khớp `CvUpload:MaxFileSizeMB`). File lớn hơn 10 MiB sẽ lỗi ngay khi đọc ở Web, nên B3 **phải lọc trước** (≤ 20 file, mỗi file ≤ 10 MiB) và báo lỗi cho từng file.
+- API tải CV **chỉ bật ở Development** (A4); Web chạy Development gọi được bình thường. Không tắt hay vượt qua Rate Limiting, antiforgery hay chốt chặn Production để Web gọi được API.
+- Rate Limiting của API tính **theo IP**. Khi Web gọi API từ máy chủ, mọi người dùng Web **chung IP của máy chủ Web**, tức là chung giới hạn 30 lần tải/phút. Khi M6 có xác thực, phải chuyển sang giới hạn theo người dùng (xem checklist M6 ở [mục 12.2](#api-upload)); khi đó Web gửi token (ví dụ JWT Bearer) trong header `Authorization` bằng một `DelegatingHandler` gắn vào các `HttpClient` trong `ServiceCollectionExtensions`.
+- API trả `429` (ProblemDetails) khi vượt giới hạn: `ApiResult.StatusCode == 429`, `ErrorMessage` là câu tiếng Việt từ API; B3 nên hiện câu này và cho thử lại sau.
 
 ---
 
@@ -576,6 +672,29 @@ Kết quả mong đợi (`503` kèm thông báo lỗi nếu không kết nối �
 ```json
 { "status": "OK", "server": "TEN_SERVER", "database": "SmartCvDb" }
 { "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx" }
+```
+
+### 12.1b. ✅ API job và health cho giao diện (tiền đề B2, `Endpoints/JobEndpoints.cs`)
+
+Chạy ở mọi môi trường (chỉ đọc, không có dữ liệu nhạy cảm).
+
+| Phương thức | Endpoint | Mô tả |
+|:---:|---|---|
+| `GET` | `/api/health` | `{ "status": "ok", "time": "..." }` – Web dùng cho huy hiệu "Đã kết nối API". Không truy cập database |
+| `GET` | `/api/jobs` | Danh sách job **đang tuyển** (`activeOnly=true` mặc định); `?activeOnly=false` lấy tất cả |
+| `GET` | `/api/jobs/{id}` | Một job; `404` khi không có (id không phải số cũng `404`) |
+
+Mỗi job (`SmartCv.Core.Contracts.JobDto`) có `jobId`, `title`, `description`, `minGpa` (`null` = không yêu cầu), `minYearsExperience`, `isActive` và `skills`. Mỗi kỹ năng (`JobSkillDto`) có `skillCode`, `displayName`, `skillType` (`MustHave` / `NiceToHave`) và `aliases`; kỹ năng **bắt buộc đứng trước**, rồi theo tên.
+
+```json
+{ "jobId": 1, "title": "Backend Developer (.NET)", "minGpa": 2.5, "minYearsExperience": 0.5, "isActive": true,
+  "skills": [ { "skillCode": "aspnetcore", "displayName": "ASP.NET Core", "skillType": "MustHave", "aliases": ["ASP.NET", "Web API"] }, ... ] }
+```
+
+```powershell
+curl.exe https://localhost:7269/api/health
+curl.exe https://localhost:7269/api/jobs
+curl.exe -i https://localhost:7269/api/jobs/99      # 404
 ```
 
 Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json` (đã có `/api/cvs/upload` với các mã 200, 400, 413).
@@ -744,7 +863,6 @@ Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) b�
 | Phương thức | Endpoint | Mô tả | Mã việc |
 |:---:|---|---|:---:|
 | `POST` | `/api/cvs/upload` (bổ sung) | Kiểm tra định dạng, dung lượng, file trùng; lưu file và ghi bảng `Cvs` | A5, A6 |
-| `GET` | `/api/jobs` | Danh sách job | – |
 | `POST` | `/api/applications` | Gắn CV với job | A8 |
 | `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
 | `GET` | `/api/scoring/progress` | Xem tiến độ chấm | A13 |
@@ -853,6 +971,37 @@ Tài nguyên: file lớn được ghi tạm ra `%TEMP%\ASPNETCORE_*.tmp` trong l
 
 Sau kiểm thử: bảng `Cvs` vẫn 12 dòng, database 368 dòng, 2 migration; thư mục CV mẫu không đổi (75 file, cùng dung lượng); không tạo thư mục `Uploads`.
 
+<a id="nghiem-thu-b2"></a>
+
+### 13.5. B2 – Giao diện SmartCv.Web và API job
+
+**API job (gọi bằng `curl.exe`, kiểm tra chứng chỉ HTTPS bình thường, dữ liệu thật trên SQL Server):**
+
+| Kiểm tra | Kết quả |
+|---|---|
+| `GET /api/health` | ✅ 200 `{"status":"ok","time":"..."}` |
+| `GET /api/jobs` | ✅ 200, **5 job**; mỗi job đúng **3 MustHave** đứng trước; số từ khóa 11 / 11 / 9 / 9 / 12; Tester (QA) `minGpa: null` |
+| `GET /api/jobs?activeOnly=false` | ✅ 5 job (cả 5 đều đang tuyển) |
+| `GET /api/jobs/4` / `/api/jobs/99` / `/api/jobs/abc` | ✅ Tester (QA) / 404 / 404 |
+| A1, A4 | ✅ `/api/health/database` 200; tải CV vẫn 200 `Received` |
+
+**10 bài nghiệm thu giao diện.** Chạy API và Web thật (`https://localhost:7269`, `https://localhost:7258`), thao tác bằng trình duyệt Chromium không giao diện (bấm thật, đổi kích thước cửa sổ thật), tắt/bật API thật:
+
+| # | Thao tác | Kết quả |
+|:---:|---|---|
+| T01 | Mở trang chủ | ✅ PASS – menu 4 mục: Trang chủ, Tải CV, Kết quả, System prompt; chỉ "Trang chủ" được tô; `<html lang="vi">` |
+| T02 | Huy hiệu API | ✅ PASS – "Đã kết nối API", chấm xanh |
+| T03 | Bảng Vị trí đang tuyển | ✅ PASS – 5 vị trí từ API, mỗi dòng 3 nhãn kỹ năng bắt buộc; Tester (QA) GPA "Không yêu cầu" |
+| T04 | Bấm Tải CV → Kết quả → System prompt → Trang chủ | ✅ PASS – đúng route `/upload`, `/results`, `/prompts`, `/`; đúng mục menu được tô; tab đổi tên `Tải CV · SmartCV`... |
+| T05 | Trang Kết quả | ✅ PASS – 4 nhãn: Rất phù hợp (xanh lá), Phù hợp (xanh dương), Tiềm năng (cam), Chưa phù hợp (đỏ) |
+| T06 | Cửa sổ 390 px | ✅ PASS – menu ẩn, hiện nút ☰; bấm ☰ → menu hiện; bấm "Tải CV" → sang `/upload` và menu tự đóng; không có thanh cuộn ngang |
+| T07 | Tắt API, bấm huy hiệu | ✅ PASS – "Mất kết nối API", chấm đỏ |
+| T08 | Vẫn tắt API, bấm Tải lại | ✅ PASS – khung đỏ "Không tải được danh sách vị trí" + "Không kết nối được máy chủ API. Hãy kiểm tra API đã chạy và ApiBaseUrl đúng cổng." + nút **Thử lại**; không hiện thanh lỗi Blazor |
+| T09 | Bật lại API, bấm Thử lại | ✅ PASS – bảng 5 vị trí hiện lại, huy hiệu về "Đã kết nối API" |
+| T10 | Mở `/abc` | ✅ PASS – HTTP 404, trang "Not Found" |
+
+Kiểm tra thêm: `dotnet watch --project src/SmartCv.Web --launch-profile https` khởi động bình thường (hot reload); `SmartCv.Web` không tham chiếu Infrastructure, không có `DbContext` hay chuỗi kết nối; database không đổi (368 dòng, 2 migration). `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **48/48** (thêm 2 `JobEndpointsTests` và 13 `WebApiClientTests`).
+
 ---
 
 <a id="lo-trinh"></a>
@@ -870,7 +1019,7 @@ Sau kiểm thử: bảng `Cvs` vẫn 12 dòng, database 368 dòng, 2 migration; 
 | Bước | Nội dung | Mã việc | Trạng thái |
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
-| 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3 · ⏳ B2 |
+| 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3, B2 |
 | 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4 · ⏳ A5 – A8, B3 – B5 |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
@@ -891,6 +1040,17 @@ Sau kiểm thử: bảng `Cvs` vẫn 12 dòng, database 368 dòng, 2 migration; 
 | A13 | API tiến độ, bảng xếp hạng, chi tiết CV |
 | A14 – A17 | API phiên bản prompt, nhãn HR, chạy đánh giá, so sánh prompt |
 | A18 | Unit test tính điểm và tỷ lệ đúng |
+
+### Việc tiếp theo của Giao diện
+
+| Mã | Nội dung | Dùng sẵn từ B2 |
+|---|---|---|
+| **B3** | Trang Tải CV: ô kéo thả, danh sách file đã chọn, nút xóa; lọc trước ≤ 20 file, mỗi file ≤ 10 MiB | `CvApiClient.UploadAsync`, `ErrorAlert` |
+| **B4** | Chọn job cho CV | `JobApiClient.GetJobsAsync` |
+| **B5** | Báo lỗi sai định dạng, quá lớn, file trùng theo `errorCode` (khi A5 xong) | `CvUploadErrorCodes` trong Core |
+| **B6** | Nút bắt đầu chấm, thanh tiến độ (khi có API A11, A13) | `ApiClientBase` |
+| **B7 – B11** | Trang Kết quả: bảng xếp hạng, màu mức đánh giá, chi tiết CV, trạng thái lỗi, biểu đồ | `FitLevel`, 4 màu trong `app.css` |
+| **B12 – B16** | Trang System prompt: sửa/lưu phiên bản, kích hoạt, chạy đánh giá, so sánh tỷ lệ đúng | `PageHeader`, mẫu trang chủ (đang tải / lỗi / dữ liệu) |
 
 > Cập nhật tên thành viên và tiến độ vào các bảng trên khi nhóm đã thống nhất chính thức.
 
@@ -947,6 +1107,13 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Gemini trả về `404` | Tên model không còn đúng. Kiểm tra trên AI Studio rồi sửa `Gemini:Model`. |
 | Lỗi chứng chỉ HTTPS | Chạy `dotnet dev-certs https --trust`. |
 | Tải CV trả `404` | Sai đường dẫn (đúng là `/api/cvs/upload`, có chữ `s`) hoặc thiếu `app.MapCvEndpoints()` trong `Program.cs`. |
+| Web báo *Thiếu cấu hình "ApiBaseUrl"* khi khởi động | Chạy Web ngoài Development mà chưa đặt `ApiBaseUrl` (biến môi trường), hoặc sửa nhầm `appsettings.Development.json` của Web. |
+| Huy hiệu luôn **Mất kết nối API** dù API đang chạy | `ApiBaseUrl` sai cổng (nhầm cổng Web 7258 với cổng API 7269), dùng `http` thay `https`, hoặc chứng chỉ HTTPS chưa được tin (`dotnet dev-certs https --trust`). |
+| Trang chủ báo "Không tìm thấy dữ liệu hoặc API chưa có đường dẫn này" | API đang chạy là bản cũ chưa có `GET /api/jobs`. Lấy code mới, build lại API. |
+| Bấm ☰ hoặc nút không có tác dụng | Thiếu `@rendermode="InteractiveServer"` cho `<Routes>` / `<HeadOutlet>` trong `App.razor`. |
+| Giao diện không có màu, vỡ bố cục | Thiếu đoạn CSS SmartCV cuối `wwwroot/app.css`, hoặc trình duyệt giữ bản cũ (`Ctrl + F5`). |
+| Thanh vàng "Đã có lỗi xảy ra trên giao diện" | Lỗi C# trong trang; xem dòng `fail:` trong terminal đang chạy Web. |
+| Hộp thoại "Rejoining the server..." | Web vừa khởi động lại (`dotnet watch`) hoặc đã dừng; đợi vài giây hoặc tải lại trang. |
 | Tải CV trả `415` hoặc `400` *Expected a supported form media type* | Request không phải `multipart/form-data`. Với curl phải dùng `-F`, không dùng `-d`. |
 | Tải CV trả `413` với file nhỏ hơn 201 MiB | Thiếu `RequestSizeLimit` / `WithFormOptions` trên endpoint trong `CvEndpoints.cs`, hoặc proxy phía trước (IIS, Nginx) có giới hạn thấp hơn (xem [mục 12.2](#api-upload)). |
 | Tải CV trả `404` dù đúng đường dẫn | Không chạy ở Development, hoặc `CvUpload:Endpoint:Enabled = false`. Chạy bằng `dotnet run --launch-profile https`. |
