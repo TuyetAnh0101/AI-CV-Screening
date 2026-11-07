@@ -2,11 +2,12 @@
 @*
     Trang "Tải lên & Phân tích CV" (Figma Project_GD, node 375:1982 "Gán CV vào Job").
     B3 (đã làm): ô kéo thả, tải lên ngay qua POST /api/cvs/upload (A4–A6), danh sách CV, ô tích, menu ⋯, nút Hủy.
-    Giữ đúng vị trí nhưng CHƯA làm nghiệp vụ: B4 chọn công việc, B5 thông báo lỗi chi tiết, B6 nút Phân tích + thẻ tiến độ.
+    B4: chọn công việc thật và hiển thị yêu cầu. B5 thông báo lỗi chi tiết, B6 nút Phân tích + thẻ tiến độ.
 *@
 @using Microsoft.Extensions.Options
 @using SmartCv.Core.Options
 @inject CvApiClient CvApi
+@inject JobApiClient JobApi
 @inject IOptions<CvUploadOptions> UploadOptions
 @inject IConfiguration Configuration
 @inject ILogger<Upload> Logger
@@ -43,12 +44,46 @@
             </div>
         }
 
-        @* ---------- B4: Chọn công việc (giữ vị trí theo Figma, nghiệp vụ làm ở B4) ---------- *@
+        @* ---------- B4: Chọn công việc và yêu cầu tuyển dụng ---------- *@
         <div class="field">
             <label for="job" class="field-label">Chọn công việc</label>
-            <select id="job" class="sc-select" disabled title="Chọn công việc sẽ được triển khai ở B4">
-                <option value="">Chọn công việc</option>
+            <select id="job" class="sc-select" @bind="selectedJobId" disabled="@(loadingJobs || jobs.Count == 0)"
+                    aria-describedby="job-details" aria-busy="@(loadingJobs ? "true" : "false")">
+                <option value="">@(loadingJobs ? "Đang tải công việc..." : "Chọn công việc")</option>
+                @foreach (var job in jobs)
+                {
+                    <option value="@job.JobId">@job.Title</option>
+                }
             </select>
+            <div id="job-details" aria-live="polite">
+                @if (jobsError is not null)
+                {
+                    <div class="field-error" role="alert">
+                        @jobsError
+                        <button type="button" class="btn btn-link btn-sm" @onclick="LoadJobsAsync">Thử lại</button>
+                    </div>
+                }
+                else if (!loadingJobs && jobs.Count == 0)
+                {
+                    <div class="job-hint">Chưa có công việc đang tuyển.</div>
+                }
+                else if (SelectedJob is { } selectedJob)
+                {
+                    <div class="job-hint">
+                        <span>Kỹ năng bắt buộc:</span>
+                        @foreach (var skill in selectedJob.Skills.Where(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                        {
+                            <span class="skill-chip">@skill.DisplayName</span>
+                        }
+                        @if (!selectedJob.Skills.Any(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                        {
+                            <span>Không yêu cầu</span>
+                        }
+                        <span>• @(selectedJob.MinGpa is { } gpa ? $"GPA tối thiểu {gpa.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}" : "Không yêu cầu GPA")</span>
+                        <span>• Kinh nghiệm từ @selectedJob.MinYearsExperience.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) năm</span>
+                    </div>
+                }
+            </div>
         </div>
 
         @* ---------- B3: Ô kéo thả ---------- *@
@@ -98,6 +133,11 @@
     private string? notice;
     private int generation;         // tăng khi bấm Hủy: kết quả của lần tải cũ không ghi đè thông báo mới
     private string? apiBaseUrl;
+    private List<JobDto> jobs = [];
+    private int? selectedJobId;
+    private bool loadingJobs = true;
+    private string? jobsError;
+    private JobDto? SelectedJob => jobs.FirstOrDefault(j => j.JobId == selectedJobId);
 
     private CvUploadOptions Limits => UploadOptions.Value;
     private int MaxFilesPerSelection => Math.Max(1, Configuration.GetValue("CvUpload:MaxFilesPerSelection", Limits.MaxFilesPerRequest));
@@ -111,10 +151,28 @@
         $"{string.Join(", ", Extensions.Select(e => e.TrimStart('.').ToUpperInvariant()).Where(e => e != "JPEG"))}"
         + $"  •  Tối đa {MaxFilesPerSelection} CV/lần  •  Tối đa {Limits.MaxFileSizeMB} MB/tệp";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         var url = Configuration["ApiBaseUrl"];
         apiBaseUrl = string.IsNullOrWhiteSpace(url) ? null : url.EndsWith('/') ? url : url + "/";
+        await LoadJobsAsync();
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        loadingJobs = true;
+        jobsError = null;
+        try
+        {
+            var result = await JobApi.GetJobsAsync();
+            jobs = result.IsSuccess ? result.Data!.Where(j => j.IsActive).ToList() : [];
+            jobsError = result.IsSuccess ? null : result.ErrorMessage;
+            if (SelectedJob is null) selectedJobId = null;
+        }
+        finally
+        {
+            loadingJobs = false;
+        }
     }
 
     private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
