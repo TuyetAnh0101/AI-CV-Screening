@@ -85,7 +85,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | A1 | Solution .NET 10 gồm 4 project; kết nối SQL Server; cấu hình Gemini qua User Secrets, kiểm tra cấu hình khi khởi động; 2 API kiểm tra kết nối |
 | A2 | 12 Entity, hằng số trạng thái, một `SmartCvDbContext`, 12 Fluent API Configuration, Migration `InitialCreate` khớp `database/SQL.sql` |
 | A3 | Dữ liệu nền 5 Jobs, 29 JobSkills, 52 JobSkillAliases (`JobSeedData` + `HasData`) nạp tự động qua Migration `SeedJobs`; tách dữ liệu demo sang `seed_demo.sql` (282 dòng); script kiểm tra `check_jobs.sql`; unit test dữ liệu nền |
-| A4 | API `POST /api/cvs/upload` nhận một hoặc nhiều file qua `multipart/form-data`, trả thông tin từng file với trạng thái `Received`; giới hạn số file và dung lượng request đọc từ `appsettings.json`; hợp đồng dùng chung `CvUploadResponse` cho giao diện Blazor. **Chưa** kiểm tra định dạng/dung lượng/file trùng (A5), **chưa** lưu file và ghi bảng `Cvs` (A6) |
+| A4 | API `POST /api/cvs/upload` nhận một hoặc nhiều file qua `multipart/form-data`, trả thông tin từng file với trạng thái `Received`; giới hạn số file và dung lượng request đọc từ `appsettings.json`; hợp đồng dùng chung `CvUploadResponse` cho giao diện Blazor. Bảo mật: giới hạn 201 MiB chỉ cho endpoint này, Rate Limiting (429), endpoint chỉ bật ở Development cho đến khi có xác thực (M6). **Chưa** kiểm tra định dạng/dung lượng/file trùng (A5), **chưa** lưu file và ghi bảng `Cvs` (A6) |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -174,11 +174,15 @@ AI-CV-Screening/
 ├── src/
 │   ├── SmartCv.Api/
 │   │   ├── Controllers/HealthController.cs   # 2 API kiểm tra kết nối
-│   │   ├── Endpoints/CvEndpoints.cs          # POST /api/cvs/upload (Minimal API)
+│   │   ├── Endpoints/
+│   │   │   ├── CvEndpoints.cs                # POST /api/cvs/upload: giới hạn dung lượng riêng, chỉ bật ở Development
+│   │   │   ├── CvUploadEndpointOptions.cs    # CvUpload:Endpoint (bật/tắt, giới hạn tần suất)
+│   │   │   └── CvUploadRateLimiting.cs       # Rate Limiting cho API tải CV (429)
 │   │   ├── Properties/launchSettings.json
 │   │   ├── CvUpload.http                     # Thử API tải CV bằng REST Client
-│   │   ├── Program.cs                        # Giới hạn dung lượng request (Kestrel, FormOptions)
-│   │   └── appsettings.json                  # Cấu hình KHÔNG nhạy cảm (Gemini, CvUpload)
+│   │   ├── Program.cs                        # Đăng ký dịch vụ, pipeline (UseRateLimiter)
+│   │   ├── appsettings.json                  # Cấu hình KHÔNG nhạy cảm (Gemini, CvUpload); API tải CV tắt mặc định
+│   │   └── appsettings.Development.json      # Bật API tải CV khi phát triển
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
 │   │   ├── Contracts/CvUploadResponse.cs     # Hợp đồng API tải CV, dùng chung với Blazor
@@ -195,7 +199,7 @@ AI-CV-Screening/
 │       ├── Uploads/CvUploadService.cs        # Xử lý file tải lên (A4: Received)
 │       └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
 ├── test-files/                               # CV GIẢ để thử API tải CV (không đặt CV thật)
-├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests
+├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests
 ├── .gitignore
 ├── CONTRIBUTING.md                           # Quy trình nhóm, danh sách nhánh
 ├── global.json
@@ -395,13 +399,35 @@ Nằm trong `src/SmartCv.Api/appsettings.json`:
   "MaxFileSizeMB": 10,
   "MaxFilesPerRequest": 20,
   "AllowedExtensions": [ ".pdf", ".png", ".jpg", ".jpeg" ],
-  "StorageRoot": "Uploads/CV"
+  "StorageRoot": "Uploads/CV",
+  "Endpoint": {
+    "Enabled": false,
+    "PermitLimit": 30,
+    "WindowSeconds": 60,
+    "ConcurrentRequests": 4,
+    "QueueLimit": 2
+  }
 }
 ```
 
 Mỗi thành viên nên kiểm tra API key của mình có dùng được model này không bằng cách gọi `/api/health/gemini`.
 
 Mục `CvUpload` quyết định giới hạn của API tải CV (xem [mục 12.2](#api-upload)). `MaxFilesPerRequest` có hiệu lực ngay từ A4; `MaxFileSizeMB` hiện chỉ dùng để tính giới hạn tổng của request, việc từ chối từng file quá lớn và kiểm tra `AllowedExtensions` là của A5; `StorageRoot` dùng ở A6. Có thể ghi đè tạm bằng biến môi trường, ví dụ `CvUpload__MaxFilesPerRequest=2`, mà không phải sửa file.
+
+Mục con `CvUpload:Endpoint` (tầng HTTP) bật/tắt endpoint và giới hạn tần suất:
+
+| Khóa | Mặc định | Ý nghĩa |
+|---|---|---|
+| `Enabled` | `false` (`appsettings.json`) · `true` (`appsettings.Development.json`) | Có tạo endpoint `POST /api/cvs/upload` hay không. **Chỉ được bật ở Development** cho đến khi có xác thực (M6) |
+| `PermitLimit` / `WindowSeconds` | 30 / 60 | Mỗi địa chỉ IP tối đa 30 request tải CV trong 60 giây |
+| `ConcurrentRequests` | 4 | Số request tải CV được xử lý cùng lúc trên toàn API |
+| `QueueLimit` | 2 | Số request được xếp hàng chờ khi đã đủ 4; quá số này trả 429 |
+
+| Môi trường | Cấu hình | Kết quả |
+|---|---|---|
+| **Development** (`dotnet run --launch-profile https`) | `appsettings.Development.json` bật `Enabled = true` | Endpoint hoạt động, giới hạn tần suất như trên |
+| **Production / Staging** (chưa có M6) | Giữ `Enabled = false` (mặc định) | Endpoint **không tồn tại** → `404` |
+| Production với `Enabled = true` (cấu hình nhầm) | – | Ứng dụng **dừng ngay khi khởi động** với lỗi *Không được bật API tải CV ở môi trường 'Production' khi chưa có xác thực (M6)* |
 
 ---
 
@@ -529,6 +555,7 @@ dotnet test
 
 > - `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server.
 > - `CvUploadServiceTests` kiểm tra service tải CV ở mức A4: một/nhiều file, bỏ đường dẫn trong tên file, trạng thái `Received`, số lượng, hủy request, giới hạn mặc định. Khi làm A5, A6 cần cập nhật các test ghi chú "A4".
+> - `CvUploadEndpointTests` chạy API trong bộ nhớ (`WebApplicationFactory`, cấu hình giả, không kết nối database, không gọi Gemini): 200/400 qua HTTP, Production trả 404 và chặn bật nhầm, chỉ endpoint tải CV có giới hạn 201 MiB, 429 khi vượt tần suất, endpoint khác không bị giới hạn.
 > - Unit test cho phần tính điểm và tỷ lệ đúng được viết ở A18.
 
 ---
@@ -559,6 +586,9 @@ Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`
 
 Nhận **một hoặc nhiều** file CV trong một request. Ở A4 API **chỉ nhận file và trả thông tin từng file**: chưa kiểm tra định dạng, chưa lưu file, chưa ghi database.
 
+> [!IMPORTANT]
+> Endpoint **chỉ có ở môi trường Development** (`CvUpload:Endpoint:Enabled`), vì chưa có xác thực (M6). Ở Production endpoint trả `404`; bật nhầm thì ứng dụng không khởi động (xem [mục 9.3](#cau-hinh)).
+
 **Request**
 
 ```text
@@ -572,11 +602,45 @@ Mỗi file là một phần có name="files" (nhiều file thì lặp lại ph�
 | Giới hạn | Giá trị mặc định | Khi vượt |
 |---|---|---|
 | Số file mỗi request (`MaxFilesPerRequest`) | 20 | `400` "Quá nhiều file" |
-| Dung lượng cả request = `MaxFileSizeMB` × `MaxFilesPerRequest` + 1 MiB | 10 × 20 + 1 = **201 MiB** | `413 Payload Too Large`, do máy chủ Kestrel trả, không có nội dung |
+| Dung lượng cả request = `MaxFileSizeMB` × `MaxFilesPerRequest` + 1 MiB | 10 × 20 + 1 = **201 MiB** (210 763 776 byte) | `413 Payload Too Large`, do máy chủ trả, không có nội dung |
+| Tần suất theo IP (`Endpoint:PermitLimit` / `WindowSeconds`) | 30 request / 60 giây | `429` ProblemDetails "Quá nhiều yêu cầu tải CV", kèm `Retry-After` (giây) |
+| Request đồng thời (`Endpoint:ConcurrentRequests` + `QueueLimit`) | 4 đang xử lý + 2 chờ | `429` ProblemDetails |
 | Dung lượng từng file (`MaxFileSizeMB`) | 10 MiB | ⏳ A5 mới từ chối (`TooLarge`) |
 | Đuôi file (`AllowedExtensions`) | `.pdf`, `.png`, `.jpg`, `.jpeg` | ⏳ A5 mới từ chối (`InvalidFormat`) |
 
-> Giới hạn 201 MiB được đặt cho Kestrel nên áp dụng cho **mọi** endpoint của API. Nếu sau này chạy sau IIS, Nginx hoặc proxy khác, phải cấu hình thêm giới hạn của proxy đó (ví dụ IIS mặc định chỉ nhận khoảng 28,6 MB).
+**Cách giới hạn được áp dụng**
+
+- Giới hạn 201 MiB **chỉ gắn cho endpoint này** (`RequestSizeLimit` cho body request và `WithFormOptions(MultipartBodyLengthLimit)` cho form multipart, trong `CvEndpoints.cs`). Mọi endpoint khác giữ mặc định của Kestrel (30 000 000 byte ≈ 28,6 MiB) và form 128 MiB.
+- Rate Limiting dùng middleware tích hợp của ASP.NET Core (`AddRateLimiter` / `UseRateLimiter`, file `Endpoints/CvUploadRateLimiting.cs`). Chỉ endpoint gắn policy `cv-upload` bị giới hạn; health check, OpenAPI và API khác không bị ảnh hưởng. Request bị từ chối ngay ở middleware, **trước khi** đọc nội dung file.
+- File nhận qua `IFormFileCollection`: mỗi file chỉ giữ tối đa 64 KiB trong RAM, phần còn lại ghi tạm ra ổ đĩa (`%TEMP%\ASPNETCORE_*.tmp`) và **tự xóa khi request kết thúc**. Tối đa 4 request × 201 MiB ≈ 0,8 GiB ổ đĩa tạm cùng lúc (cộng hàng chờ 2 request đang chờ, chưa đọc dữ liệu).
+- Hủy request (client ngắt kết nối) được truyền qua `CancellationToken` tới `CvUploadService`.
+- Log chỉ ghi **số lượng** file (`Nhận 3 file CV: 3 thành công, 0 bị từ chối`), không ghi tên file, nội dung CV hay thông tin cá nhân.
+
+**Khi triển khai sau IIS hoặc Nginx** (dự kiến – M9), proxy có giới hạn riêng, phải nới **chỉ cho đường dẫn tải CV**:
+
+```xml
+<!-- IIS: web.config (mặc định chỉ 30 000 000 byte) -->
+<location path="api/cvs/upload">
+  <system.webServer>
+    <security>
+      <requestFiltering>
+        <requestLimits maxAllowedContentLength="210763776" />
+      </requestFiltering>
+    </security>
+  </system.webServer>
+</location>
+```
+
+```nginx
+# Nginx (mặc định client_max_body_size 1m)
+location = /api/cvs/upload {
+    client_max_body_size 201m;
+    proxy_request_buffering off;   # chuyển thẳng dữ liệu tới Kestrel, không đệm toàn bộ ở proxy
+    proxy_pass http://smartcv_api;
+}
+```
+
+Sau proxy còn phải bật **Forwarded Headers** (`UseForwardedHeaders`, khai báo `KnownProxies`) để Rate Limiting nhận đúng IP người dùng; nếu không, mọi người dùng chung IP của proxy và chung giới hạn 30 request/phút.
 
 **Response 200** (JSON, tên trường viết thường chữ đầu) – ví dụ thực tế khi gửi 3 file:
 
@@ -612,8 +676,10 @@ Mỗi file là một phần có name="files" (nhiều file thì lặp lại ph�
 |:---:|---|---|
 | `400` | Không có file nào trong trường `files` | ProblemDetails, `"title": "Chưa chọn file"` |
 | `400` | Quá `MaxFilesPerRequest` file | ProblemDetails, `"title": "Quá nhiều file"` |
-| `413` | Request vượt giới hạn dung lượng tổng | Không có nội dung (Kestrel chặn trước khi chạy code) |
+| `404` | Endpoint đang tắt (môi trường khác Development, `CvUpload:Endpoint:Enabled = false`) | Không có nội dung |
+| `413` | Request vượt giới hạn dung lượng tổng | Không có nội dung (máy chủ chặn trước khi chạy code) |
 | `415` | Request không phải `multipart/form-data` | Không có nội dung |
+| `429` | Vượt giới hạn tần suất theo IP hoặc giới hạn request đồng thời | ProblemDetails `"title": "Quá nhiều yêu cầu tải CV"`, header `Retry-After` khi vượt tần suất |
 
 ```json
 { "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1", "title": "Chưa chọn file", "status": 400,
@@ -637,7 +703,31 @@ curl.exe -k -i -F "note=khong co file" https://localhost:7269/api/cvs/upload
 
 Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) bằng extension **REST Client** (Huachao Mao) và bấm **Send Request**.
 
-**Ghi chú bảo mật:** endpoint đang tắt kiểm tra antiforgery (`.DisableAntiforgery()`) và **chưa có xác thực**. Điều này chấp nhận được ở giai đoạn hiện tại vì API không dùng cookie đăng nhập (không có phiên để kẻ xấu lợi dụng qua CSRF), và được giao diện Blazor gọi từ phía máy chủ. Khi làm đăng nhập (M6) bằng cookie phải xem lại: bật antiforgery hoặc dùng token trong header, và yêu cầu xác thực cho endpoint này.
+#### Bảo mật: bảo vệ trước khi có M6 và antiforgery
+
+**Đã triển khai (A4)**
+
+| Rủi ro | Cách xử lý |
+|---|---|
+| Endpoint chưa có xác thực, có thể bị gọi công khai | **Tắt mặc định.** Chỉ `appsettings.Development.json` bật. Ở môi trường khác endpoint không được tạo (`404`); bật nhầm thì ứng dụng **từ chối khởi động**. Không có đăng nhập giả hay token cố định |
+| Giới hạn 201 MiB áp dụng cho toàn API | Chỉ gắn cho `/api/cvs/upload`; endpoint khác giữ mặc định Kestrel 30 MB |
+| Bị gửi dồn dập, cạn tài nguyên khi tải file lớn | Rate Limiting theo IP (30/phút) + giới hạn 4 request đồng thời, hàng chờ 2 → `429` |
+| Lộ thông tin trong log / lỗi | Log chỉ ghi số lượng file; lỗi request trả ProblemDetails do code định nghĩa; Production không bật trang lỗi chi tiết |
+
+**Antiforgery (`.DisableAntiforgery()`)**: vẫn tắt, có chủ đích.
+
+- Antiforgery chống CSRF, tức là trình duyệt của người dùng **tự động gửi kèm cookie đăng nhập** khi bị một trang khác lừa gửi request. API hiện **không có cookie hay đăng nhập nào**, nên CSRF không có gì để lợi dụng: bật antiforgery không tăng bảo mật.
+- Client hợp lệ là giao diện **Blazor gọi API từ phía máy chủ bằng `HttpClient`** (B3) và curl/REST Client khi phát triển. Bật antiforgery bắt các client này phải lấy cookie + token trước mỗi lần tải lên, làm hỏng luồng hiện tại.
+- Rủi ro thật là *ai cũng gọi được* endpoint; rủi ro này được xử lý bằng việc chỉ bật ở Development (ở trên), không phải bằng antiforgery.
+
+**⏳ Bắt buộc khi làm M6 (đăng nhập)** – trước khi bật endpoint ở Production:
+
+1. Chọn cơ chế xác thực cho API. Khuyến nghị: Blazor (Web) đăng nhập HR bằng cookie, còn **API xác thực bằng token (JWT Bearer)** mà Web gửi kèm trong header `Authorization` khi gọi API. Token không được trình duyệt tự gửi nên không cần antiforgery ở API.
+2. Thêm `AddAuthentication(...)` + `AddAuthorization(...)`, gọi `app.UseAuthentication()` trước `app.UseAuthorization()`, và đặt `app.UseRateLimiter()` sau hai dòng này nếu muốn giới hạn theo người dùng.
+3. Trong `CvEndpoints.MapCvEndpoints`: **bỏ đoạn chặn môi trường khác Development** và thêm `.RequireAuthorization(...)` (ví dụ policy cho vai trò HR) cho endpoint.
+4. Nếu API chấp nhận **cookie** trực tiếp từ trình duyệt thì phải bật antiforgery: `AddAntiforgery` + `UseAntiforgery`, bỏ `.DisableAntiforgery()`, client gửi token (form field hoặc header `RequestVerificationToken`).
+5. Đổi khóa phân vùng Rate Limiting từ IP sang mã người dùng; cấu hình Forwarded Headers khi chạy sau proxy.
+6. Đặt `CvUpload:Endpoint:Enabled = true` trong cấu hình Production và kiểm thử lại: không token → `401`, sai quyền → `403`.
 
 #### Tích hợp giao diện Blazor (B3, B5)
 
@@ -724,6 +814,45 @@ Thử thật bằng `curl.exe` trên `https://localhost:7269` (profile `https`),
 
 Kiểm tra thêm: tên file kèm đường dẫn `C:\Users\hr\Desktop\cv-mau-3.pdf` → `cv-mau-3.pdf`; request JSON → 415; `/api/health/database`, `/api/health/gemini` vẫn 200; OpenAPI có `/api/cvs/upload` (200, 400, 413); không tạo thư mục `Uploads`, bảng `Cvs` không đổi (database vẫn 368 dòng, 2 migration). `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **22/22** (thêm 12 test `CvUploadServiceTests`).
 
+<a id="nghiem-thu-a4-bao-mat"></a>
+
+### 13.4. A4 – Bảo mật và cấu hình endpoint tải CV
+
+Thử thật trên Kestrel (`curl.exe`) và bằng test tự động (`CvUploadEndpointTests`, `WebApplicationFactory`, cấu hình giả, không kết nối database):
+
+| # | Trường hợp | Kết quả |
+|:---:|---|---|
+| 1 | 1 file PDF (Development) | ✅ 200, `Received` |
+| 2 | 3 file PDF + PNG + JPG | ✅ 200, `totalFiles` 3 |
+| 3 | Không có file | ✅ 400 "Chưa chọn file" |
+| 4 | 21 file (giới hạn thật 20) | ✅ 400 "Mỗi lần chỉ được tải tối đa 20 file, bạn đã gửi 21 file." |
+| 5 | Vượt dung lượng tổng | ✅ File **50 MB** (lớn hơn mặc định 30 MB của Kestrel) → **200**: giới hạn riêng của endpoint có hiệu lực. File 250 MB → **413** (0 byte nội dung khi có `Expect: 100-continue`; khoảng 0,4 MB rồi đóng kết nối khi không có) |
+| 6 | Rate Limiting | ✅ `PermitLimit = 5`: request 1–5 → 200, request 6–7 → **429** `application/problem+json`, `Retry-After: 60`. `ConcurrentRequests = 1`, `QueueLimit = 0`: trong khi một upload chậm (10 giây) đang chạy, upload thứ hai → **429**; xong thì lại 200 |
+| 7 | Endpoint khác không bị nới 201 MiB / không bị giới hạn tần suất | ✅ Test tự động: chỉ `/api/cvs/upload` có `RequestSizeLimit` và `MultipartBodyLengthLimit` = 210 763 776 byte, mọi endpoint khác không có. 40 request OpenAPI liên tiếp đều 200; health vẫn 200 khi upload đang bị 429 |
+| 8 | Production chưa có M6 | ✅ `POST /api/cvs/upload` → **404** (endpoint không được tạo, log *API tải CV ... đang TẮT*). Bật `CvUpload__Endpoint__Enabled=true` ở Production → ứng dụng **dừng khi khởi động** |
+| 9 | Antiforgery | ✅ Request hợp lệ không token, không cookie → 200 (đúng kiến trúc đã chọn: không có cookie để CSRF lợi dụng). Request có `Origin` lạ cũng 200 ở Development – rủi ro này được chặn bằng việc endpoint không tồn tại ngoài Development |
+| 10 | Health check | ✅ `/api/health/database`, `/api/health/gemini` → 200 (Development) |
+
+Tài nguyên: file lớn được ghi tạm ra `%TEMP%\ASPNETCORE_*.tmp` trong lúc nhận và **tự xóa sau request** (kiểm tra: còn 0 file); RAM tiến trình khoảng 114 MB sau khi nhận 40 MB, không nạp toàn bộ file vào bộ nhớ. Database không đổi (368 dòng, 2 migration), không tạo thư mục `Uploads`.
+
+`dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **31/31** (thêm 9 test `CvUploadEndpointTests`).
+
+**Kiểm thử lại với cấu hình thật và bộ CV mẫu.** Dùng 75 CV PDF mẫu (39 KB – 1,9 MB) để **ngoài repo**: chỉ đọc để gửi lên, không sửa, không chép vào repo, không commit. Mọi giới hạn để ở giá trị mặc định trong `appsettings.json`:
+
+| Trường hợp | Kết quả |
+|---|---|
+| 1 CV | ✅ 200, `totalFiles` 1, `Received`, `cvId` null |
+| 20 CV (tối đa) | ✅ 200, `totalFiles` 20, `successCount` 20, tất cả `Received` |
+| 21 CV | ✅ 400 "Quá nhiều file" |
+| Không có file | ✅ 400 "Chưa chọn file" |
+| 50 MB / 250 MB | ✅ 200 / 413 |
+| 32 request liên tiếp (giới hạn 30/60 giây) | ✅ 30 × 200, 2 × **429** (`Retry-After: 60`, `application/problem+json`); health vẫn 200 |
+| 7 upload gửi cùng lúc (4 đồng thời + 2 chờ) | ✅ 6 × 200 (4 chạy, 2 chờ rồi chạy), 1 × **429** |
+| Production | ✅ 404; bật nhầm → không khởi động |
+| Log | ✅ Không có tên file, chỉ có số lượng |
+
+Sau kiểm thử: bảng `Cvs` vẫn 12 dòng, database 368 dòng, 2 migration; thư mục CV mẫu không đổi (75 file, cùng dung lượng); không tạo thư mục `Uploads`.
+
 ---
 
 <a id="lo-trinh"></a>
@@ -752,7 +881,8 @@ Kiểm tra thêm: tên file kèm đường dẫn `C:\Users\hr\Desktop\cv-mau-3.p
 | Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
 |---|---|
 | **A5** | Trong `CvUploadService` (chỗ `TODO A5`): từ chối file rỗng, sai đuôi, sai nội dung thật (magic bytes), quá `MaxFileSizeMB`, trùng SHA-256 → `Rejected` + `errorCode` |
-| **A6** | Trong `CvUploadService` (chỗ `TODO A6`): lưu `Uploads/CV/yyyy/MM/<GUID>.ext`, ghi bảng `Cvs`, trả `Accepted` + `cvId` |
+| **A6** | Trong `CvUploadService` (chỗ `TODO A6`): lưu `Uploads/CV/yyyy/MM/<GUID>.ext`, ghi bảng `Cvs`, trả `Accepted` + `cvId`. Ghi file dạng stream (không nạp cả file vào RAM), xóa file đã ghi nếu ghi database lỗi |
+| **M6** | Đăng nhập, phân quyền; bật API tải CV ở Production theo checklist tại [mục 12.2](#api-upload) (xác thực, `RequireAuthorization`, antiforgery nếu dùng cookie, Rate Limiting theo người dùng) |
 | A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
 | A8 | API gắn CV với job |
 | A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
@@ -818,7 +948,10 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Lỗi chứng chỉ HTTPS | Chạy `dotnet dev-certs https --trust`. |
 | Tải CV trả `404` | Sai đường dẫn (đúng là `/api/cvs/upload`, có chữ `s`) hoặc thiếu `app.MapCvEndpoints()` trong `Program.cs`. |
 | Tải CV trả `415` hoặc `400` *Expected a supported form media type* | Request không phải `multipart/form-data`. Với curl phải dùng `-F`, không dùng `-d`. |
-| Tải CV trả `413` với file nhỏ | Giới hạn trong `Program.cs` (Kestrel, `FormOptions`) bị thiếu, hoặc proxy phía trước (IIS, Nginx) có giới hạn thấp hơn. |
+| Tải CV trả `413` với file nhỏ hơn 201 MiB | Thiếu `RequestSizeLimit` / `WithFormOptions` trên endpoint trong `CvEndpoints.cs`, hoặc proxy phía trước (IIS, Nginx) có giới hạn thấp hơn (xem [mục 12.2](#api-upload)). |
+| Tải CV trả `404` dù đúng đường dẫn | Không chạy ở Development, hoặc `CvUpload:Endpoint:Enabled = false`. Chạy bằng `dotnet run --launch-profile https`. |
+| Tải CV trả `429` | Vượt 30 request/phút/IP hoặc quá 4 request đồng thời. Chờ theo `Retry-After`, hoặc tăng `CvUpload:Endpoint:*` khi kiểm thử. |
+| Khởi động báo *Không được bật API tải CV ở môi trường '...'* | Đang bật `CvUpload:Endpoint:Enabled` ngoài Development khi chưa có xác thực (M6). Tắt đi, hoặc chạy ở Development. |
 | Tải CV trả `400` "Chưa chọn file" dù đã gửi | Tên phần multipart không phải `files`; trong REST Client thì sai `boundary` hoặc sai đường dẫn `< ../../test-files/...`. |
 | `Invoke-WebRequest: A parameter cannot be found that matches parameter name 'F'` | Đã gõ `curl` thay vì `curl.exe` trong PowerShell. |
 | Blazor báo *exceeds the maximum of 512000 bytes* | Chưa truyền `maxAllowedSize` cho `IBrowserFile.OpenReadStream()` (xem [mục 12.2](#api-upload)). |
