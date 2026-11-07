@@ -4,11 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Extraction;
 using SmartCv.Infrastructure.Storage;
 using SmartCv.Infrastructure.Uploads;
 
@@ -50,6 +52,17 @@ public static class DependencyInjection
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
             sp.GetRequiredService<IOptions<CvUploadOptions>>().Value.StorageRoot,
             sp.GetRequiredService<ILogger<LocalCvFileStorage>>()));
+
+        // A7: đọc chữ CV. Đọc mục "TextExtraction" trong appsettings.json.
+        // TessdataPath tương đối ("tessdata") được đổi thành đường dẫn đầy đủ trong thư mục dự án Api.
+        services.Configure<OcrOptions>(configuration.GetSection(OcrOptions.SectionName));
+        services.AddOptions<OcrOptions>().PostConfigure<IHostEnvironment>((o, env) =>
+            o.TessdataPath = Path.GetFullPath(Path.Combine(env.ContentRootPath, o.TessdataPath)));
+
+        services.AddSingleton<ICvExtractionQueue, CvExtractionQueue>();   // hàng đợi dùng chung (upload + worker)
+        services.AddSingleton<TesseractOcrEngine>();                        // tải mô hình OCR một lần
+        services.AddSingleton<ICvTextExtractor, CvTextExtractor>();
+        services.AddScoped<CvExtractionProcessor>();                        // dùng DbContext nên Scoped
 
         return services;
     }

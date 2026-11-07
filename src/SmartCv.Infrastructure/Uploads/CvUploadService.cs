@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
+using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
@@ -17,10 +18,12 @@ namespace SmartCv.Infrastructure.Uploads;
 /// A4: nhận file. A5: kiểm tra rỗng, dung lượng, đuôi file, nội dung thật, trùng hash (trong lần tải và trong database).
 /// A6: lưu file hợp lệ vào Uploads/CV/yyyy/MM/&lt;GUID&gt;.ext và thêm dòng vào bảng Cvs (ExtractionStatus = Pending),
 ///     trả Accepted + CvId. File bị từ chối trả Rejected kèm ErrorCode, ErrorMessage (thêm mã SaveFailed).
+/// A7: sau khi CV đã lưu chắc chắn, xếp CvId vào hàng đợi để tiến trình nền đọc chữ (không chờ đọc xong).
 /// </summary>
 public sealed class CvUploadService(
     SmartCvDbContext db,
     ICvFileStorage storage,
+    ICvExtractionQueue extractionQueue,
     IOptions<CvUploadOptions> options,
     ILogger<CvUploadService> logger) : ICvUploadService
 {
@@ -166,7 +169,7 @@ public sealed class CvUploadService(
                 ContentType = p.ContentType,        // loại thật đã nhận diện ở A5
                 FileSizeBytes = p.File.Length,
                 FileHash = p.Hash,
-                ExtractionStatus = ExtractionStatuses.Pending,   // A7 sẽ đọc chữ
+                ExtractionStatus = ExtractionStatuses.Pending,   // A7: tiến trình nền sẽ đọc chữ
                 UploadedAt = uploadedAt
             };
 
@@ -174,15 +177,6 @@ public sealed class CvUploadService(
             await db.SaveChangesAsync(ct);
 
             logger.LogInformation("Đã lưu CV {CvId} tại {StoredPath}", cvId, storedPath);
-
-            return new CvUploadItemResult
-            {
-                FileName = p.Name,
-                SizeBytes = p.File.Length,
-                ContentType = p.ContentType,
-                Status = CvUploadStatuses.Accepted,
-                CvId = cvId
-            };
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
@@ -204,6 +198,26 @@ public sealed class CvUploadService(
             logger.LogError(ex, "Không lưu được CV {CvId}", cvId);
             return Rejected(p.File, p.Name, CvUploadErrorCodes.SaveFailed, "Không lưu được file trên máy chủ. Vui lòng thử lại.");
         }
+
+        // A7: xếp vào hàng đợi đọc chữ. Đặt NGOÀI khối try ở trên: CV đã lưu xong, nếu xếp hàng lỗi
+        // thì không được dọn file/dòng Cvs. CV vẫn Pending và được worker tự xếp lại khi API khởi động.
+        try
+        {
+            await extractionQueue.EnqueueAsync(cvId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Không xếp được CV {CvId} vào hàng đợi đọc chữ; sẽ xếp lại khi API khởi động", cvId);
+        }
+
+        return new CvUploadItemResult
+        {
+            FileName = p.Name,
+            SizeBytes = p.File.Length,
+            ContentType = p.ContentType,
+            Status = CvUploadStatuses.Accepted,
+            CvId = cvId
+        };
     }
 
     /// <summary>
