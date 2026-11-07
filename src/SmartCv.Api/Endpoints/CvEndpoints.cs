@@ -1,13 +1,21 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Options;
+using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
+using SmartCv.Infrastructure.Data;
 
 namespace SmartCv.Api.Endpoints;
 
-/// <summary>Các API liên quan đến CV: /api/cvs/...</summary>
+/// <summary>
+/// Các API liên quan đến CV:
+///   POST /api/cvs/upload      tải một hoặc nhiều file (A4–A6)
+///   GET  /api/cvs/{id}        thông tin CV, trạng thái đọc chữ, các job đã ứng tuyển (A6)
+///   GET  /api/cvs/{id}/file   xem / tải file gốc (A6)
+/// </summary>
 public static class CvEndpoints
 {
     /// <summary>
@@ -59,7 +67,102 @@ public static class CvEndpoints
             // Truy cập được kiểm soát bằng việc chỉ bật ở Development (ở trên) cho đến khi có xác thực (M6).
             .DisableAntiforgery();
 
+        // A6: xem lại CV đã lưu. Hai API này trả dữ liệu cá nhân (tên, nội dung CV), nên dùng chung chốt chặn ở trên:
+        // chỉ có ở Development cho đến khi có xác thực (M6). M6: thêm .RequireAuthorization(...) cho cả nhóm.
+        group.MapGet("/{id:guid}", GetCvAsync)
+            .WithName("GetCv")
+            .WithSummary("Thông tin một CV, trạng thái đọc chữ và các job đã ứng tuyển");
+
+        group.MapGet("/{id:guid}/file", GetCvFileAsync)
+            .WithName("GetCvFile")
+            .WithSummary("Xem file CV gốc (thêm ?download=true để tải về)")
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    // ---------- GET /api/cvs/{id} ----------
+    private static async Task<Results<Ok<CvDetailDto>, NotFound>> GetCvAsync(
+        Guid id, SmartCvDbContext db, ICvFileStorage storage, CancellationToken ct)
+    {
+        var cv = await db.Cvs.AsNoTracking()
+            .Where(c => c.CvId == id)
+            .Select(c => new
+            {
+                c.CvId, c.CandidateId, CandidateName = c.Candidate != null ? c.Candidate.FullName : null,
+                c.OriginalFileName, c.ContentType, c.FileSizeBytes, c.UploadedAt, c.StoredPath,
+                c.ExtractionStatus, c.ExtractionMethod, c.ExtractionError, c.ExtractedText,
+                Applications = c.Applications
+                    .OrderBy(a => a.JobId)
+                    .Select(a => new CvApplicationDto
+                    {
+                        ApplicationId = a.ApplicationId, JobId = a.JobId, JobTitle = a.Job.Title, CreatedAt = a.CreatedAt
+                    }).ToList()
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (cv is null) return TypedResults.NotFound();
+
+        // Không trả StoredPath (đường dẫn nội bộ trên máy chủ)
+        return TypedResults.Ok(new CvDetailDto
+        {
+            CvId = cv.CvId,
+            CandidateId = cv.CandidateId,
+            CandidateName = cv.CandidateName,
+            OriginalFileName = cv.OriginalFileName,
+            ContentType = cv.ContentType,
+            FileSizeBytes = cv.FileSizeBytes,
+            UploadedAt = DateTime.SpecifyKind(cv.UploadedAt, DateTimeKind.Utc),
+            FileAvailable = SafeExists(storage, cv.StoredPath),
+            ExtractionStatus = cv.ExtractionStatus,
+            ExtractionMethod = cv.ExtractionMethod,
+            ExtractionError = cv.ExtractionError,
+            ExtractedText = cv.ExtractedText,
+            Applications = cv.Applications
+        });
+    }
+
+    // ---------- GET /api/cvs/{id}/file ----------
+    private static async Task<Results<FileStreamHttpResult, NotFound<ProblemDetails>>> GetCvFileAsync(
+        Guid id, SmartCvDbContext db, ICvFileStorage storage, HttpContext http, CancellationToken ct, bool download = false)
+    {
+        // Chỉ tìm theo CvId: đường dẫn file lấy từ database, không bao giờ lấy từ request
+        var cv = await db.Cvs.AsNoTracking()
+            .Where(c => c.CvId == id)
+            .Select(c => new { c.StoredPath, c.ContentType, c.OriginalFileName })
+            .FirstOrDefaultAsync(ct);
+
+        if (cv is null)
+            return TypedResults.NotFound(new ProblemDetails { Title = "Không tìm thấy CV", Status = 404 });
+
+        Stream stream;
+        try
+        {
+            stream = storage.OpenRead(cv.StoredPath);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or InvalidOperationException)
+        {
+            return TypedResults.NotFound(new ProblemDetails
+            {
+                Title = "File gốc không còn trên máy chủ",
+                Detail = "CV có trong database nhưng không có file (ví dụ CV của dữ liệu demo).",
+                Status = 404
+            });
+        }
+
+        // Trình duyệt không được tự đoán lại loại file (ContentType là loại thật đã nhận diện ở A5)
+        http.Response.Headers.XContentTypeOptions = "nosniff";
+
+        // Không có tên tải về: trình duyệt mở xem trực tiếp (PDF, ảnh). Có: tải về với tên gốc
+        // (ASP.NET tự mã hóa tên trong Content-Disposition, kể cả tên tiếng Việt / ký tự đặc biệt).
+        return TypedResults.Stream(stream, cv.ContentType,
+            fileDownloadName: download ? cv.OriginalFileName : null);
+    }
+
+    private static bool SafeExists(ICvFileStorage storage, string storedPath)
+    {
+        try { return storage.Exists(storedPath); }
+        catch (InvalidOperationException) { return false; }   // đường dẫn không thuộc thư mục lưu CV
     }
 
     private static async Task<Results<Ok<CvUploadResponse>, ProblemHttpResult>> UploadAsync(

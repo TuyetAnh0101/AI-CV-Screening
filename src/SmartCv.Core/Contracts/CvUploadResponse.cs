@@ -27,7 +27,7 @@ public sealed class CvUploadItemResult
 /// <summary>Trạng thái của từng file.</summary>
 public static class CvUploadStatuses
 {
-    public const string Received = "Received";   // A4: đã nhận, chưa kiểm tra / chưa lưu
+    public const string Received = "Received";   // A4–A5: đã nhận, chưa lưu (từ A6 không còn dùng)
     public const string Accepted = "Accepted";   // A5–A6: hợp lệ và đã lưu
     public const string Rejected = "Rejected";   // A5: bị từ chối, xem ErrorCode
 }
@@ -39,4 +39,5 @@ public static class CvUploadErrorCodes
     public const string InvalidFormat = "InvalidFormat";  // không phải PDF/PNG/JPG
     public const string TooLarge = "TooLarge";            // vượt dung lượng cho phép
     public const string Duplicate = "Duplicate";          // trùng mã hash với CV đã có
+    public const string SaveFailed = "SaveFailed";        // A6: lỗi khi lưu file / database
 }

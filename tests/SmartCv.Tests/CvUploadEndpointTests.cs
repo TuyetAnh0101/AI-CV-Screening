@@ -71,7 +71,7 @@ public class CvUploadEndpointTests
         var body = await response.Content.ReadFromJsonAsync<CvUploadResponse>();
         Assert.NotNull(body);
         Assert.Equal(2, body.TotalFiles);
-        Assert.All(body.Files, f => Assert.Equal(CvUploadStatuses.Received, f.Status));
+        Assert.All(body.Files, f => { Assert.Equal(CvUploadStatuses.Accepted, f.Status); Assert.NotNull(f.CvId); });   // A6: đã lưu
     }
 
     [Fact]
