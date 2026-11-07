@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SmartCv.Core.Options;
+using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Storage;
 using SmartCv.Infrastructure.Uploads;
 
 namespace SmartCv.Infrastructure;
@@ -38,6 +43,13 @@ public static class DependencyInjection
         // Scoped vì A6 sẽ dùng SmartCvDbContext (cũng Scoped) trong service này.
         services.Configure<CvUploadOptions>(configuration.GetSection(CvUploadOptions.SectionName));
         services.AddScoped<ICvUploadService, CvUploadService>();
+
+        // A6: lưu file CV vào {thư mục Api}/Uploads/CV (CvUpload:StorageRoot), ngoài wwwroot.
+        // Singleton: không giữ trạng thái thay đổi, dùng chung cho cả ứng dụng.
+        services.AddSingleton<ICvFileStorage>(sp => new LocalCvFileStorage(
+            sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
+            sp.GetRequiredService<IOptions<CvUploadOptions>>().Value.StorageRoot,
+            sp.GetRequiredService<ILogger<LocalCvFileStorage>>()));
 
         return services;
     }

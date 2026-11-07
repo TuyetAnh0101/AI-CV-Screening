@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A5):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256; **chưa lưu**) và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (kiểm tra/lưu CV, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A6):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256) rồi **lưu file hợp lệ** vào thư mục và bảng `Cvs` (A6), kèm API xem thông tin và file gốc của CV và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (trích xuất văn bản, ghép CV với job, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -34,7 +34,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 10. [Tạo database và nạp dữ liệu](#database)
 11. [Build, chạy và kiểm thử](#chay-du-an) – gồm [giao diện SmartCv.Web](#web)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2, A3, A4, B2, A5](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3, A4, B2, A5, A6](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -88,7 +88,8 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | A4 | API `POST /api/cvs/upload` nhận một hoặc nhiều file qua `multipart/form-data`, trả thông tin từng file với trạng thái `Received`; giới hạn số file và dung lượng request đọc từ `appsettings.json`; hợp đồng dùng chung `CvUploadResponse` cho giao diện Blazor. Bảo mật: giới hạn 201 MiB chỉ cho endpoint này, Rate Limiting (429), endpoint chỉ bật ở Development cho đến khi có xác thực (M6). **Chưa** kiểm tra định dạng/dung lượng/file trùng (A5), **chưa** lưu file và ghi bảng `Cvs` (A6) |
 | A (tiền đề B2) | API `GET /api/health`, `GET /api/jobs` (`activeOnly`), `GET /api/jobs/{id}` (404 khi không có); hợp đồng dùng chung `JobDto`, `JobSkillDto` |
 | B2 | Dự án **SmartCv.Web** (Blazor Web App, Interactive Server): bố cục sidebar + thanh trên cùng, menu 4 mục (thu thành ☰ dưới 768px), huy hiệu trạng thái API, component dùng chung (`PageHeader`, `ErrorAlert`, `LoadingIndicator`, `ApiStatusBadge`), service gọi API (`HealthApiClient`, `JobApiClient`, `CvApiClient`) trả `ApiResult<T>` với thông báo lỗi tiếng Việt. Trang chủ hiện 5 job thật từ API; trang Tải CV, Kết quả, System prompt **mới là khung** cho B3–B16 |
-| A5 | API tải CV **kiểm tra từng file** theo 6 bước: rỗng (`EmptyFile`), quá 10 MiB (`TooLarge`), đuôi không hỗ trợ / không có đuôi, nội dung thật không khớp đuôi theo magic bytes (`InvalidFormat`), trùng SHA-256 trong cùng lần tải hoặc với bảng `Cvs` (`Duplicate`). File hợp lệ vẫn `Received` và **chưa lưu** (A6) |
+| A5 | API tải CV **kiểm tra từng file** theo 6 bước: rỗng (`EmptyFile`), quá 10 MiB (`TooLarge`), đuôi không hỗ trợ / không có đuôi, nội dung thật không khớp đuôi theo magic bytes (`InvalidFormat`), trùng SHA-256 trong cùng lần tải hoặc với bảng `Cvs` (`Duplicate`) |
+| A6 | **Lưu CV**: file hợp lệ ghi vào `src/SmartCv.Api/Uploads/CV/yyyy/MM/<GUID>.<đuôi>` và bảng `Cvs` (`ExtractionStatus = Pending`), trả `Accepted` + `cvId`; lỗi lưu trả `SaveFailed`, không để file mồ côi; trùng do tải đồng thời trả `Duplicate`. API `GET /api/cvs/{id}` (thông tin, trạng thái đọc chữ, các job đã ứng tuyển) và `GET /api/cvs/{id}/file` (xem / tải file gốc) |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -152,7 +153,7 @@ flowchart LR
     API --> INFRA[SmartCv.Infrastructure]
     INFRA --> CORE
     INFRA --> DB[(SQL Server<br/>12 bảng)]
-    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID – dự kiến/]
+    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID/]
     INFRA --> GEM[Gemini API]
 ```
 
@@ -191,7 +192,8 @@ AI-CV-Screening/
 │   │   └── appsettings.Development.json      # Bật API tải CV khi phát triển
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
-│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, JobDto
+│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, CvDetailDto, JobDto
+│   │   ├── Storage/ICvFileStorage.cs         # Lưu / mở / xóa file CV (A6)
 │   │   ├── Entities/                         # 12 Entity
 │   │   ├── Options/CvUploadOptions.cs        # Giới hạn tải CV
 │   │   └── Uploads/                          # CvUploadFile, ICvUploadService, CvFileValidator (A5), FileHasher (SHA-256)
@@ -202,7 +204,8 @@ AI-CV-Screening/
 │   │   │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
 │   │   │   └── SmartCvDbContext.cs           # DbContext duy nhất
 │   │   ├── Gemini/GeminiOptions.cs
-│   │   ├── Uploads/CvUploadService.cs        # Xử lý file tải lên: kiểm tra 6 bước (A5), chưa lưu
+│   │   ├── Storage/LocalCvFileStorage.cs     # Lưu vào Uploads/CV/yyyy/MM/<GUID>.ext, chặn đường dẫn ra ngoài (A6)
+│   │   ├── Uploads/CvUploadService.cs        # Kiểm tra 6 bước (A5), lưu file + bảng Cvs (A6)
 │   │   └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
 │   └── SmartCv.Web/                          # Giao diện Blazor (B2)
 │       ├── Components/
@@ -576,7 +579,8 @@ dotnet test
 
 > - `JobSeedDataTests` kiểm tra dữ liệu nền (số dòng, khóa, quan hệ, số kỹ năng/từ khóa từng job, ngày seed cố định, tiếng Việt) và thứ tự migration, không cần kết nối SQL Server.
 > - `CvFileValidatorTests`, `FileHasherTests` (A5): thứ tự kiểm tra, `EmptyFile`, `TooLarge` (đúng giới hạn vẫn hợp lệ), đuôi file không phân biệt hoa/thường, magic bytes PDF/PNG/JPEG, đuôi và nội dung không khớp; SHA-256 đúng giá trị chuẩn, viết hoa 64 ký tự, tính theo luồng, hai file khác tên cùng nội dung cùng hash.
-> - `CvUploadServiceTests` (A5, database EF Core InMemory): file hợp lệ `Received` + loại file thật, bước 1 không đọc nội dung, giả mạo/đổi đuôi, trùng trong lần tải (giữ file đầu), cùng tên khác nội dung không trùng, trùng database, 8 file hỗn hợp giữ thứ tự và số đếm, bỏ đường dẫn trong tên file, hủy request. Khi làm A6 cần cập nhật các test `Received` thành `Accepted`.
+> - `CvUploadServiceTests` (A5–A6, database EF Core InMemory, file lưu vào thư mục tạm): kiểm tra 6 bước, trùng trong lần tải / database, 8 file hỗn hợp; file hợp lệ `Accepted` + `cvId`, có file trên ổ đĩa (tên GUID) và dòng `Cvs` đúng các cột; lỗi ổ đĩa → `SaveFailed` không có dòng database và không ảnh hưởng file khác; lỗi database → xóa file vừa ghi; hủy request không để lại file.
+> - `LocalCvFileStorageTests`, `CvDetailEndpointTests` (A6): thư mục `yyyy/MM`, không ghi đè, chặn đường dẫn thoát ra ngoài, xóa file ghi dở khi lỗi/hủy; `GET /api/cvs/{id}` không trả đường dẫn lưu, xem / tải file với tên gốc, 404 khi không có CV hoặc không có file, Production không có API đọc CV.
 > - `CvUploadEndpointTests` chạy API trong bộ nhớ (`WebApplicationFactory`, cấu hình giả, không kết nối database, không gọi Gemini): 200/400 qua HTTP, Production trả 404 và chặn bật nhầm, chỉ endpoint tải CV có giới hạn 201 MiB, 429 khi vượt tần suất, endpoint khác không bị giới hạn.
 > - `JobEndpointsTests`: `GET /api/health` trả `ok` không cần database; route `/api/jobs`, `/api/jobs/{id}` được đăng ký đúng một lần, không đè route `/api/health/database`, `/api/health/gemini`.
 > - `WebApiClientTests` (B2): service gọi API của Web đổi 400/404/413/415/429/500, mất kết nối, quá thời gian thành câu tiếng Việt, không đưa nội dung lỗi kỹ thuật ra giao diện; `CvApiClient.UploadAsync` gọi đúng API tải CV thật trong bộ nhớ, nhận đúng kết quả từ chối từng file (A5).
@@ -705,9 +709,9 @@ Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`
 
 <a id="api-upload"></a>
 
-### 12.2. ✅ API tải CV – `POST /api/cvs/upload` (A4, A5)
+### 12.2. ✅ API tải CV – `POST /api/cvs/upload` (A4, A5, A6)
 
-Nhận **một hoặc nhiều** file CV trong một request. Từ A5, API **kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256 – xem [Kiểm tra file](#kiem-tra-file)) và trả kết quả từng file; **chưa lưu file, chưa ghi database** (A6).
+Nhận **một hoặc nhiều** file CV trong một request. Từ A5, API **kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256 – xem [Kiểm tra file](#kiem-tra-file)) rồi **lưu file hợp lệ** vào `Uploads/CV` và bảng `Cvs` (A6 – xem [Lưu CV](#luu-cv)) và trả kết quả từng file.
 
 > [!IMPORTANT]
 > Endpoint **chỉ có ở môi trường Development** (`CvUpload:Endpoint:Enabled`), vì chưa có xác thực (M6). Ở Production endpoint trả `404`; bật nhầm thì ứng dụng không khởi động (xem [mục 9.3](#cau-hinh)).
@@ -782,16 +786,16 @@ Sau proxy còn phải bật **Forwarded Headers** (`UseForwardedHeaders`, khai b
 
 - `fileName`: tên file gốc **đã bỏ phần đường dẫn** client gửi kèm (ví dụ `C:\Users\...\cv.pdf` → `cv.pdf`). Không dùng tên này để lưu file.
 - `contentType`: với file hợp lệ là **loại nhận diện từ nội dung** (A5), không phải loại trình duyệt khai báo; với file bị từ chối là giá trị client gửi.
-- `successCount`: số file **qua hết các bước kiểm tra** (`Received`). Chưa có nghĩa là file đã được lưu (A6).
+- `successCount`: số file **đã lưu** (`Accepted`, từ A6).
 - Một request có thể vừa có file hợp lệ vừa có file bị từ chối; API vẫn trả **200**, mỗi file tự mang `status` riêng (đã áp dụng từ A5).
 
 **Trạng thái từng file** (`SmartCv.Core.Contracts.CvUploadStatuses`)
 
 | `status` | Ý nghĩa | Từ khi nào |
 |---|---|---|
-| `Received` | Từ A5: **hợp lệ** (qua hết 6 bước kiểm tra) nhưng **chưa lưu**. `cvId`, `errorCode`, `errorMessage` đều `null` | ✅ A4, A5 |
-| `Rejected` | Bị từ chối; xem `errorCode`: `EmptyFile`, `TooLarge`, `InvalidFormat`, `Duplicate` (`CvUploadErrorCodes`) và `errorMessage` tiếng Việt | ✅ A5 |
-| `Accepted` | Hợp lệ và **đã lưu** file + bảng `Cvs`; `cvId` có giá trị | ⏳ A6 |
+| `Accepted` | Hợp lệ và **đã lưu** file + bảng `Cvs` (`ExtractionStatus = Pending`); `cvId` là mã CV để xem lại (`GET /api/cvs/{id}`) và gắn job (A8) | ✅ A6 |
+| `Rejected` | Bị từ chối; xem `errorCode`: `EmptyFile`, `TooLarge`, `InvalidFormat`, `Duplicate` (A5), `SaveFailed` (A6) và `errorMessage` tiếng Việt | ✅ A5, A6 |
+| `Received` | Chỉ dùng ở A4–A5 (hợp lệ nhưng chưa lưu). **Từ A6 không còn trả về**; giao diện kiểm tra `Accepted` | – |
 
 <a id="kiem-tra-file"></a>
 
@@ -843,9 +847,46 @@ curl.exe -s -F "files=@test-files/qua-lon-12MB.pdf" https://localhost:7269/api/c
 
 Trong PowerShell, chạy `[Console]::OutputEncoding = [Text.Encoding]::UTF8` trước để hiện đúng tiếng Việt.
 
-**Thử trùng database:** A5 chưa lưu CV, nên phải thêm tạm một dòng vào `Cvs`. Dùng [`database/test_a5_trung_database.sql`](database/test_a5_trung_database.sql) trên **database thử riêng** (ví dụ `SmartCvDb_A5Test`, tạo bằng `dotnet ef database update --connection "...Database=SmartCvDb_A5Test..."`). Script **tự dừng nếu đang kết nối `SmartCvDb`**. Hướng dẫn từng bước nằm ở đầu file.
+**Thử trùng database:** từ A6, tải lại một file đã lưu là thấy `Duplicate`. Ở A5 (chưa lưu) phải thêm tạm một dòng vào `Cvs`: Dùng [`database/test_a5_trung_database.sql`](database/test_a5_trung_database.sql) trên **database thử riêng** (ví dụ `SmartCvDb_A5Test`, tạo bằng `dotnet ef database update --connection "...Database=SmartCvDb_A5Test..."`). Script **tự dừng nếu đang kết nối `SmartCvDb`**. Hướng dẫn từng bước nằm ở đầu file.
 
 > File mẫu PDF/ảnh phải giữ nguyên từng byte. `.gitattributes` đánh dấu chúng là `binary` để Git trên Windows (`core.autocrlf=true`) không đổi xuống dòng khi checkout; nếu bị đổi, mã SHA-256 sẽ khác và kiểm tra trùng cho kết quả sai.
+
+<a id="luu-cv"></a>
+
+#### Lưu CV (A6)
+
+File qua hết 6 bước kiểm tra được lưu **từng file một** (file này lỗi không ảnh hưởng file khác):
+
+```text
+ghi file ra ổ đĩa ──> thêm dòng Cvs ──> SaveChanges ──> Accepted + cvId
+        │ lỗi (ổ đĩa, database, trùng do tải đồng thời, hủy request)
+        ▼
+xóa file vừa ghi (nếu dòng Cvs chưa được lưu) ──> Rejected: SaveFailed / Duplicate
+```
+
+| Nội dung | Giá trị |
+|---|---|
+| Vị trí file | `src/SmartCv.Api/Uploads/CV/yyyy/MM/<CvId>.<đuôi>` (thư mục Api, `CvUpload:StorageRoot`), **ngoài `wwwroot`**, đã chặn trong `.gitignore`. Không đưa lên GitHub |
+| Tên file trên ổ đĩa | `CvId` (GUID) + đuôi viết thường; **không dùng tên gốc** (không trùng, không lộ tên ứng viên, không bị tên giả mạo `../../`). Ghi bằng `FileMode.CreateNew` nên không bao giờ ghi đè file có sẵn |
+| Bảng `Cvs` | `CvId`, `CandidateId = NULL` (chưa biết ứng viên), `OriginalFileName` (tên gốc đã bỏ đường dẫn), `StoredPath` (tương đối, dấu `/`, ví dụ `Uploads/CV/2026/11/<CvId>.pdf`), `ContentType` (loại thật từ A5), `FileSizeBytes`, `FileHash` (SHA-256), `ExtractionStatus = Pending`, `UploadedAt` (UTC) |
+| Lỗi lưu | `SaveFailed` "Không lưu được file trên máy chủ. Vui lòng thử lại." (chi tiết chỉ ghi log) |
+| Tải đồng thời cùng file | Ràng buộc `UQ_Cvs_FileHash` chỉ cho một bản vào database; các bản còn lại `Duplicate` "Trùng với một CV vừa được tải lên cùng lúc." và file của chúng bị xóa |
+| Dọn file | File ghi dở (lỗi giữa chừng, hủy request) bị xóa ngay. Nếu không xóa được, log ghi `StoredPath` để xóa thủ công. Trước khi xóa, kiểm tra lại database: nếu dòng `Cvs` thực ra đã được lưu thì **giữ file** |
+| Bảo mật đường dẫn | Mọi đường dẫn đi qua `LocalCvFileStorage`, chặn đường dẫn ra ngoài `Uploads/CV`; API đọc file chỉ nhận `CvId`, đường dẫn lấy từ database |
+
+**API xem lại CV** (cùng chốt chặn với API tải lên: **chỉ có ở Development** cho đến khi có xác thực M6, vì trả dữ liệu cá nhân):
+
+| Phương thức | Endpoint | Trả về |
+|:---:|---|---|
+| `GET` | `/api/cvs/{id}` | `CvDetailDto`: `cvId`, `candidateId`, `candidateName`, `originalFileName`, `contentType`, `fileSizeBytes`, `uploadedAt` (UTC), `fileAvailable` (file gốc còn không), `extractionStatus` / `extractionMethod` / `extractionError` / `extractedText` (A7 điền), `applications` (các job đã ứng tuyển). **Không** trả đường dẫn lưu. `404` nếu không có CV |
+| `GET` | `/api/cvs/{id}/file` | File gốc, mở xem trên trình duyệt (PDF, ảnh), header `X-Content-Type-Options: nosniff`. `?download=true`: tải về với **tên gốc** (`Content-Disposition` mã hóa an toàn, giữ tiếng Việt). `404` "Không tìm thấy CV" hoặc "File gốc không còn trên máy chủ" (ví dụ 12 CV demo chỉ có trong database) |
+
+```powershell
+curl.exe -s https://localhost:7269/api/cvs/<cvId>
+curl.exe -s -o cv.pdf "https://localhost:7269/api/cvs/<cvId>/file?download=true"
+```
+
+**Dọn dữ liệu thử:** không có script xóa hàng loạt. Script kiểu "xóa mọi CV có `CandidateId = NULL`" **không an toàn** vì xóa cả CV thật do người khác tải lên. Nên thử trên database thử riêng (tạo bằng `dotnet ef database update --connection "...Database=SmartCvDb_Test..."` rồi chạy `seed_demo.sql` vào database đó) và đặt `CvUpload__StorageRoot=Uploads/CV-test` để file thử nằm riêng, dọn bằng cách xóa đúng thư mục đó.
 
 **Response lỗi**
 
@@ -939,7 +980,8 @@ Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) b�
 
 | Phương thức | Endpoint | Mô tả | Mã việc |
 |:---:|---|---|:---:|
-| `POST` | `/api/cvs/upload` (bổ sung) | Lưu file hợp lệ vào `Uploads/CV/yyyy/MM/<GUID>.ext`, ghi bảng `Cvs`, trả `Accepted` + `cvId` | A6 |
+| `POST` | `/api/cvs/{id}/extract` | Đọc lại chữ của một CV | A7 |
+| `POST` `GET` `DELETE` | `/api/applications` | Gắn CV vào job, danh sách, bỏ gắn | A8 |
 | `POST` | `/api/applications` | Gắn CV với job | A8 |
 | `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
 | `GET` | `/api/scoring/progress` | Xem tiến độ chấm | A13 |
@@ -1103,6 +1145,32 @@ Dữ liệu: bảng `Cvs` của `SmartCvDb` **không đổi** (12 dòng, cùng c
 
 `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **79/79** (thêm `CvFileValidatorTests`, `FileHasherTests`; viết lại `CvUploadServiceTests` cho A5; cập nhật test HTTP dùng database InMemory và nội dung PDF thật).
 
+<a id="nghiem-thu-a6"></a>
+
+### 13.7. A6 – Lưu file CV, API xem thông tin và file gốc
+
+Thử thật trên `https://localhost:7269` với **database thử riêng** (12 bảng + `seed_demo.sql`, không đụng `SmartCvDb`) và `CvUpload__StorageRoot=Uploads/CV-test` (file thử nằm riêng):
+
+| # | Trường hợp | Kết quả |
+|:---:|---|---|
+| 1 | `cv-mau-1.pdf` + `cv-mau-2.png` + `cv-word.docx` | ✅ 2 × `Accepted` có `cvId`, `.docx` `Rejected` / `InvalidFormat` |
+| 2 | Ổ đĩa | ✅ `Uploads/CV-test/2026/11/<cvId>.pdf`, `<cvId>.png` (tên GUID, không có tên gốc) |
+| 3 | Bảng `Cvs` | ✅ `StoredPath` dạng `Uploads/CV-test/2026/11/<cvId>.pdf`, `ContentType` loại thật, `FileSizeBytes` 1421 / 8625, `FileHash` khớp SHA-256 file gốc, `ExtractionStatus = Pending`, `CandidateId = NULL` |
+| 4 | Tải lại `cv-mau-1.pdf` | ✅ `Duplicate` "Trùng với CV đã tải trước đó: "cv-mau-1.pdf" (ngày 07/11/2026)." |
+| 5 | 5 file hỗn hợp | ✅ 2 `Accepted`, 3 `Rejected` (`EmptyFile`, `InvalidFormat`, `Duplicate`), đúng thứ tự |
+| 6 | `GET /api/cvs/{id}` | ✅ tên gốc, loại, dung lượng, `Pending`, `fileAvailable: true`, không có trường đường dẫn lưu |
+| 7 | `GET /api/cvs/{id}/file` | ✅ 200 `application/pdf`, `X-Content-Type-Options: nosniff`, nội dung giống hệt file gốc |
+| 8 | `?download=true` | ✅ `Content-Disposition: attachment; filename=cv-mau-1.pdf; filename*=UTF-8''cv-mau-1.pdf` |
+| 9 | CV demo (có dòng `Cvs`, không có file) | ✅ `/file` → 404 "File gốc không còn trên máy chủ"; chi tiết `fileAvailable: false`, 2 hồ sơ ứng tuyển |
+| 10 | CV không tồn tại / mã sai định dạng | ✅ 404 |
+| 11 | 8 request **cùng lúc** tải cùng một file mới (3 vòng) | ✅ mỗi vòng 1 `Accepted` + 7 `Duplicate`; mỗi hash đúng 1 dòng `Cvs`; nhánh bắt lỗi `UQ_Cvs_FileHash` chạy 14 lần và đều xóa file thừa |
+| 12 | Nhất quán ổ đĩa ↔ database | ✅ 9 file = 9 dòng, không lệch: không có file mồ côi |
+| 13 | Không ghi được thư mục (giả lập) | ✅ file đó `SaveFailed`, file khác trong cùng request vẫn xử lý; không có dòng `Cvs` mới |
+
+Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Production không có API `/api/cvs/*` (test tự động). Log không chứa tên file. `SmartCvDb` không đổi.
+
+`dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **97/97** (thêm `LocalCvFileStorageTests`, `CvDetailEndpointTests`; cập nhật `CvUploadServiceTests` và test HTTP từ `Received` sang `Accepted`).
+
 ---
 
 <a id="lo-trinh"></a>
@@ -1121,7 +1189,7 @@ Dữ liệu: bảng `Cvs` của `SmartCvDb` **không đổi** (12 dòng, cùng c
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
 | 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3, B2 |
-| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4, A5 · ⏳ A6 – A8, B3 – B5 |
+| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4, A5, A6 · ⏳ A7, A8, B3 – B5 |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
 | 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 | ⏳ |
@@ -1130,7 +1198,6 @@ Dữ liệu: bảng `Cvs` của `SmartCvDb` **không đổi** (12 dòng, cùng c
 
 | Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
 |---|---|
-| **A6** | Trong `CvUploadService` (chỗ `TODO A6`): lưu `Uploads/CV/yyyy/MM/<GUID>.ext`, ghi bảng `Cvs` (`FileHash`, `ContentType` đã có từ A5), trả `Accepted` + `cvId`. Ghi file dạng stream, xóa file đã ghi nếu ghi database lỗi; bắt lỗi `UQ_Cvs_FileHash` (hai người tải cùng file cùng lúc) và trả `Duplicate` |
 | **M6** | Đăng nhập, phân quyền; bật API tải CV ở Production theo checklist tại [mục 12.2](#api-upload) (xác thực, `RequireAuthorization`, antiforgery nếu dùng cookie, Rate Limiting theo người dùng) |
 | A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
 | A8 | API gắn CV với job |
@@ -1218,6 +1285,10 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Tải CV trả `413` với file nhỏ hơn 201 MiB | Thiếu `RequestSizeLimit` / `WithFormOptions` trên endpoint trong `CvEndpoints.cs`, hoặc proxy phía trước (IIS, Nginx) có giới hạn thấp hơn (xem [mục 12.2](#api-upload)). |
 | Tải CV trả `404` dù đúng đường dẫn | Không chạy ở Development, hoặc `CvUpload:Endpoint:Enabled = false`. Chạy bằng `dotnet run --launch-profile https`. |
 | Mọi file đều `Received`, kể cả file rỗng | API đang chạy bản cũ (A4). Dừng API, build lại, chạy lại. |
+| File hợp lệ vẫn `Received`, không có `cvId` | API đang chạy bản A5. Từ A6 file hợp lệ là `Accepted`. |
+| Mọi file đều `SaveFailed` | Xem log API. Thường do không có quyền ghi thư mục `src/SmartCv.Api/Uploads`, ổ đĩa đầy, hoặc mất kết nối database. |
+| `Accepted` nhưng không thấy file | File nằm trong `src/SmartCv.Api/Uploads/CV/yyyy/MM/`, không phải gốc repo. |
+| Tải nhiều file cùng lúc bị lỗi 500 / `Cannot open database ... requested by the login` | Database đang ở chế độ `SINGLE_USER` (chỉ một kết nối). Database mới thừa hưởng chế độ này nếu database hệ thống `model` đang `SINGLE_USER`. Kiểm tra `SELECT name, user_access_desc FROM sys.databases`; đổi sang `MULTI_USER` khi có quyền và đã thống nhất với nhóm. |
 | File 12 MB trả `413` thay vì `TooLarge` | Thiếu giới hạn riêng của endpoint (`RequestSizeLimit`, `WithFormOptions`) trong `CvEndpoints.cs`, hoặc proxy phía trước giới hạn thấp hơn. |
 | `cv-mau-1-ban-sao.pdf` không bị báo trùng | Chỉ trùng khi gửi **cùng lần** với `cv-mau-1.pdf` (A5 chưa lưu file). Nếu gửi chung vẫn không trùng: file mẫu đã bị đổi xuống dòng khi checkout; kiểm tra `.gitattributes` rồi `git checkout -- test-files`. |
 | Thử trùng database vẫn ra `Received` | Chạy `test_a5_trung_database.sql` nhầm database, hoặc API chưa trỏ vào database thử (`ConnectionStrings__SmartCvDb`). |

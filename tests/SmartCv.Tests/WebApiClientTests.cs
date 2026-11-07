@@ -159,7 +159,7 @@ public class WebApiClientTests
         Assert.Equal(2, result.Data!.TotalFiles);
         Assert.Equal(["cv-mau-1.pdf", "cv-mau-2.png"], result.Data.Files.Select(f => f.FileName));
         Assert.Equal(1024 * 1024, result.Data.Files[0].SizeBytes);
-        Assert.All(result.Data.Files, f => Assert.Equal(CvUploadStatuses.Received, f.Status));
+        Assert.All(result.Data.Files, f => { Assert.Equal(CvUploadStatuses.Accepted, f.Status); Assert.NotNull(f.CvId); });   // A6: đã lưu
     }
 
     [Fact]

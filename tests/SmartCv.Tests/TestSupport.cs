@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SmartCv.Core.Storage;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Storage;
 
 namespace SmartCv.Tests;
 
@@ -55,7 +57,21 @@ internal static class TestSupport
                 services.RemoveAll<DbContextOptions<SmartCvDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<SmartCvDbContext>>();
                 services.AddDbContext<SmartCvDbContext>(o => o.UseInMemoryDatabase(database));
+
+                // A6: lưu file vào thư mục tạm của test, không ghi vào src/SmartCv.Api/Uploads
+                services.RemoveAll<ICvFileStorage>();
+                services.AddSingleton<ICvFileStorage>(Storage(TempRoot()));
             });
         });
     }
+
+    /// <summary>Thư mục tạm riêng cho một test (trong %TEMP%), dùng làm thư mục gốc lưu file.</summary>
+    public static string TempRoot()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "smartcv-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    public static LocalCvFileStorage Storage(string root) => new(root, "Uploads/CV");
 }
