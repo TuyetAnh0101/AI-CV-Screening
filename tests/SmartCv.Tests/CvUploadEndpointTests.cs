@@ -1,21 +1,20 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCv.Core.Contracts;
 
 namespace SmartCv.Tests;
 
 /// <summary>
-/// A4 (bảo mật): kiểm thử API POST /api/cvs/upload qua toàn bộ pipeline HTTP (TestServer, trong bộ nhớ).
-/// Dùng cấu hình GIẢ cho chuỗi kết nối và Gemini key: không kết nối SQL Server, không gọi Gemini.
+/// A4 (bảo mật) + A5: kiểm thử API POST /api/cvs/upload qua toàn bộ pipeline HTTP (TestServer, trong bộ nhớ).
+/// Dùng cấu hình GIẢ cho chuỗi kết nối và Gemini key, database InMemory: không kết nối SQL Server, không gọi Gemini.
 /// Giới hạn dung lượng 413 phụ thuộc máy chủ Kestrel nên được kiểm thử thủ công bằng curl (xem README mục 13.4).
+/// Từ A5, file gửi lên phải có nội dung PDF thật (chữ ký %PDF-) và khác nhau, nếu không sẽ bị Rejected.
 /// </summary>
 public class CvUploadEndpointTests
 {
@@ -23,28 +22,41 @@ public class CvUploadEndpointTests
 
     private static WebApplicationFactory<Program> CreateFactory(
         string environment = "Development", Dictionary<string, string?>? settings = null) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment(environment);
-            // Đọc sớm trong AddInfrastructure nên phải dùng UseSetting. Giá trị giả, không dùng thật.
-            builder.UseSetting("ConnectionStrings:SmartCvDb", "Server=(local);Database=SmartCv_Test_NotUsed;Trusted_Connection=True");
-            builder.UseSetting("Gemini:ApiKey", "test-not-a-real-key");
-            if (settings is not null)
-            {
-                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings));
-            }
-        });
+        TestSupport.ApiFactory(environment, settings);
 
     private static MultipartFormDataContent Files(params string[] names)
     {
         var content = new MultipartFormDataContent();
         foreach (var name in names)
         {
-            var part = new ByteArrayContent(new byte[100]);
+            var part = new ByteArrayContent(TestSupport.Pdf(name + Guid.NewGuid()));
             part.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
             content.Add(part, "files", name);
         }
         return content;
+    }
+
+    [Fact]
+    public async Task A5_mixed_upload_over_http_returns_per_file_status()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var pdf = TestSupport.Pdf("cv-mau-1");
+        using var content = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(pdf), "files", "cv-mau-1.pdf" },
+            { new ByteArrayContent([]), "files", "file-rong.pdf" },
+            { new ByteArrayContent("PK"u8.ToArray()), "files", "cv-word.docx" },
+            { new ByteArrayContent(pdf), "files", "cv-mau-1-ban-sao.pdf" },
+        };
+
+        using var response = await client.PostAsync("/api/cvs/upload", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);   // có file bị từ chối vẫn trả 200
+        var body = await response.Content.ReadFromJsonAsync<CvUploadResponse>();
+        Assert.Equal((4, 1, 3), (body!.TotalFiles, body.SuccessCount, body.FailedCount));
+        Assert.Equal([null, CvUploadErrorCodes.EmptyFile, CvUploadErrorCodes.InvalidFormat, CvUploadErrorCodes.Duplicate],
+            body.Files.Select(f => f.ErrorCode));
     }
 
     [Fact]

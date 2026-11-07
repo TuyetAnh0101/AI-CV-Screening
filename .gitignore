@@ -283,6 +283,8 @@ ServiceFabricBackup/
 
 # File thử dung lượng lớn tạo tạm khi kiểm thử A4 (Thử 6)
 /test-files/*-qua-lon*
+# File thử quá lớn A5 (tạo bằng lệnh, không commit), ví dụ test-files/qua-lon-12MB.pdf
+/test-files/qua-lon-*
 
 # Business Intelligence projects
 *.rdl.data
