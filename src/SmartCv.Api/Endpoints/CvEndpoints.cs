@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
+using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
@@ -15,6 +17,7 @@ namespace SmartCv.Api.Endpoints;
 ///   POST /api/cvs/upload      tải một hoặc nhiều file (A4–A6)
 ///   GET  /api/cvs/{id}        thông tin CV, trạng thái đọc chữ, các job đã ứng tuyển (A6)
 ///   GET  /api/cvs/{id}/file   xem / tải file gốc (A6)
+///   POST /api/cvs/{id}/extract đọc lại chữ (A7), ví dụ khi lần trước lỗi do thiếu dữ liệu OCR
 /// </summary>
 public static class CvEndpoints
 {
@@ -78,7 +81,37 @@ public static class CvEndpoints
             .WithSummary("Xem file CV gốc (thêm ?download=true để tải về)")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        // A7: đọc lại chữ. Cùng chốt chặn Development như trên; giới hạn tần suất như API tải lên vì OCR tốn CPU.
+        group.MapPost("/{id:guid}/extract", ReExtractAsync)
+            .WithName("ReExtractCv")
+            .WithSummary("Đặt lại trạng thái Pending và xếp CV vào hàng đợi đọc chữ")
+            .RequireRateLimiting(CvUploadRateLimiting.PolicyName)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            // Không có cookie/phiên đăng nhập nên không có nguy cơ CSRF (giống API tải lên ở trên).
+            .DisableAntiforgery();
+
         return app;
+    }
+
+    // ---------- POST /api/cvs/{id}/extract ----------
+    private static async Task<Results<Accepted<CvExtractionAcceptedDto>, NotFound>> ReExtractAsync(
+        Guid id, SmartCvDbContext db, ICvExtractionQueue queue, CancellationToken ct)
+    {
+        var cv = await db.Cvs.FirstOrDefaultAsync(c => c.CvId == id, ct);
+        if (cv is null) return TypedResults.NotFound();
+
+        // Đang Pending (chờ hoặc đang đọc): không đặt lại, chỉ bảo đảm có trong hàng đợi (hàng đợi tự bỏ trùng)
+        if (cv.ExtractionStatus != ExtractionStatuses.Pending)
+        {
+            cv.ExtractionStatus = ExtractionStatuses.Pending;
+            cv.ExtractionError = null;
+            await db.SaveChangesAsync(ct);
+        }
+
+        await queue.EnqueueAsync(id, CancellationToken.None);
+
+        return TypedResults.Accepted($"/api/cvs/{id}",
+            new CvExtractionAcceptedDto { CvId = id, ExtractionStatus = cv.ExtractionStatus });
     }
 
     // ---------- GET /api/cvs/{id} ----------

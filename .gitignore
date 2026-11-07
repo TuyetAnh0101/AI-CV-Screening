@@ -281,6 +281,9 @@ ServiceFabricBackup/
 /Uploads/
 /src/SmartCv.Api/Uploads/
 
+# A7: dữ liệu ngôn ngữ OCR (khoảng 30 MB, mỗi máy tự tải bằng scripts/tai-tessdata.ps1)
+/src/SmartCv.Api/tessdata/
+
 # File thử dung lượng lớn tạo tạm khi kiểm thử A4 (Thử 6)
 /test-files/*-qua-lon*
 # File thử quá lớn A5 (tạo bằng lệnh, không commit), ví dụ test-files/qua-lon-12MB.pdf
