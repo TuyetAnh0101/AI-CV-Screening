@@ -1,0 +1,40 @@
+@* Menu bên trái. Giai đoạn 1 có 3 trang chính; giai đoạn 2 (M1–M7) thêm mục mới vào danh sách "items" bên dưới. *@
+
+<div class="brand">
+    <a href="" class="brand-link">
+        <span class="brand-logo">CV</span>
+        <span>
+            <span class="brand-name">SmartCV</span>
+            <span class="brand-sub">Sàng lọc hồ sơ</span>
+        </span>
+    </a>
+    <button type="button" class="menu-toggle" @onclick="Toggle" aria-label="Mở/đóng menu">☰</button>
+</div>
+
+<nav class="nav-list @(collapsed ? "collapsed" : null)">
+    @foreach (var item in items)
+    {
+        <NavLink class="nav-item" href="@item.Href" Match="@item.Match" @onclick="Collapse">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="@item.Icon" /></svg>
+            <span>@item.Text</span>
+        </NavLink>
+    }
+</nav>
+
+@code {
+    private bool collapsed = true;   // chỉ có tác dụng trên màn hình hẹp
+
+    private void Toggle() => collapsed = !collapsed;
+    private void Collapse() => collapsed = true;
+
+    private sealed record MenuItem(string Text, string Href, string Icon, NavLinkMatch Match = NavLinkMatch.Prefix);
+
+    // Icon là đường vẽ SVG (24x24) đơn giản, không cần thư viện icon
+    private readonly MenuItem[] items =
+    [
+        new("Trang chủ", "", "M3 11 12 3l9 8v10h-6v-6H9v6H3z", NavLinkMatch.All),
+        new("Tải CV", "upload", "M12 3 6 9h4v6h4V9h4zM4 17h16v4H4z"),
+        new("Kết quả", "results", "M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z"),
+        new("System prompt", "prompts", "M4 4h16v12H8l-4 4zm4 5h8V7H8zm0 4h5v-2H8z"),
+    ];
+}

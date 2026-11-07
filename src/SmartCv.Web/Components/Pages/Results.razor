@@ -1,0 +1,23 @@
+@page "/results"
+
+<PageHeader Title="Kết quả" Subtitle="Bảng xếp hạng ứng viên theo từng vị trí." />
+
+<div class="card-panel placeholder-panel">
+    <p class="mb-2">Trang đang được xây dựng. Các phần sẽ làm:</p>
+    <ul>
+        <li><strong>B7</strong>: lọc job và bảng xếp hạng</li>
+        <li><strong>B8</strong>: màu theo 4 mức đánh giá</li>
+        <li><strong>B9</strong>: trang chi tiết CV</li>
+        <li><strong>B10</strong>: trạng thái xử lý, lỗi đọc file, lỗi AI</li>
+        <li><strong>B11</strong>: biểu đồ số CV theo mức</li>
+    </ul>
+
+    @* Xem trước 4 màu mức đánh giá đã dựng sẵn cho B8 *@
+    <p class="mb-2 text-secondary small">Màu mức đánh giá (dựng sẵn cho B8):</p>
+    <div class="d-flex flex-wrap gap-2">
+        @foreach (var label in FitLevel.All)
+        {
+            <span class="fit-badge @FitLevel.CssClass(label)">@label</span>
+        }
+    </div>
+</div>

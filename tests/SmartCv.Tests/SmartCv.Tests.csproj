@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\SmartCv.Core\SmartCv.Core.csproj" />
     <ProjectReference Include="..\..\src\SmartCv.Infrastructure\SmartCv.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\SmartCv.Api\SmartCv.Api.csproj" />
+    <!-- Alias "web": Api và Web đều có class Program; test chỉ dùng service gọi API của Web. -->
+    <ProjectReference Include="..\..\src\SmartCv.Web\SmartCv.Web.csproj" Aliases="web" />
   </ItemGroup>
 
 </Project>
