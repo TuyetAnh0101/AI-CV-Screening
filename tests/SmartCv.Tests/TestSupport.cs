@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SmartCv.Api.Background;
 using SmartCv.Core.Storage;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Storage;
@@ -37,8 +38,11 @@ internal static class TestSupport
     /// <summary>
     /// API chạy trong bộ nhớ: cấu hình giả, SmartCvDbContext thay bằng InMemory (tên <paramref name="dbName"/>).
     /// </summary>
+    /// A7: mặc định TẮT tiến trình nền đọc chữ để kết quả test không phụ thuộc thời điểm worker chạy
+    /// (CV vừa tải lên luôn là Pending). Test cần đọc chữ thật thì truyền <paramref name="extractionWorker"/> = true.
     public static WebApplicationFactory<Program> ApiFactory(
-        string environment = "Development", Dictionary<string, string?>? settings = null, string? dbName = null)
+        string environment = "Development", Dictionary<string, string?>? settings = null, string? dbName = null,
+        bool extractionWorker = false)
     {
         var database = dbName ?? Guid.NewGuid().ToString("N");
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -61,6 +65,12 @@ internal static class TestSupport
                 // A6: lưu file vào thư mục tạm của test, không ghi vào src/SmartCv.Api/Uploads
                 services.RemoveAll<ICvFileStorage>();
                 services.AddSingleton<ICvFileStorage>(Storage(TempRoot()));
+
+                if (!extractionWorker)
+                {
+                    var worker = services.Where(d => d.ImplementationType == typeof(CvExtractionWorker)).ToList();
+                    foreach (var d in worker) services.Remove(d);
+                }
             });
         });
     }
@@ -74,4 +84,28 @@ internal static class TestSupport
     }
 
     public static LocalCvFileStorage Storage(string root) => new(root, "Uploads/CV");
+
+    /// <summary>Đường dẫn tới file trong thư mục test-files ở gốc repo.</summary>
+    public static string RepoFile(string relative)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SmartCv.slnx")) && !Directory.Exists(Path.Combine(dir.FullName, "test-files")))
+            dir = dir.Parent;
+        return Path.Combine(dir?.FullName ?? throw new DirectoryNotFoundException("Không tìm thấy gốc repo"), relative);
+    }
+
+    /// <summary>Thư mục tessdata của Api (tải bằng scripts/tai-tessdata.ps1, không có trong Git).</summary>
+    public static string TessdataPath => RepoFile(Path.Combine("src", "SmartCv.Api", "tessdata"));
+
+    public static bool HasTessdata =>
+        File.Exists(Path.Combine(TessdataPath, "eng.traineddata")) && File.Exists(Path.Combine(TessdataPath, "vie.traineddata"));
+}
+
+/// <summary>Test cần OCR thật: tự bỏ qua (Skipped, không tính là PASS) khi máy chưa tải tessdata.</summary>
+public sealed class OcrFactAttribute : FactAttribute
+{
+    public OcrFactAttribute()
+    {
+        if (!TestSupport.HasTessdata) Skip = "Chưa có tessdata (chạy scripts/tai-tessdata.ps1)";
+    }
 }

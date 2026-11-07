@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A6):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256) rồi **lưu file hợp lệ** vào thư mục và bảng `Cvs` (A6), kèm API xem thông tin và file gốc của CV và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (trích xuất văn bản, ghép CV với job, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A7):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256) rồi **lưu file hợp lệ** vào thư mục và bảng `Cvs` (A6), kèm API xem thông tin và file gốc của CV, rồi **đọc chữ CV dưới nền** (PdfPig cho PDF có chữ, OCR Tesseract `eng+vie` cho PDF scan và ảnh – A7), và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (ghép CV với job, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -34,7 +34,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 10. [Tạo database và nạp dữ liệu](#database)
 11. [Build, chạy và kiểm thử](#chay-du-an) – gồm [giao diện SmartCv.Web](#web)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2, A3, A4, B2, A5, A6](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3, A4, B2, A5, A6, A7](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -90,6 +90,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | B2 | Dự án **SmartCv.Web** (Blazor Web App, Interactive Server): bố cục sidebar + thanh trên cùng, menu 4 mục (thu thành ☰ dưới 768px), huy hiệu trạng thái API, component dùng chung (`PageHeader`, `ErrorAlert`, `LoadingIndicator`, `ApiStatusBadge`), service gọi API (`HealthApiClient`, `JobApiClient`, `CvApiClient`) trả `ApiResult<T>` với thông báo lỗi tiếng Việt. Trang chủ hiện 5 job thật từ API; trang Tải CV, Kết quả, System prompt **mới là khung** cho B3–B16 |
 | A5 | API tải CV **kiểm tra từng file** theo 6 bước: rỗng (`EmptyFile`), quá 10 MiB (`TooLarge`), đuôi không hỗ trợ / không có đuôi, nội dung thật không khớp đuôi theo magic bytes (`InvalidFormat`), trùng SHA-256 trong cùng lần tải hoặc với bảng `Cvs` (`Duplicate`) |
 | A6 | **Lưu CV**: file hợp lệ ghi vào `src/SmartCv.Api/Uploads/CV/yyyy/MM/<GUID>.<đuôi>` và bảng `Cvs` (`ExtractionStatus = Pending`), trả `Accepted` + `cvId`; lỗi lưu trả `SaveFailed`, không để file mồ côi; trùng do tải đồng thời trả `Duplicate`. API `GET /api/cvs/{id}` (thông tin, trạng thái đọc chữ, các job đã ứng tuyển) và `GET /api/cvs/{id}/file` (xem / tải file gốc) |
+| A7 | **Đọc chữ CV dưới nền**: tải lên xong trả kết quả ngay, CV được xếp vào hàng đợi; tiến trình nền đọc PDF có chữ bằng PdfPig (`PdfText`), PDF scan bằng PDFtoImage + Tesseract `eng+vie` (`PdfOcr`), ảnh bằng Tesseract (`ImageOcr`); chuẩn hóa Unicode NFC; ghi `ExtractedText` / `ExtractionStatus` (`Completed` / `Failed`) / `ExtractionError` vào `Cvs`. Tự xếp lại CV `Pending` khi khởi động. API `POST /api/cvs/{id}/extract` đọc lại một CV. Dữ liệu OCR tải bằng `scripts/tai-tessdata.ps1` (không đưa lên GitHub) |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -131,8 +132,8 @@ Phiên bản lấy theo các file `.csproj` và `global.json` hiện tại.
 | AI | Google Gemini API (gọi qua `HttpClient`, cấu hình `GeminiOptions`) | ✅ Đã cấu hình · ⏳ Chấm điểm ở A10 |
 | Kiểm thử | xUnit 2.9.3, `Microsoft.NET.Test.Sdk` 17.14.1, coverlet 6.0.4, `Microsoft.AspNetCore.Mvc.Testing` 10.0.14 | ✅ |
 | Giao diện | Blazor Web App (`net10.0`), chế độ **Interactive Server** cho mọi trang, Bootstrap có sẵn trong mẫu | ✅ Khung B2 · ⏳ Chức năng B3–B16 |
-| Đọc PDF / OCR | PdfPig, Tesseract cho .NET (`eng` + `vie`) | ⏳ A7 |
-| Chạy nền | BackgroundService hoặc Hangfire | ⏳ A11 |
+| Đọc PDF / OCR | `PdfPig` 0.1.16 (lớp chữ PDF), `Tesseract` 5.2.0 (OCR `eng+vie`, cần Visual C++ Redistributable x64), `PDFtoImage` 5.4.0 (PDFium + SkiaSharp, đổi trang PDF scan thành ảnh) | ✅ A7 |
+| Chạy nền | `BackgroundService` + hàng đợi `Channel` trong bộ nhớ | ✅ Đọc chữ (A7) · ⏳ Chấm điểm (A11) |
 | Biểu đồ | Chart.js | ⏳ B11 |
 | Mã nguồn | Git, GitHub (nhánh + Pull Request) | ✅ |
 
@@ -175,10 +176,12 @@ AI-CV-Screening/
 │   ├── migration_SeedJobs.sql          # Script SQL sinh từ Migration SeedJobs
 │   ├── update_seed_weights_30_70.sql   # Chỉ dùng cho DB đã seed bằng bản cũ 40/60
 │   ├── test_a5_trung_database.sql      # Thử A5 trùng database – CHỈ chạy trên database thử riêng
+│   ├── check_a7.sql                    # Xem kết quả đọc chữ CV (chỉ SELECT)
 │   ├── erdplus.png                     # Sơ đồ ERD
 │   └── README.md
 ├── src/
 │   ├── SmartCv.Api/
+│   │   ├── Background/CvExtractionWorker.cs  # Tiến trình nền đọc chữ CV từ hàng đợi (A7)
 │   │   ├── Controllers/HealthController.cs   # 2 API kiểm tra kết nối
 │   │   ├── Endpoints/
 │   │   │   ├── CvEndpoints.cs                # POST /api/cvs/upload: giới hạn dung lượng riêng, chỉ bật ở Development
@@ -186,16 +189,18 @@ AI-CV-Screening/
 │   │   │   ├── CvUploadRateLimiting.cs       # Rate Limiting cho API tải CV (429)
 │   │   │   └── JobEndpoints.cs               # GET /api/health, /api/jobs, /api/jobs/{id}
 │   │   ├── Properties/launchSettings.json
+│   │   ├── tessdata/                         # eng/vie.traineddata – tải bằng scripts/tai-tessdata.ps1, KHÔNG có trong Git
 │   │   ├── CvUpload.http                     # Thử API tải CV bằng REST Client
 │   │   ├── Program.cs                        # Đăng ký dịch vụ, pipeline (UseRateLimiter)
 │   │   ├── appsettings.json                  # Cấu hình KHÔNG nhạy cảm (Gemini, CvUpload); API tải CV tắt mặc định
 │   │   └── appsettings.Development.json      # Bật API tải CV khi phát triển
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
-│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, CvDetailDto, JobDto
+│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, CvDetailDto, CvExtractionAcceptedDto, JobDto
+│   │   ├── Extraction/                       # ICvTextExtractor, ICvExtractionQueue, TextCleaner (NFC) – A7
 │   │   ├── Storage/ICvFileStorage.cs         # Lưu / mở / xóa file CV (A6)
 │   │   ├── Entities/                         # 12 Entity
-│   │   ├── Options/CvUploadOptions.cs        # Giới hạn tải CV
+│   │   ├── Options/                          # CvUploadOptions (giới hạn tải CV), OcrOptions (đọc chữ – A7)
 │   │   └── Uploads/                          # CvUploadFile, ICvUploadService, CvFileValidator (A5), FileHasher (SHA-256)
 │   ├── SmartCv.Infrastructure/
 │   │   ├── Data/
@@ -203,10 +208,11 @@ AI-CV-Screening/
 │   │   │   ├── Migrations/                   # InitialCreate, SeedJobs + ModelSnapshot
 │   │   │   ├── Seed/JobSeedData.cs           # Dữ liệu nền 5 job (HasData)
 │   │   │   └── SmartCvDbContext.cs           # DbContext duy nhất
+│   │   ├── Extraction/                       # CvTextExtractor, TesseractOcrEngine, CvExtractionQueue, CvExtractionProcessor (A7)
 │   │   ├── Gemini/GeminiOptions.cs
 │   │   ├── Storage/LocalCvFileStorage.cs     # Lưu vào Uploads/CV/yyyy/MM/<GUID>.ext, chặn đường dẫn ra ngoài (A6)
-│   │   ├── Uploads/CvUploadService.cs        # Kiểm tra 6 bước (A5), lưu file + bảng Cvs (A6)
-│   │   └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload
+│   │   ├── Uploads/CvUploadService.cs        # Kiểm tra 6 bước (A5), lưu file + bảng Cvs (A6), xếp hàng đọc chữ (A7)
+│   │   └── DependencyInjection.cs            # AddInfrastructure(): DbContext, Gemini, CvUpload, lưu file, đọc chữ
 │   └── SmartCv.Web/                          # Giao diện Blazor (B2)
 │       ├── Components/
 │       │   ├── App.razor                     # Khung HTML (lang="vi"), InteractiveServer cho HeadOutlet + Routes
@@ -220,8 +226,9 @@ AI-CV-Screening/
 │       ├── wwwroot/app.css                   # CSS chung: biến màu, 4 màu mức đánh giá
 │       ├── appsettings.Development.json      # ApiBaseUrl = https://localhost:7269/
 │       └── Program.cs                        # AddSmartCvApiClients(...)
-├── test-files/                               # CV GIẢ để thử API tải CV (A4, A5); không đặt CV thật
-├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests, JobEndpointsTests, WebApiClientTests
+├── scripts/tai-tessdata.ps1                  # Tải dữ liệu OCR eng + vie (A7), mỗi máy chạy một lần
+├── test-files/                               # CV GIẢ để thử API tải CV (A4, A5); cv-mau-a7/ để thử đọc chữ (A7); không đặt CV thật
+├── tests/SmartCv.Tests/                      # xUnit: tải/lưu CV, đọc chữ (TextCleaner, CvTextExtractor, CvExtractionProcessor, CvExtractEndpoint), job, Web client
 ├── .vscode/tasks.json                        # Task "Chạy API + Web" cho VS Code
 ├── .gitattributes                            # PDF/ảnh/test-files là binary: giữ nguyên từng byte (đúng SHA-256)
 ├── .gitignore
@@ -279,7 +286,7 @@ Database `SmartCvDb` gồm **12 bảng nghiệp vụ**, được tạo bằng **
 ## 7. 🧮 Quy trình xử lý CV và chấm điểm
 
 > [!NOTE]
-> Phần này là **thiết kế**. Code tải CV, trích xuất nội dung và chấm điểm chưa được lập trình. Quy tắc dưới đây đã được dùng để tạo và kiểm tra dữ liệu mẫu.
+> Phần này là **thiết kế**. Tải CV (A4 – A6) và trích xuất nội dung (A7) đã lập trình; gắn CV với job và chấm điểm chưa được lập trình. Quy tắc dưới đây đã được dùng để tạo và kiểm tra dữ liệu mẫu.
 
 ### 7.1. Luồng xử lý
 
@@ -356,7 +363,7 @@ Ngoài tỷ lệ đúng, hệ thống báo thêm:
 - **Git**
 - **VS Code** (kèm *C# Dev Kit*) hoặc Visual Studio
 - **Gemini API key** lấy từ [Google AI Studio](https://aistudio.google.com)
-- *(Khi làm OCR – A7)* Tesseract và dữ liệu ngôn ngữ `eng`, `vie`
+- **Dữ liệu OCR (A7)**: file `eng.traineddata`, `vie.traineddata` (~30 MB), tải bằng `scripts/tai-tessdata.ps1` (bước dưới). Thư viện Tesseract đi kèm package NuGet, cần **Visual C++ Redistributable x64** (`winget install --id Microsoft.VCRedist.2015+.x64 -e`)
 
 ```powershell
 dotnet --version      # 10.0.xxx
@@ -372,8 +379,14 @@ cd AI-CV-Screening
 
 dotnet restore
 dotnet build
+
+# A7: tải dữ liệu OCR (một lần mỗi máy; file nặng nên không có trong Git)
+powershell -ExecutionPolicy Bypass -File .\scripts\tai-tessdata.ps1
+
 dotnet test
 ```
+
+> Chưa tải tessdata thì PDF có chữ vẫn đọc bình thường, nhưng PDF scan và ảnh sẽ `Failed` "Máy chủ chưa có dữ liệu OCR"; 4 test cần OCR báo **Skipped**. Script kiểm tra file tải về (không phải trang HTML, đủ dung lượng); thêm `-Force` để tải lại.
 
 > Mọi lệnh trong README chạy từ thư mục gốc `AI-CV-Screening`.
 
@@ -431,12 +444,22 @@ Nằm trong `src/SmartCv.Api/appsettings.json`:
     "ConcurrentRequests": 4,
     "QueueLimit": 2
   }
+},
+"TextExtraction": {
+  "TessdataPath": "tessdata",
+  "Languages": "eng+vie",
+  "MinCharsPerPage": 50,
+  "RenderDpi": 300,
+  "MaxOcrPages": 5,
+  "MaxImagePixels": 40000000
 }
 ```
 
 Mỗi thành viên nên kiểm tra API key của mình có dùng được model này không bằng cách gọi `/api/health/gemini`.
 
 Mục `CvUpload` quyết định giới hạn của API tải CV (xem [mục 12.2](#api-upload)). `MaxFilesPerRequest` có hiệu lực ngay từ A4; `MaxFileSizeMB` hiện chỉ dùng để tính giới hạn tổng của request, việc từ chối từng file quá lớn và kiểm tra `AllowedExtensions` là của A5; `StorageRoot` dùng ở A6. Có thể ghi đè tạm bằng biến môi trường, ví dụ `CvUpload__MaxFilesPerRequest=2`, mà không phải sửa file.
+
+Mục `TextExtraction` (A7) cấu hình đọc chữ – xem [Đọc chữ CV](#doc-chu).
 
 Mục con `CvUpload:Endpoint` (tầng HTTP) bật/tắt endpoint và giới hạn tần suất:
 
@@ -921,6 +944,69 @@ curl.exe -k -i -F "note=khong co file" https://localhost:7269/api/cvs/upload
 
 Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) bằng extension **REST Client** (Huachao Mao) và bấm **Send Request**.
 
+<a id="doc-chu"></a>
+
+#### Đọc chữ CV (A7)
+
+Tải lên **không chờ** đọc chữ (OCR một trang scan mất 2–6 giây). CV đã lưu được xếp vào hàng đợi, một tiến trình nền đọc từng CV:
+
+```text
+POST /api/cvs/upload ──lưu file + Cvs (A6)──> xếp CvId vào hàng đợi ──> trả kết quả NGAY (Pending)
+                                                     │
+                       CvExtractionWorker (chạy nền suốt khi API chạy)
+                                                     │ lấy từng CvId
+                                                     ▼
+                       CvExtractionProcessor: mở file → CvTextExtractor → ghi Cvs (Completed / Failed)
+```
+
+| Loại file | Cách đọc | `ExtractionMethod` |
+|---|---|---|
+| PDF có lớp chữ (xuất từ Word, Canva...) | **PdfPig** đọc thẳng chữ | `PdfText` |
+| PDF scan (ít hơn `MinCharsPerPage` = 50 ký tự/trang) | **PDFtoImage** đổi trang thành ảnh 300 DPI → **Tesseract** `eng+vie` (tối đa `MaxOcrPages` = 5 trang) | `PdfOcr` |
+| Ảnh PNG / JPG | **Tesseract** `eng+vie` | `ImageOcr` |
+
+| Cột `Cvs` | Đọc được | Không đọc được |
+|---|---|---|
+| `ExtractionStatus` | `Completed` | `Failed` |
+| `ExtractedText` | Nội dung đã làm sạch: chuẩn **Unicode NFC** (tiếng Việt có dấu so khớp đúng), bỏ ký tự điều khiển, gom khoảng trắng | `NULL` |
+| `ExtractionError` | `NULL` | Câu cố định, dễ hiểu (bảng dưới). **Không** chứa thông báo kỹ thuật hay đường dẫn máy chủ; chi tiết chỉ ghi log |
+
+| `ExtractionError` | Nguyên nhân |
+|---|---|
+| Không đọc được nội dung: file PDF có mật khẩu. | PDF đặt mật khẩu mở |
+| Không đọc được nội dung: file PDF bị hỏng hoặc có mật khẩu. | PdfPig không mở được file |
+| Không nhận ra chữ trong file (ảnh mờ, quá nhỏ hoặc không có chữ). | OCR được dưới 20 ký tự |
+| Máy chủ chưa có dữ liệu OCR (tessdata). Quản trị viên cần chạy scripts/tai-tessdata.ps1 rồi bấm đọc lại. | Thiếu `eng/vie.traineddata` |
+| Ảnh có độ phân giải quá lớn, không đọc được. ... | Ảnh vượt `MaxImagePixels` (40 triệu điểm ảnh) – chặn "bom giải nén" |
+| Không đọc được nội dung: file ảnh bị hỏng. | Ảnh không giải mã được |
+| Không tìm thấy file gốc trên máy chủ. | Dòng `Cvs` còn nhưng file đã mất |
+
+**An toàn và độ bền**
+
+- Xếp hàng chỉ sau khi CV đã lưu chắc chắn; xếp hàng lỗi **không** xóa CV (CV vẫn `Pending`, được xếp lại khi khởi động).
+- Tắt API giữa chừng: khi chạy lại, worker **tự xếp lại** mọi CV `Pending` (log `Xếp lại N CV đang chờ đọc chữ`).
+- Hàng đợi bỏ trùng: một CV đang chờ thì gọi đọc lại nhiều lần cũng chỉ đọc một lần. CV không còn `Pending` thì không bị đọc lại ngoài ý muốn.
+- Tesseract nạp mô hình **một lần** và dùng khóa (không an toàn đa luồng); nếu khởi tạo lỗi (thiếu tessdata) thì lần sau thử lại.
+- Trang PDF khổ lớn được hạ DPI cho vừa `MaxImagePixels`, tránh tốn RAM.
+- Log chỉ ghi `CvId`, trạng thái, cách đọc, số ký tự, thời gian; **không** ghi tên file hay nội dung CV.
+
+**API đọc lại** (cùng chốt chặn Development như API tải lên, có Rate Limiting `cv-upload`):
+
+| Phương thức | Endpoint | Trả về |
+|:---:|---|---|
+| `POST` | `/api/cvs/{id}/extract` | `202 Accepted`, header `Location: /api/cvs/{id}`, body `{ "cvId": "...", "extractionStatus": "Pending" }`. Đặt lại `Pending`, xóa `ExtractionError`, xếp vào hàng đợi. CV đang `Pending` thì giữ nguyên. `404` nếu không có CV, `429` khi vượt giới hạn tần suất |
+
+```powershell
+curl.exe -k -s -X POST https://localhost:7269/api/cvs/<cvId>/extract
+curl.exe -k -s https://localhost:7269/api/cvs/<cvId>        # extractionStatus, extractionMethod, extractedText
+```
+
+Xem nhanh trong database: [`database/check_a7.sql`](database/check_a7.sql) (chỉ `SELECT`, chọn database trước khi chạy).
+
+**Chất lượng OCR** (đo trên `test-files/cv-mau-a7`): tên kỹ năng (`Python`, `Machine Learning`, `Postman`, `BPMN`, `Figma`) và chữ thường có dấu đọc **đúng**; chữ IN HOA đôi khi **mất dấu** (`TRAN ĐỨC MINH`, `AI` thành `Al`) và đường kẻ ngang thành ký tự rác. Vì vậy **A9 phải so khớp không phân biệt dấu và hoa/thường**.
+
+**Gửi bạn B (B10 – hiển thị trạng thái đọc file):** `extractionStatus` = `Pending` → "Đang đọc nội dung..."; `Completed` → "Đã đọc" kèm `extractionMethod` (`PdfText` "PDF có chữ", `PdfOcr` "PDF scan – OCR", `ImageOcr` "Ảnh – OCR"); `Failed` → hiện `extractionError` và nút "Đọc lại" gọi `POST /api/cvs/{id}/extract`. Muốn tự cập nhật: 2–3 giây gọi lại `GET /api/cvs/{id}` cho các CV còn `Pending`, dừng khi hết.
+
 #### Bảo mật: bảo vệ trước khi có M6 và antiforgery
 
 **Đã triển khai (A4)**
@@ -980,7 +1066,6 @@ Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) b�
 
 | Phương thức | Endpoint | Mô tả | Mã việc |
 |:---:|---|---|:---:|
-| `POST` | `/api/cvs/{id}/extract` | Đọc lại chữ của một CV | A7 |
 | `POST` `GET` `DELETE` | `/api/applications` | Gắn CV vào job, danh sách, bỏ gắn | A8 |
 | `POST` | `/api/applications` | Gắn CV với job | A8 |
 | `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
@@ -1173,6 +1258,32 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 
 ---
 
+### 13.8. A7 – Đọc chữ CV bằng PdfPig, OCR `eng+vie`
+
+Thử thật trên `https://localhost:7269` với **database thử riêng** (không đụng `SmartCvDb`) và `CvUpload__StorageRoot=Uploads/CV-test`, dùng 6 CV mẫu tự tạo trong `test-files/cv-mau-a7` (thông tin giả):
+
+| # | Trường hợp | Kết quả |
+|:---:|---|---|
+| 1 | Tải 6 CV mẫu | ✅ 6 `Accepted`, trả lời sau **0,34 giây** (không chờ OCR); ngay sau đó 4 CV còn `Pending` |
+| 2 | `cv-backend-pdf-chu.pdf`, `cv-frontend-pdf-chu.pdf` | ✅ `Completed` / `PdfText` (937 và 811 ký tự) |
+| 3 | `cv-ai-pdf-scan.pdf` (PDF chỉ có ảnh, nghiêng, nhiễu) | ✅ `Completed` / `PdfOcr` (861 ký tự, ~3,4 giây) |
+| 4 | `cv-tester-anh.png`, `cv-ba-anh-chup.jpg` (ảnh giống ảnh chụp) | ✅ `Completed` / `ImageOcr` (577 và 637 ký tự) |
+| 5 | `cv-co-mat-khau.pdf` | ✅ `Failed` / `PdfText` "Không đọc được nội dung: file PDF có mật khẩu." |
+| 6 | Chuẩn NFC | ✅ `ExtractedText` của PDF chữ, PDF scan, ảnh đều ở dạng NFC |
+| 7 | Khởi động khi database còn 9 CV `Pending` (từ A6) | ✅ log `Xếp lại 9 CV đang chờ đọc chữ`, sau đó không còn `Pending` |
+| 8 | Thiếu tessdata (`TextExtraction__TessdataPath` trỏ thư mục không có) rồi đọc lại ảnh | ✅ `202`; `Failed` "Máy chủ chưa có dữ liệu OCR (tessdata)..." – **không** lộ đường dẫn máy chủ (đường dẫn chỉ có trong log) |
+| 9 | Có tessdata, đọc lại ảnh đó | ✅ `Completed` / `ImageOcr` |
+| 10 | Tải 3 file scan/ảnh mới rồi **tắt API ngay** | ✅ cả 3 còn `Pending`; chạy lại → `Xếp lại 3 CV...` → cả 3 `Completed` |
+| 11 | 5 request đọc lại **cùng lúc** cho CV scan | ✅ 5 × `202`, OCR chỉ chạy **1 lần** |
+| 12 | Đọc lại CV không tồn tại | ✅ `404` |
+| 13 | CV A4 cũ: `cv-mau-1.pdf` / `cv-mau-3.pdf` / `cv-mau-2.png` / `cv-mau-4.jpg` | ✅ `PdfText` / `PdfOcr` (PDF chỉ 1 dòng chữ, dưới ngưỡng 50 ký tự) / `ImageOcr` / `ImageOcr`; PDF giả 47–53 byte → `Failed` "bị hỏng" |
+
+Log 6 lần chạy API: **không** có tên file CV, không có lỗi chưa xử lý. `dotnet list package --vulnerable`: không có package có lỗ hổng. `scripts/tai-tessdata.ps1` (cả `-Force`) tải đúng 2 file nhị phân 22,4 MB + 7,4 MB, `tessdata/` bị `.gitignore` chặn.
+
+`dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **131/131** (thêm `TextCleanerTests`, `CvTextExtractorTests` (đọc thật 6 CV mẫu, 4 test cần tessdata), `CvExtractionProcessorTests` (gồm worker xếp lại CV `Pending`), `CvExtractEndpointTests`; `CvUploadServiceTests` thêm phần xếp hàng). Test HTTP mặc định tắt worker để kết quả ổn định; test cần đọc chữ bật riêng.
+
+---
+
 <a id="lo-trinh"></a>
 
 ## 14. 🗺️ Lộ trình phát triển
@@ -1189,7 +1300,7 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
 | 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3, B2 |
-| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4, A5, A6 · ⏳ A7, A8, B3 – B5 |
+| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4 – A7 · ⏳ A8, B3 – B5 |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
 | 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 | ⏳ |
@@ -1199,7 +1310,6 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 | Mã | Nội dung (theo [CONTRIBUTING.md](CONTRIBUTING.md)) |
 |---|---|
 | **M6** | Đăng nhập, phân quyền; bật API tải CV ở Production theo checklist tại [mục 12.2](#api-upload) (xác thực, `RequireAuthorization`, antiforgery nếu dùng cookie, Rate Limiting theo người dùng) |
-| A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
 | A8 | API gắn CV với job |
 | A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
 | A10 | Gọi Gemini, JSON có cấu trúc, thử lại, xử lý vượt hạn mức |
@@ -1297,12 +1407,20 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Tải CV trả `400` "Chưa chọn file" dù đã gửi | Tên phần multipart không phải `files`; trong REST Client thì sai `boundary` hoặc sai đường dẫn `< ../../test-files/...`. |
 | `Invoke-WebRequest: A parameter cannot be found that matches parameter name 'F'` | Đã gõ `curl` thay vì `curl.exe` trong PowerShell. |
 | Blazor báo *exceeds the maximum of 512000 bytes* | Chưa truyền `maxAllowedSize` cho `IBrowserFile.OpenReadStream()` (xem [mục 12.2](#api-upload)). |
+| CV ảnh/scan `Failed` "Máy chủ chưa có dữ liệu OCR (tessdata)" | Chưa chạy `scripts/tai-tessdata.ps1`, hoặc file không nằm ở `src/SmartCv.Api/tessdata/eng.traineddata` và `vie.traineddata`. Tải xong gọi `POST /api/cvs/{id}/extract` |
+| `Failed` "Lỗi khi đọc ảnh bằng OCR." và log *Failed to initialise tesseract engine* | File `.traineddata` hỏng. Chạy lại script với `-Force` |
+| Log `DllNotFoundException: leptonica` / `tesseract50` | Chưa cài Visual C++ Redistributable x64 (mục 8.1) |
+| Log `DllNotFoundException: pdfium` / `libSkiaSharp` | Thư mục `bin` cũ: `dotnet clean` rồi `dotnet build` |
+| Script tessdata báo *running scripts is disabled* | Chạy đúng lệnh có `-ExecutionPolicy Bypass` |
+| CV mãi `Pending` | API đang chạy bản cũ (trước A7) hoặc worker lỗi; xem log API. Khởi động lại API sẽ tự xếp lại CV `Pending` |
+| PDF có chữ lại ra `PdfOcr` | PDF quá ít chữ (dưới 50 ký tự/trang) hoặc chữ đã bị chuyển thành hình khi xuất file. Bình thường; có thể giảm `TextExtraction:MinCharsPerPage` |
+| OCR rất chậm (trên 10 giây/trang) | Ảnh lớn trên máy yếu; có thể giảm `TextExtraction:RenderDpi` xuống 200 |
 | Cảnh báo `NU1902` / `NU1903` khi build | Package có lỗ hổng bảo mật. Nâng lên bản đã vá; **không tắt cảnh báo** để che lỗi. |
 
 ### 🔒 Bảo mật và dữ liệu
 
 - Không commit Gemini API key, mật khẩu, chuỗi kết nối chứa bí mật, file `.env` hoặc User Secrets.
-- Không commit thư mục build (`bin/`, `obj/`), file backup database (`*.bak`) hay CV thật trong `Uploads/`.
+- Không commit thư mục build (`bin/`, `obj/`), file backup database (`*.bak`), CV thật trong `Uploads/` hay dữ liệu OCR `tessdata/`.
 - Luôn xem lại `git diff --cached` trước khi commit.
 - Chỉ dùng CV mà nhóm có quyền xử lý. Dữ liệu demo trong `seed_demo.sql` là dữ liệu giả lập.
 - Khi thay đổi cấu hình chung, schema hoặc API contract, báo cho cả nhóm và cập nhật tài liệu.

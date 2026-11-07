@@ -1,3 +1,4 @@
+using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
 using SmartCv.Infrastructure;
 
@@ -6,6 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// A7: tiến trình chạy nền đọc chữ CV (PdfPig / OCR Tesseract) từ hàng đợi; đăng ký các service trong AddInfrastructure.
+builder.Services.AddHostedService<CvExtractionWorker>();
 
 // A4: giới hạn tần suất cho API tải CV (mục "CvUpload:Endpoint" trong appsettings).
 // Giới hạn dung lượng request (201 MiB) được gắn riêng cho endpoint tải CV trong CvEndpoints,

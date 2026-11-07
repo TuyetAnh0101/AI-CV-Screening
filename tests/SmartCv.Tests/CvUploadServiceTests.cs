@@ -4,10 +4,12 @@ using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
+using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Extraction;
 using SmartCv.Infrastructure.Uploads;
 
 namespace SmartCv.Tests;
@@ -18,19 +20,20 @@ namespace SmartCv.Tests;
 /// </summary>
 public class CvUploadServiceTests
 {
-    private sealed record Ctx(CvUploadService Service, SmartCvDbContext Db, string Root, ICvFileStorage Storage)
+    private sealed record Ctx(CvUploadService Service, SmartCvDbContext Db, string Root, ICvFileStorage Storage, RecordingQueue Queue)
     {
         public string[] SavedFiles() =>
             Directory.Exists(Path.Combine(Root, "Uploads")) ? Directory.GetFiles(Path.Combine(Root, "Uploads"), "*", SearchOption.AllDirectories) : [];
     }
 
-    private static Ctx Create(SmartCvDbContext? db = null, ICvFileStorage? storage = null)
+    private static Ctx Create(SmartCvDbContext? db = null, ICvFileStorage? storage = null, bool queueFails = false)
     {
         db ??= TestSupport.InMemoryDb(Guid.NewGuid().ToString("N"));
         var root = TestSupport.TempRoot();
         storage ??= TestSupport.Storage(root);
-        var service = new CvUploadService(db, storage, Options.Create(new CvUploadOptions()), NullLogger<CvUploadService>.Instance);
-        return new Ctx(service, db, root, storage);
+        var queue = new RecordingQueue(queueFails);
+        var service = new CvUploadService(db, storage, queue, Options.Create(new CvUploadOptions()), NullLogger<CvUploadService>.Instance);
+        return new Ctx(service, db, root, storage, queue);
     }
 
     private static CvUploadFile File(string name, byte[] bytes, string contentType = "application/octet-stream") =>
@@ -286,6 +289,87 @@ public class CvUploadServiceTests
     }
 
     /// <summary>Storage báo lỗi ở lần lưu thứ <c>failOnCall</c>, các lần khác chuyển cho storage thật.</summary>
+    // ---------- A7: xếp CV vào hàng đợi đọc chữ ----------
+
+    [Fact]
+    public async Task Only_saved_cvs_are_enqueued_for_extraction_in_order()
+    {
+        var ctx = Create();
+
+        var result = await ctx.Service.UploadAsync([
+            File("a.pdf", TestSupport.Pdf("q-a")),
+            File("rong.pdf", []),
+            File("b.png", TestSupport.Png("q-b")),
+            File("a-trung.pdf", TestSupport.Pdf("q-a"))
+        ]);
+
+        Assert.Equal([result.Files[0].CvId!.Value, result.Files[2].CvId!.Value], ctx.Queue.Items);
+    }
+
+    [Fact]
+    public async Task Save_failure_is_not_enqueued()
+    {
+        var ctx = Create(storage: new FailingStorage(TestSupport.Storage(TestSupport.TempRoot()), failOnCall: 1));
+
+        var result = await ctx.Service.UploadAsync([File("a.pdf", TestSupport.Pdf("q-fail"))]);
+
+        Assert.Equal(CvUploadErrorCodes.SaveFailed, result.Files[0].ErrorCode);
+        Assert.Empty(ctx.Queue.Items);
+    }
+
+    [Fact]
+    public async Task Queue_failure_keeps_saved_cv_and_file()
+    {
+        // Xếp hàng lỗi sau khi đã lưu: KHÔNG được xóa file/dòng Cvs; CV vẫn Pending, worker xếp lại khi khởi động
+        var ctx = Create(queueFails: true);
+
+        var result = await ctx.Service.UploadAsync([File("a.pdf", TestSupport.Pdf("q-queue-fail"))]);
+
+        Assert.Equal(CvUploadStatuses.Accepted, result.Files[0].Status);
+        var cv = await ctx.Db.Cvs.AsNoTracking().SingleAsync();
+        Assert.Equal(ExtractionStatuses.Pending, cv.ExtractionStatus);
+        Assert.True(ctx.Storage.Exists(cv.StoredPath));
+    }
+
+    [Fact]
+    public async Task Real_queue_ignores_duplicate_ids_until_dequeued()
+    {
+        var queue = new CvExtractionQueue();
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+
+        await queue.EnqueueAsync(a);
+        await queue.EnqueueAsync(a);
+        await queue.EnqueueAsync(b);
+        Assert.Equal(2, queue.Count);
+
+        using var cts = new CancellationTokenSource();
+        var seen = new List<Guid>();
+        await foreach (var id in queue.DequeueAllAsync(cts.Token))
+        {
+            seen.Add(id);
+            if (seen.Count == 2) break;
+        }
+        Assert.Equal([a, b], seen);
+
+        await queue.EnqueueAsync(a);   // đã lấy ra rồi thì được xếp lại (đọc lại)
+        Assert.Equal(1, queue.Count);
+    }
+
+    private sealed class RecordingQueue(bool fail) : ICvExtractionQueue
+    {
+        public List<Guid> Items { get; } = [];
+
+        public ValueTask EnqueueAsync(Guid cvId, CancellationToken cancellationToken = default)
+        {
+            if (fail) throw new InvalidOperationException("Hàng đợi lỗi (giả lập)");
+            Items.Add(cvId);
+            return ValueTask.CompletedTask;
+        }
+
+        public IAsyncEnumerable<Guid> DequeueAllAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
     private sealed class FailingStorage(ICvFileStorage inner, int failOnCall) : ICvFileStorage
     {
         private int _calls;
