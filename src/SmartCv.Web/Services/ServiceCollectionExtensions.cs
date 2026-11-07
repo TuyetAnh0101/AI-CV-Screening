@@ -30,6 +30,11 @@ public static class ServiceCollectionExtensions
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
         Add<CvApiClient>(TimeSpan.FromMinutes(5));   // tải nhiều file cần lâu hơn
 
+        // B3: giới hạn tải CV, đọc mục "CvUpload" trong appsettings.json của Web.
+        // PHẢI KHỚP với mục "CvUpload" của API, nếu không giao diện cho qua mà API lại từ chối.
+        services.Configure<SmartCv.Core.Options.CvUploadOptions>(
+            configuration.GetSection(SmartCv.Core.Options.CvUploadOptions.SectionName));
+
         return services;
     }
 }

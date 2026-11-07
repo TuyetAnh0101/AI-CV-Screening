@@ -58,29 +58,67 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
-/* ===== SmartCV: CHÉP TOÀN BỘ ĐOẠN NÀY VÀO CUỐI FILE src/SmartCv.Web/wwwroot/app.css ===== */
+/* ===== SmartCV: bảng màu và thành phần chung theo Figma Project_GD (cập nhật ở B3) ===== */
 
-/* Biến màu dùng chung. Đổi màu toàn web chỉ cần sửa ở đây. */
+/* Bảng màu theo Figma (Project_GD) */
 :root {
-    --brand: #2563eb;
-    --brand-dark: #0f172a;
-    --page-bg: #f5f7fb;
-    --border: #e5e7eb;
-    --text-muted: #475569;
+    --brand: #0f766e;          /* nút chính, menu đang chọn, liên kết quan trọng */
+    --brand-hover: #115e59;    /* hover, nhấn nút, viền ô kéo thả */
+    --brand-accent: #14b8a6;   /* điểm nhấn sáng, chỉ báo AI */
+    --brand-dark: #115e59;     /* (giữ tên cũ của B2 để không vỡ chỗ khác) */
+    --page-bg: #f4f8f8;        /* nền vùng nội dung */
+    --surface-soft: #f4f8f8;   /* nền nhạt: tiêu đề bảng, ô kéo thả, nút phụ */
+    --border: #d6e2e1;         /* viền thẻ, bảng, ô nhập */
+    --text-main: #163333;      /* tiêu đề, nội dung chính */
+    --text-muted: #526767;     /* mô tả, nhãn phụ */
 
     /* 4 mức đánh giá (B8) */
-    --fit-excellent: #15803d;   /* Rất phù hợp: xanh lá */
-    --fit-good: #2563eb;        /* Phù hợp: xanh dương */
-    --fit-potential: #b45309;   /* Tiềm năng: cam */
-    --fit-poor: #b91c1c;        /* Chưa phù hợp: đỏ */
+    --fit-excellent: #15803d;  /* Rất phù hợp */
+    --fit-good: #0f766e;       /* Phù hợp */
+    --fit-potential: #b45309;  /* Tiềm năng */
+    --fit-poor: #b91c1c;       /* Chưa phù hợp */
 }
 
 body {
-    font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #0f172a;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    color: var(--text-main);
+    background: var(--page-bg);
 }
 
-/* Tiêu đề trang (component PageHeader) */
+/* ---------- Nút (Figma: Component button 1 / 2) ---------- */
+.btn.sc-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--brand);
+    color: #f4f8f8;
+    font-size: 15px;
+    font-weight: 600;
+}
+.btn.sc-btn-primary:hover { background: var(--brand-hover); color: #fff; }
+.btn.sc-btn-primary:disabled { background: var(--brand); opacity: .7; color: #f4f8f8; }
+
+.btn.sc-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 144px;
+    height: 40px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--brand-hover);
+    font-size: 15px;
+    font-weight: 600;
+}
+.btn.sc-btn-secondary:hover { background: #e7f0ef; color: var(--brand-hover); border-color: var(--border); }
+
+/* ---------- Tiêu đề trang (component PageHeader của B2) ---------- */
 .page-header {
     display: flex;
     flex-wrap: wrap;
@@ -88,56 +126,38 @@ body {
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 1.5rem;
+    padding: 22px 31px 24px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: linear-gradient(180deg, #e6fffb, #e0f2fe);
 }
+.page-header h1 { font-size: 28px; font-weight: 600; margin-bottom: .25rem; color: var(--text-main); }
 
-.page-header h1 {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin-bottom: .25rem;
-}
-
-/* Khung nội dung trắng bo góc */
+/* ---------- Khung trắng, thẻ lối tắt (trang chủ B2) ---------- */
 .card-panel {
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: .75rem;
+    border-radius: 12px;
     padding: 1.25rem;
 }
+.placeholder-panel { border-style: dashed; }
 
-.placeholder-panel {
-    border-style: dashed;
-}
-
-/* Thẻ lối tắt ở trang chủ */
 .quick-card {
     display: block;
     height: 100%;
     background: #fff;
     border: 1px solid var(--border);
-    border-radius: .75rem;
+    border-radius: 12px;
     padding: 1.25rem;
     color: inherit;
     text-decoration: none;
     transition: border-color .15s, box-shadow .15s;
 }
+.quick-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(15, 118, 110, .12); }
+.quick-card h2 { font-size: 1.1rem; font-weight: 700; color: var(--brand); }
+.quick-card p { margin-bottom: 0; color: var(--text-muted); }
 
-.quick-card:hover {
-    border-color: var(--brand);
-    box-shadow: 0 4px 14px rgba(37, 99, 235, .12);
-}
-
-.quick-card h2 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--brand);
-}
-
-.quick-card p {
-    margin-bottom: 0;
-    color: var(--text-muted);
-}
-
-/* Huy hiệu trạng thái API (component ApiStatusBadge) */
+/* ---------- Huy hiệu trạng thái API (ApiStatusBadge của B2) ---------- */
 .api-status {
     display: inline-flex;
     align-items: center;
@@ -149,29 +169,26 @@ body {
     font-size: .85rem;
     white-space: nowrap;
 }
-
-.api-status .dot {
-    width: .55rem;
-    height: .55rem;
-    border-radius: 50%;
-    background: #94a3b8;
-}
-
-.api-status.online .dot { background: var(--fit-excellent); }
+.api-status .dot { width: .55rem; height: .55rem; border-radius: 50%; background: #94a3b8; }
+.api-status.online .dot { background: var(--brand-accent); }
 .api-status.offline { color: var(--fit-poor); border-color: #fecaca; background: #fef2f2; }
 .api-status.offline .dot { background: var(--fit-poor); }
 
-/* Nhãn mức đánh giá (B8): <span class="fit-badge fit-excellent">Rất phù hợp</span> */
+/* ---------- Nhãn mức đánh giá (B6 dùng, B8 dùng tiếp) ---------- */
 .fit-badge {
-    display: inline-block;
-    padding: .2rem .6rem;
-    border-radius: 999px;
-    font-size: .8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 100px;
+    font-size: 12px;
     font-weight: 600;
     color: #fff;
     background: #94a3b8;
+    white-space: nowrap;
 }
-
 .fit-badge.fit-excellent { background: var(--fit-excellent); }
 .fit-badge.fit-good { background: var(--fit-good); }
 .fit-badge.fit-potential { background: var(--fit-potential); }

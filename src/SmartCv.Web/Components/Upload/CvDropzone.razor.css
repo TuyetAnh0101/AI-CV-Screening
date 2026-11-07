@@ -1,0 +1,75 @@
+/* Figma: nền #F4F8F8, viền 2px #115E59, bo 12px, đệm 24px, chữ 28px #115E59 */
+.dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    background: var(--surface-soft);
+    border: 2px solid var(--brand-hover);
+    border-radius: 12px;
+    text-align: center;
+    transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+
+.dropzone:hover,
+.dropzone.is-dragging {
+    background: #e6fffb;
+    border-color: var(--brand-accent);
+    border-style: dashed;
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, .15);
+}
+
+.dropzone.is-disabled { opacity: .65; }
+
+.dz-icon { display: block; }
+
+.dz-title {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--brand-hover);
+}
+
+.dz-hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.dz-hint span {
+    color: var(--brand);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+/* InputFile phủ kín ô, trong suốt. InputFile là component con nên cần ::deep */
+.dropzone ::deep .dz-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.dropzone.is-disabled ::deep .dz-input { cursor: progress; }
+
+.dz-caption {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+}
+
+@media (max-width: 767.98px) {
+    .dz-title { font-size: 20px; }
+}
+
+/* Bàn phím: InputFile trong suốt nhận focus, hiện viền trên cả ô */
+.dropzone:focus-within {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, .25);
+}

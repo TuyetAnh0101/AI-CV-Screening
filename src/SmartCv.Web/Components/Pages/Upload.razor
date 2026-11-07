@@ -1,13 +1,235 @@
 @page "/upload"
+@*
+    Trang "Tải lên & Phân tích CV" (Figma Project_GD, node 375:1982 "Gán CV vào Job").
+    B3 (đã làm): ô kéo thả, tải lên ngay qua POST /api/cvs/upload (A4–A6), danh sách CV, ô tích, menu ⋯, nút Hủy.
+    Giữ đúng vị trí nhưng CHƯA làm nghiệp vụ: B4 chọn công việc, B5 thông báo lỗi chi tiết, B6 nút Phân tích + thẻ tiến độ.
+*@
+@using Microsoft.Extensions.Options
+@using SmartCv.Core.Options
+@inject CvApiClient CvApi
+@inject IOptions<CvUploadOptions> UploadOptions
+@inject IConfiguration Configuration
+@inject ILogger<Upload> Logger
 
-<PageHeader Title="Tải CV" Subtitle="Kéo thả nhiều file PDF, PNG, JPG; chọn vị trí; bắt đầu chấm điểm." />
+<PageTitle>Tải lên & Phân tích CV · SCApp</PageTitle>
 
-<div class="card-panel placeholder-panel">
-    <p class="mb-2">Trang đang được xây dựng. Các phần sẽ làm:</p>
-    <ul class="mb-0">
-        <li><strong>B3</strong>: ô kéo thả, danh sách file đã chọn, nút xóa (dùng <code>CvApiClient.UploadAsync</code>)</li>
-        <li><strong>B4</strong>: chọn job cho CV (dùng <code>JobApiClient.GetJobsAsync</code>)</li>
-        <li><strong>B5</strong>: báo lỗi sai định dạng, quá lớn, file trùng</li>
-        <li><strong>B6</strong>: nút bắt đầu chấm và thanh tiến độ</li>
-    </ul>
-</div>
+@* ---------- Banner tiêu đề (Figma: nền chuyển màu #E6FFFB → #E0F2FE) ---------- *@
+<section class="page-banner">
+    <h1>Tải lên &amp; Phân tích CV</h1>
+    <p>Quản lý hồ sơ, gán công việc và đánh giá mức độ phù hợp bằng AI</p>
+</section>
+
+@* ---------- 2 thẻ: Tải nhiều hồ sơ | Phân tích hồ sơ ---------- *@
+<nav class="page-tabs" role="tablist">
+    <button type="button" role="tab" aria-selected="@(tab == Tab.Upload ? "true" : "false")"
+            class="tab @(tab == Tab.Upload ? "active" : null)" @onclick="() => tab = Tab.Upload">
+        Tải nhiều hồ sơ
+        @if (items.Count > 0) { <span class="tab-count">@items.Count</span> }
+    </button>
+    <button type="button" role="tab" aria-selected="@(tab == Tab.Analyze ? "true" : "false")"
+            class="tab @(tab == Tab.Analyze ? "active" : null)" @onclick="() => tab = Tab.Analyze">
+        Phân tích hồ sơ
+    </button>
+</nav>
+
+<section class="page-card">
+    @if (tab == Tab.Upload)
+    {
+        @if (notice is not null)
+        {
+            <div class="alert alert-light border d-flex justify-content-between align-items-start sc-notice" role="status">
+                <span>@notice</span>
+                <button type="button" class="btn-close" aria-label="Đóng" @onclick="() => notice = null"></button>
+            </div>
+        }
+
+        @* ---------- B4: Chọn công việc (giữ vị trí theo Figma, nghiệp vụ làm ở B4) ---------- *@
+        <div class="field">
+            <label for="job" class="field-label">Chọn công việc</label>
+            <select id="job" class="sc-select" disabled title="Chọn công việc sẽ được triển khai ở B4">
+                <option value="">Chọn công việc</option>
+            </select>
+        </div>
+
+        @* ---------- B3: Ô kéo thả ---------- *@
+        <div class="field">
+            <CvDropzone OnFilesSelected="OnFilesSelectedAsync" Disabled="busy" Accept="@AcceptAttr" Caption="@Caption" />
+        </div>
+
+        @* ---------- B3: Danh sách CV ---------- *@
+        <div class="field">
+            <div class="field-label d-flex justify-content-between flex-wrap gap-2">
+                <span>Danh sách CV</span>
+                @if (items.Count > 0)
+                {
+                    <span class="list-summary" aria-live="polite">
+                        Sẵn sàng <strong>@items.Count(i => i.CanAnalyze)</strong>
+                        • Đã chọn <strong>@SelectedCount</strong>
+                    </span>
+                }
+            </div>
+            <CvFileTable Items="items" ApiBaseUrl="@apiBaseUrl"
+                         OnRemove="RemoveItem" OnToggle="ToggleItem" OnToggleAll="ToggleAll" />
+        </div>
+
+        @* ---------- Nút (Figma: Hủy | Phân tích hồ sơ) ---------- *@
+        <div class="page-actions">
+            <button type="button" class="btn sc-btn-secondary" @onclick="Reset" disabled="@(items.Count == 0)">Hủy</button>
+            <button type="button" class="btn sc-btn-primary" disabled
+                    title="Chức năng phân tích hồ sơ sẽ được triển khai ở B6">
+                Phân tích hồ sơ
+            </button>
+        </div>
+    }
+    else
+    {
+        <p class="analyze-placeholder">
+            Tiến độ phân tích hồ sơ sẽ hiển thị tại đây sau khi chức năng phân tích (B6) được triển khai.
+        </p>
+    }
+</section>
+
+@code {
+    private enum Tab { Upload, Analyze }
+
+    private Tab tab = Tab.Upload;
+    private readonly List<UploadItem> items = [];
+    private bool busy;              // đang tải lên: khóa ô kéo thả để IBrowserFile cũ không bị thay thế giữa chừng
+    private string? notice;
+    private int generation;         // tăng khi bấm Hủy: kết quả của lần tải cũ không ghi đè thông báo mới
+    private string? apiBaseUrl;
+
+    private CvUploadOptions Limits => UploadOptions.Value;
+    private int MaxFilesPerSelection => Math.Max(1, Configuration.GetValue("CvUpload:MaxFilesPerSelection", Limits.MaxFilesPerRequest));
+    // ConfigurationBinder NỐI mảng trong appsettings vào mảng mặc định của CvUploadOptions → phải bỏ trùng.
+    private IEnumerable<string> Extensions => Limits.AllowedExtensions.Select(e => e.ToLowerInvariant()).Distinct();
+    private string AcceptAttr => string.Join(",", Extensions);
+    private int SelectedCount => items.Count(i => i.CanAnalyze && i.Selected);
+
+    // Figma: "PDF, JPG, PNG • Tối đa 25 CV/lần • Tối đa 2 MB/tệp". Số lấy từ cấu hình CvUpload, không viết cứng.
+    private string Caption =>
+        $"{string.Join(", ", Extensions.Select(e => e.TrimStart('.').ToUpperInvariant()).Where(e => e != "JPEG"))}"
+        + $"  •  Tối đa {MaxFilesPerSelection} CV/lần  •  Tối đa {Limits.MaxFileSizeMB} MB/tệp";
+
+    protected override void OnInitialized()
+    {
+        var url = Configuration["ApiBaseUrl"];
+        apiBaseUrl = string.IsNullOrWhiteSpace(url) ? null : url.EndsWith('/') ? url : url + "/";
+    }
+
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
+    {
+        if (busy) return;   // ô đã bị khóa; chặn thêm một lần cho chắc
+        notice = null;
+
+        // GetMultipleFiles mặc định chỉ cho 10 file và NÉM LỖI nếu nhiều hơn; lấy rộng rồi tự áp giới hạn.
+        var picked = e.GetMultipleFiles(maximumFileCount: 1000);
+        var allowed = new HashSet<string>(Limits.AllowedExtensions, StringComparer.OrdinalIgnoreCase);
+        var toUpload = new List<(IBrowserFile File, UploadItem Item)>();
+        var skipped = 0;
+
+        foreach (var file in picked)
+        {
+            var item = new UploadItem { FileName = file.Name, SizeBytes = file.Size, Selected = true };
+            // Kiểm tra tối thiểu để gửi an toàn (B5 sẽ làm thông báo chi tiết); API A5 vẫn kiểm tra lại nội dung thật.
+            if (toUpload.Count >= MaxFilesPerSelection)
+                Invalidate(item, $"Vượt quá {MaxFilesPerSelection} CV mỗi lần chọn.");
+            else if (!allowed.Contains(Path.GetExtension(file.Name)))
+                Invalidate(item, "Định dạng không được hỗ trợ.");
+            else if (file.Size == 0)
+                Invalidate(item, "File rỗng.");
+            else if (file.Size > Limits.MaxFileSizeBytes)
+                Invalidate(item, $"Vượt quá {Limits.MaxFileSizeMB} MB.");
+            else
+            {
+                item.State = UploadItemState.Uploading;
+                toUpload.Add((file, item));
+            }
+
+            if (item.State == UploadItemState.Invalid) skipped++;
+            items.Add(item);
+        }
+
+        if (toUpload.Count == 0)
+        {
+            if (skipped > 0) notice = $"Không có file nào được tải lên ({skipped} file không hợp lệ).";
+            return;
+        }
+
+        busy = true;
+        var myGeneration = generation;
+        StateHasChanged();   // hiện ngay các dòng "Đang tải lên"
+
+        try
+        {
+            // API nhận tối đa MaxFilesPerRequest file / request và MaxRequestBytes / request: chia nhóm, gửi lần lượt.
+            var batches = UploadFlow.SplitIntoBatches(toUpload, x => x.File.Size,
+                Math.Max(1, Limits.MaxFilesPerRequest), Limits.MaxRequestBytes - 1024 * 1024);
+
+            foreach (var batch in batches)
+            {
+                ApiResult<CvUploadResponse> result;
+                try
+                {
+                    result = await CvApi.UploadAsync(batch.Select(b => b.File).ToList());
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException)
+                {
+                    // Ví dụ: file trên trình duyệt không đọc được nữa, mất kết nối giữa chừng
+                    Logger.LogWarning(ex, "Không đọc/gửi được nhóm {Count} file", batch.Count);
+                    result = ApiResult<CvUploadResponse>.Failure("Không đọc hoặc gửi được file. Vui lòng chọn lại file.");
+                }
+
+                UploadFlow.ApplyResult(batch.Select(b => b.Item).ToList(), result);
+                StateHasChanged();   // cập nhật từng nhóm, nhóm đã xong không bị mất khi nhóm sau lỗi
+            }
+        }
+        finally
+        {
+            busy = false;
+        }
+
+        if (myGeneration == generation)
+        {
+            var batchItems = toUpload.Select(x => x.Item).ToList();
+            var ok = batchItems.Count(i => i.CanAnalyze);
+            var failed = batchItems.Count - ok;
+            notice = $"Đã tải lên {ok} CV."
+                     + (failed > 0 ? $" {failed} file không thành công." : string.Empty)
+                     + (skipped > 0 ? $" {skipped} file không hợp lệ, chưa gửi." : string.Empty);
+        }
+    }
+
+    private static void Invalidate(UploadItem item, string message)
+    {
+        item.State = UploadItemState.Invalid;
+        item.Selected = false;
+        item.Message = message;
+    }
+
+    // "Xóa khỏi danh sách": chỉ bỏ dòng trên giao diện; CV đã lưu trên máy chủ và database giữ nguyên.
+    private void RemoveItem(UploadItem item)
+    {
+        if (item.State == UploadItemState.Uploading) return;   // tránh lệch trạng thái khi request đang chạy
+        items.Remove(item);
+    }
+
+    private void ToggleItem((UploadItem Item, bool Selected) e)
+    {
+        if (e.Item.CanAnalyze) e.Item.Selected = e.Selected;
+    }
+
+    private void ToggleAll(bool selected)
+    {
+        foreach (var item in items.Where(i => i.CanAnalyze)) item.Selected = selected;
+    }
+
+    // "Hủy": xóa danh sách trên giao diện. Không gọi API xóa, không hủy request đang chạy
+    // (request đó vẫn hoàn tất trên máy chủ; kết quả chỉ cập nhật vào các dòng đã bị bỏ, không hiện lại).
+    private void Reset()
+    {
+        generation++;
+        items.Clear();
+        notice = null;
+    }
+}

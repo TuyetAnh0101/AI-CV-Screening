@@ -1,16 +1,19 @@
+/* Figma: khối logo nền #115E59 viền dưới #D6E2E1; chữ "SC" trắng + "App" #14B8A6, 28px */
 .brand {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    height: 3.5rem;
+    justify-content: center;
+    height: 5.5rem;
     padding: 0 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, .1);
+    background: var(--brand-hover);
+    border-bottom: 1px solid var(--border);
+    position: relative;
 }
 
 .brand-link {
     display: flex;
     align-items: center;
-    gap: .65rem;
+    gap: .6rem;
     color: #fff;
     text-decoration: none;
 }
@@ -18,21 +21,23 @@
 .brand-logo {
     display: grid;
     place-items: center;
-    width: 2.1rem;
-    height: 2.1rem;
-    border-radius: .5rem;
-    background: var(--brand);
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: .65rem;
+    background: rgba(255, 255, 255, .14);
     font-weight: 700;
-    font-size: .85rem;
+    font-size: .95rem;
 }
 
-.brand-name { display: block; font-weight: 700; line-height: 1.1; }
-.brand-sub { display: block; font-size: .75rem; opacity: .7; }
+.brand-name { font-size: 28px; font-weight: 600; line-height: 1; }
+.brand-name span { color: var(--brand-accent); }
 
 .menu-toggle {
     display: none;
+    position: absolute;
+    right: 1rem;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, .3);
+    border: 1px solid rgba(255, 255, 255, .35);
     color: #fff;
     border-radius: .375rem;
     padding: .15rem .55rem;
@@ -42,41 +47,50 @@
 .nav-list {
     display: flex;
     flex-direction: column;
-    gap: .25rem;
-    padding: 1rem .75rem;
+    gap: 4px;
+    padding: 14px 14px 24px;
 }
 
-/* NavLink là component con nên phải dùng ::deep để CSS áp được vào thẻ <a> nó tạo ra */
+/* Tiêu đề nhóm: chữ trắng đậm 20px */
+.nav-group {
+    margin: 12px 0 4px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+}
+.nav-group:first-child { margin-top: 4px; }
+
+/* Mục menu: đệm 16px 12px, bo 8px, chữ 15px đậm */
 .nav-list ::deep a.nav-item {
     display: flex;
     align-items: center;
-    gap: .75rem;
-    padding: .6rem .8rem;
-    border-radius: .5rem;
-    color: rgba(255, 255, 255, .78);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.nav-list ::deep a.nav-item:hover {
-    background: rgba(255, 255, 255, .08);
+    gap: 8px;
+    padding: 14px 12px;
+    border-radius: 8px;
     color: #fff;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
 }
 
-/* Trang đang mở: NavLink tự thêm class "active" */
+.nav-list ::deep a.nav-item:hover { background: rgba(255, 255, 255, .12); }
+
+/* Mục đang mở (Figma: nền #0F766E) */
 .nav-list ::deep a.nav-item.active {
     background: var(--brand);
-    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
 }
 
 .nav-list ::deep .nav-icon {
-    width: 1.2rem;
-    height: 1.2rem;
+    width: 16px;
+    height: 16px;
     fill: currentColor;
     flex-shrink: 0;
 }
 
 @media (max-width: 767.98px) {
+    .brand { height: 4rem; justify-content: flex-start; }
+    .brand-name { font-size: 22px; }
     .menu-toggle { display: block; }
     .nav-list.collapsed { display: none; }
 }

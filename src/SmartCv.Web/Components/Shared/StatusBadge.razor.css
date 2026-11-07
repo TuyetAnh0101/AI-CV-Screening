@@ -1,0 +1,19 @@
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Màu theo Figma: Hoàn thành = nền #DCEBE9, chữ #15803D */
+.is-success { background: #dcebe9; color: #15803d; }
+.is-info    { background: #e0f2fe; color: #0369a1; }
+.is-warning { background: #fef3c7; color: #b45309; }
+.is-danger  { background: #fee2e2; color: #b91c1c; }
+.is-neutral { background: #eef2f2; color: #526767; }
