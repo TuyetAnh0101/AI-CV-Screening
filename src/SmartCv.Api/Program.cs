@@ -27,6 +27,7 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapCvEndpoints();
+app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
 
 app.Run();

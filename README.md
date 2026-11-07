@@ -18,7 +18,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 ---
 
 > [!NOTE]
-> **Trạng thái hiện tại (sau A6):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256) rồi **lưu file hợp lệ** vào thư mục và bảng `Cvs` (A6), kèm API xem thông tin và file gốc của CV và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (trích xuất văn bản, ghép CV với job, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
+> **Trạng thái hiện tại (sau A6, A8):** Backend đã có solution, cấu hình SQL Server và Gemini qua User Secrets, các API kiểm tra kết nối, **12 Entity, EF Core Migration `InitialCreate`, dữ liệu nền 5 job nạp tự động qua Migration `SeedJobs`, bộ dữ liệu demo**, **API `POST /api/cvs/upload` nhận một hoặc nhiều file và kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256) rồi **lưu file hợp lệ** vào thư mục và bảng `Cvs` (A6), kèm API xem thông tin và file gốc của CV, **API hồ sơ ứng tuyển `/api/applications`** (gắn CV với job – A8) và **API đọc job `GET /api/jobs`**. Giao diện **SmartCv.Web (Blazor)** đã có bố cục chung, menu, service gọi API và trang chủ hiện danh sách job thật; ba trang Tải CV, Kết quả, System prompt **mới là khung**. Các chức năng nghiệp vụ còn lại (trích xuất văn bản, chấm điểm, xếp hạng, quản lý prompt) được mô tả **theo thiết kế** và **chưa được lập trình**.
 
 ## 📌 Mục lục
 
@@ -34,7 +34,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 10. [Tạo database và nạp dữ liệu](#database)
 11. [Build, chạy và kiểm thử](#chay-du-an) – gồm [giao diện SmartCv.Web](#web)
 12. [Danh sách API](#api)
-13. [Kết quả nghiệm thu A2, A3, A4, B2, A5, A6](#nghiem-thu-a2)
+13. [Kết quả nghiệm thu A2, A3, A4, B2, A5, A6, A8](#nghiem-thu-a2)
 14. [Lộ trình phát triển](#lo-trinh)
 15. [Quy trình làm việc với Git](#git)
 16. [Xử lý lỗi thường gặp và bảo mật](#loi-thuong-gap)
@@ -90,6 +90,7 @@ Quản lý hồ sơ · Chấm điểm Keyword + AI · Xếp hạng theo vị tr�
 | B2 | Dự án **SmartCv.Web** (Blazor Web App, Interactive Server): bố cục sidebar + thanh trên cùng, menu 4 mục (thu thành ☰ dưới 768px), huy hiệu trạng thái API, component dùng chung (`PageHeader`, `ErrorAlert`, `LoadingIndicator`, `ApiStatusBadge`), service gọi API (`HealthApiClient`, `JobApiClient`, `CvApiClient`) trả `ApiResult<T>` với thông báo lỗi tiếng Việt. Trang chủ hiện 5 job thật từ API; trang Tải CV, Kết quả, System prompt **mới là khung** cho B3–B16 |
 | A5 | API tải CV **kiểm tra từng file** theo 6 bước: rỗng (`EmptyFile`), quá 10 MiB (`TooLarge`), đuôi không hỗ trợ / không có đuôi, nội dung thật không khớp đuôi theo magic bytes (`InvalidFormat`), trùng SHA-256 trong cùng lần tải hoặc với bảng `Cvs` (`Duplicate`) |
 | A6 | **Lưu CV**: file hợp lệ ghi vào `src/SmartCv.Api/Uploads/CV/yyyy/MM/<GUID>.<đuôi>` và bảng `Cvs` (`ExtractionStatus = Pending`), trả `Accepted` + `cvId`; lỗi lưu trả `SaveFailed`, không để file mồ côi; trùng do tải đồng thời trả `Duplicate`. API `GET /api/cvs/{id}` (thông tin, trạng thái đọc chữ, các job đã ứng tuyển) và `GET /api/cvs/{id}/file` (xem / tải file gốc) |
+| A8 | **Hồ sơ ứng tuyển** (bảng `Applications`): `POST /api/applications` gắn nhiều CV vào một job (`Created` / `AlreadyExists` / `CvNotFound` cho từng CV, không tạo trùng, chịu được thao tác đồng thời), `GET /api/applications?jobId=` hoặc `?cvId=`, `DELETE /api/applications/{id}` bỏ gắn khi hồ sơ chưa được chấm và chưa có nhãn HR. Chỉ có ở Development (chờ M6), có Rate Limiting |
 
 ### 3.2. ⏳ Dự kiến – giai đoạn 1 (chưa lập trình)
 
@@ -181,6 +182,7 @@ AI-CV-Screening/
 │   ├── SmartCv.Api/
 │   │   ├── Controllers/HealthController.cs   # 2 API kiểm tra kết nối
 │   │   ├── Endpoints/
+│   │   │   ├── ApplicationEndpoints.cs       # POST / GET / DELETE /api/applications – gắn CV với job (A8)
 │   │   │   ├── CvEndpoints.cs                # POST /api/cvs/upload: giới hạn dung lượng riêng, chỉ bật ở Development
 │   │   │   ├── CvUploadEndpointOptions.cs    # CvUpload:Endpoint (bật/tắt, giới hạn tần suất)
 │   │   │   ├── CvUploadRateLimiting.cs       # Rate Limiting cho API tải CV (429)
@@ -192,7 +194,7 @@ AI-CV-Screening/
 │   │   └── appsettings.Development.json      # Bật API tải CV khi phát triển
 │   ├── SmartCv.Core/
 │   │   ├── Constants/StatusValues.cs         # Giá trị khớp các ràng buộc CHECK
-│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, CvDetailDto, JobDto
+│   │   ├── Contracts/                        # Hợp đồng dùng chung với Blazor: CvUploadResponse, CvDetailDto, ApplicationContracts (A8), JobDto
 │   │   ├── Storage/ICvFileStorage.cs         # Lưu / mở / xóa file CV (A6)
 │   │   ├── Entities/                         # 12 Entity
 │   │   ├── Options/CvUploadOptions.cs        # Giới hạn tải CV
@@ -221,7 +223,7 @@ AI-CV-Screening/
 │       ├── appsettings.Development.json      # ApiBaseUrl = https://localhost:7269/
 │       └── Program.cs                        # AddSmartCvApiClients(...)
 ├── test-files/                               # CV GIẢ để thử API tải CV (A4, A5); không đặt CV thật
-├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests, JobEndpointsTests, WebApiClientTests
+├── tests/SmartCv.Tests/                      # xUnit: JobSeedDataTests, CvUploadServiceTests, CvUploadEndpointTests, ApplicationEndpointTests, JobEndpointsTests, WebApiClientTests
 ├── .vscode/tasks.json                        # Task "Chạy API + Web" cho VS Code
 ├── .gitattributes                            # PDF/ảnh/test-files là binary: giữ nguyên từng byte (đúng SHA-256)
 ├── .gitignore
@@ -974,6 +976,88 @@ Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) b�
   ```
 - Thứ tự `Files` luôn khớp thứ tự file gửi lên (kết quả thứ *i* là của file thứ *i*), kể cả khi có file bị từ chối.
 
+<a id="api-applications"></a>
+
+### 12.2b. ✅ API hồ sơ ứng tuyển – `/api/applications` (A8)
+
+Một **hồ sơ** (`Applications`) = một CV ứng tuyển một job. Lượt chấm (A11) chấm từng hồ sơ, nên **CV chưa gắn job thì chưa chấm được**.
+
+```text
+B3: chọn file ──> POST /api/cvs/upload ──> các cvId (A6)
+B4: chọn job  ──> POST /api/applications { jobId, cvIds } ──> các applicationId (A8)
+B6: bấm chấm  ──> (A11) chấm các hồ sơ vừa tạo
+```
+
+> [!IMPORTANT]
+> API trả tên file và tên ứng viên nên dùng **chung chốt chặn với API CV**: chỉ có ở Development khi `CvUpload:Endpoint:Enabled = true`, cho đến khi có xác thực (M6). Ở Production cả 3 API trả `404`. `POST` và `DELETE` dùng chung Rate Limiting `cv-upload` (30 request/phút/IP, 4 đồng thời).
+
+| Phương thức | Endpoint | Việc |
+|:---:|---|---|
+| `POST` | `/api/applications` | Gắn **1 – 100 CV** vào **một job** đang tuyển |
+| `GET` | `/api/applications?jobId=1` · `?cvId=<guid>` | Danh sách hồ sơ (mới nhất trước). **Bắt buộc** có ít nhất một điều kiện lọc |
+| `DELETE` | `/api/applications/{id}` | Bỏ gắn (CV vẫn còn), **chỉ khi** hồ sơ chưa có kết quả chấm (`Evaluations`) và chưa có nhãn HR (`HrLabels`) |
+
+**Quy tắc**
+
+- Một CV ứng tuyển **nhiều job** được; **không** ứng tuyển một job hai lần (ràng buộc `UQ_Applications_Cv_Job`). Gửi lại thì CV đó là `AlreadyExists` với **cùng** `applicationId`, không lỗi.
+- Mã CV rỗng hoặc lặp trong danh sách gửi lên được bỏ qua; kết quả trả **đúng thứ tự gửi lên**.
+- Job phải **tồn tại** và **đang tuyển** (`IsActive = 1`).
+- CV đọc chữ lỗi (`Failed`) hoặc đang chờ đọc (`Pending`) **vẫn gắn được**, kèm `message` cảnh báo.
+- Hai người gắn cùng CV vào cùng job đúng lúc: API tự đọc lại và trả `AlreadyExists` (thử lại một lần); chỉ trả `409` nếu vẫn xung đột.
+- Bỏ gắn đúng lúc hồ sơ vừa được chấm: khóa ngoại chặn xóa, API trả `409`.
+- Log chỉ ghi mã job và số lượng, **không** ghi tên file.
+
+**`POST /api/applications`**
+
+```json
+{ "jobId": 1, "cvIds": ["3f2a...e1", "9b10...c4", "0000...99"] }
+```
+
+`200 OK`:
+
+```json
+{
+  "jobId": 1, "jobTitle": "Backend Developer (.NET)",
+  "createdCount": 1, "existingCount": 1, "failedCount": 1,
+  "items": [
+    { "cvId": "3f2a...e1", "fileName": "cv-backend-pdf-chu.pdf", "applicationId": 14, "status": "Created",
+      "extractionStatus": "Completed", "message": null },
+    { "cvId": "9b10...c4", "fileName": "cv-mau-1.pdf", "applicationId": 15, "status": "AlreadyExists",
+      "extractionStatus": "Pending", "message": "CV đã ứng tuyển vị trí này từ trước." },
+    { "cvId": "0000...99", "fileName": null, "applicationId": null, "status": "CvNotFound",
+      "extractionStatus": null, "message": "Không tìm thấy CV." }
+  ]
+}
+```
+
+| `status` từng CV | Ý nghĩa |
+|---|---|
+| `Created` | Gắn mới. `message` cảnh báo nếu CV `Failed` ("...không đọc được nội dung nên khi chấm sẽ báo lỗi") hoặc `Pending` |
+| `AlreadyExists` | Đã ứng tuyển job này từ trước – **không phải lỗi** |
+| `CvNotFound` | Không có CV với mã này |
+
+**`GET /api/applications?jobId=1`** trả mảng `ApplicationDto`: `applicationId`, `jobId`, `jobTitle`, `cvId`, `fileName`, `candidateName` (CV tự tải lên: `null`), `extractionStatus`, `createdAt` (UTC, có `Z`). Các job một CV đã ứng tuyển cũng có trong `GET /api/cvs/{id}` (`applications`).
+
+**Lỗi** (ProblemDetails)
+
+| Mã | Khi nào |
+|:---:|---|
+| `400` | `cvIds` rỗng ("Chưa chọn CV"), hơn 100 CV ("Quá nhiều CV"), job đã ngừng tuyển, `GET` không có `jobId`/`cvId` ("Thiếu điều kiện lọc"), JSON sai (mã CV không phải GUID) |
+| `404` | Không có job (`POST`), không có hồ sơ (`DELETE`), hoặc API đang tắt (môi trường khác Development) |
+| `409` | `DELETE` hồ sơ đã chấm / có nhãn HR ("Không thể bỏ gắn"); xung đột đồng thời không tự xử lý được |
+| `415` | `POST` không gửi `Content-Type: application/json` |
+| `429` | Vượt giới hạn tần suất (`POST`, `DELETE`) |
+
+```powershell
+$base = "https://localhost:7269"
+$body = @{ jobId = 1; cvIds = @("<cvId 1>", "<cvId 2>") } | ConvertTo-Json
+Invoke-RestMethod -Method Post "$base/api/applications" -ContentType 'application/json; charset=utf-8' -Body $body
+Invoke-RestMethod "$base/api/applications?jobId=1" | Format-Table applicationId, fileName, candidateName, extractionStatus
+Invoke-RestMethod -Method Delete "$base/api/applications/<applicationId>"
+```
+
+**Gửi bạn B (B4 – chọn job cho CV):** hợp đồng dùng chung nằm ở `SmartCv.Core/Contracts/ApplicationContracts.cs` (`CreateApplicationsRequest`, `CreateApplicationsResponse`, `ApplicationItemResult`, `ApplicationItemStatuses`, `ApplicationDto`). Sau khi tải lên, giữ `cvId` của các file `Accepted`, chọn job từ `JobApiClient.GetJobsAsync()`, gọi `POST /api/applications`, hiện kết quả từng CV theo `status` và `message`, lưu các `applicationId` cho B6. Mẫu `ApplicationApiClient` nằm trong mô tả Pull Request A8.
+
 ### 12.3. ⏳ Dự kiến
 
 > Danh sách này là định hướng thiết kế, **chưa được chốt** (C2) và có thể điều chỉnh khi lập trình.
@@ -981,8 +1065,6 @@ Hoặc mở [`src/SmartCv.Api/CvUpload.http`](src/SmartCv.Api/CvUpload.http) b�
 | Phương thức | Endpoint | Mô tả | Mã việc |
 |:---:|---|---|:---:|
 | `POST` | `/api/cvs/{id}/extract` | Đọc lại chữ của một CV | A7 |
-| `POST` `GET` `DELETE` | `/api/applications` | Gắn CV vào job, danh sách, bỏ gắn | A8 |
-| `POST` | `/api/applications` | Gắn CV với job | A8 |
 | `POST` | `/api/scoring/start` | Bắt đầu chấm điểm | A11 |
 | `GET` | `/api/scoring/progress` | Xem tiến độ chấm | A13 |
 | `GET` | `/api/jobs/{id}/ranking` | Bảng xếp hạng theo job | A13 |
@@ -1173,6 +1255,31 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 
 ---
 
+### 13.9. A8 – API hồ sơ ứng tuyển `/api/applications`
+
+Thử thật trên `https://localhost:7269` với **database thử riêng** (có dữ liệu demo 13 hồ sơ; không đụng `SmartCvDb` – `Applications` của `SmartCvDb` giữ nguyên 13 dòng trước và sau khi thử):
+
+| # | Trường hợp | Kết quả |
+|:---:|---|---|
+| 1 | Gắn 2 CV mới vào job 1 | ✅ `Mới 2`, `Created`, `applicationId` 14, 15 (nối tiếp 13 hồ sơ demo) |
+| 2 | Gửi lại y hệt | ✅ `Đã có 2`, `AlreadyExists`, **cùng** `applicationId` 14, 15, không thêm dòng |
+| 3 | CV demo Nguyễn Văn An → job 2, rồi → job 1 | ✅ `Created` (id 16); job 1 `AlreadyExists` với `applicationId = 1` |
+| 4 | 1 CV đã gắn + 1 mã CV không tồn tại | ✅ `Đã có 1`, `Lỗi 1`, dòng 2 `CvNotFound` "Không tìm thấy CV." |
+| 5 | Job 99 / `cvIds` rỗng / mã CV không phải GUID / không gửi JSON | ✅ `404` "Không tìm thấy vị trí" / `400` "Chưa chọn CV" / `400` / `415` |
+| 6 | `cv-co-mat-khau.pdf` (đọc chữ `Failed`) | ✅ `Created`, `extractionStatus = Failed`, cảnh báo "...không đọc được nội dung nên khi chấm sẽ báo lỗi." |
+| 7 | `GET ?jobId=1` | ✅ 7 hồ sơ (4 demo có tên ứng viên + 3 vừa tạo, `candidateName = null`), mới nhất trước, `createdAt` có `Z` |
+| 8 | `GET` không lọc | ✅ `400` "Thiếu điều kiện lọc" |
+| 9 | `GET /api/cvs/{id}` của An | ✅ job `[1, 2, 3]` |
+| 10 | `DELETE` hồ sơ An → job 2 | ✅ `204`; An còn job `[1, 3]`, CV không bị xóa |
+| 11 | `DELETE` hồ sơ demo 1 (đã chấm) / hồ sơ không tồn tại | ✅ `409` "Không thể bỏ gắn", hồ sơ còn nguyên / `404` |
+| 12 | 6 request **cùng lúc** gắn cùng CV vào job 4; thêm 6 vòng × 4 request cùng lúc vào job 5 | ✅ mỗi vòng 1 `Created` + còn lại `AlreadyExists`, tất cả `200`; nhánh thử lại khi trùng `UQ_Applications_Cv_Job` chạy **13 lần**, không có `409`, không có hồ sơ trùng |
+
+Log không chứa tên file CV. Production không có `/api/applications` (test tự động).
+
+`dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt **108/108** (thêm `ApplicationEndpointTests`: tạo / trùng / nhiều job / CV không tồn tại / dữ liệu sai / lọc danh sách / bỏ gắn / chặn bỏ gắn hồ sơ đã chấm hoặc có nhãn HR / Production / Rate Limiting).
+
+---
+
 <a id="lo-trinh"></a>
 
 ## 14. 🗺️ Lộ trình phát triển
@@ -1189,7 +1296,7 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 |:---:|---|---|---|
 | 1 | Thiết kế | C1, C2, C3, B1 | C2 (CSDL) đã có trong `database/` |
 | 2 | Dựng nền | A1 – A3, B2 | ✅ A1, A2, A3, B2 |
-| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4, A5, A6 · ⏳ A7, A8, B3 – B5 |
+| 3 | Trang tải CV | A4 – A8, B3 – B5 | ✅ A4, A5, A6, A8 · ⏳ A7, B3 – B5 |
 | 4 | Trang kết quả | A9 – A13, B6 – B10 | ⏳ |
 | 5 | Trang prompt | A14 – A17, B12 – B16 | ⏳ |
 | 6 | Hoàn thiện | C4, A18, B11, B17, B18, C5 | ⏳ |
@@ -1200,7 +1307,6 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 |---|---|
 | **M6** | Đăng nhập, phân quyền; bật API tải CV ở Production theo checklist tại [mục 12.2](#api-upload) (xác thực, `RequireAuthorization`, antiforgery nếu dùng cookie, Rate Limiting theo người dùng) |
 | A7 | Đọc chữ bằng PdfPig, OCR `eng+vie` |
-| A8 | API gắn CV với job |
 | A9 | Chấm keyword bằng C#, xử lý thiếu GPA hoặc kinh nghiệm |
 | A10 | Gọi Gemini, JSON có cấu trúc, thử lại, xử lý vượt hạn mức |
 | A11, A12 | Chấm điểm dưới nền, lưu điểm kèm phiên bản prompt |
@@ -1213,7 +1319,7 @@ Hồi quy: 21 file → 400; `/api/health`, `/api/jobs` bình thường; Producti
 | Mã | Nội dung | Dùng sẵn từ B2 |
 |---|---|---|
 | **B3** | Trang Tải CV: ô kéo thả, danh sách file đã chọn, nút xóa; lọc trước ≤ 20 file, mỗi file ≤ 10 MiB | `CvApiClient.UploadAsync`, `ErrorAlert` |
-| **B4** | Chọn job cho CV | `JobApiClient.GetJobsAsync` |
+| **B4** | Chọn job cho CV, gọi `POST /api/applications` (A8 đã xong, xem [API hồ sơ ứng tuyển](#api-applications)) | `JobApiClient.GetJobsAsync`, hợp đồng `ApplicationContracts` trong Core |
 | **B5** | Báo lỗi sai định dạng, quá lớn, file trùng theo `status` / `errorCode` / `errorMessage` của từng file (A5 đã xong, xem [Kiểm tra file](#kiem-tra-file)) | `CvUploadErrorCodes`, `CvUploadStatuses` trong Core |
 | **B6** | Nút bắt đầu chấm, thanh tiến độ (khi có API A11, A13) | `ApiClientBase` |
 | **B7 – B11** | Trang Kết quả: bảng xếp hạng, màu mức đánh giá, chi tiết CV, trạng thái lỗi, biểu đồ | `FitLevel`, 4 màu trong `app.css` |
@@ -1297,6 +1403,10 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | Tải CV trả `400` "Chưa chọn file" dù đã gửi | Tên phần multipart không phải `files`; trong REST Client thì sai `boundary` hoặc sai đường dẫn `< ../../test-files/...`. |
 | `Invoke-WebRequest: A parameter cannot be found that matches parameter name 'F'` | Đã gõ `curl` thay vì `curl.exe` trong PowerShell. |
 | Blazor báo *exceeds the maximum of 512000 bytes* | Chưa truyền `maxAllowedSize` cho `IBrowserFile.OpenReadStream()` (xem [mục 12.2](#api-upload)). |
+| `/api/applications` trả `404` | Không chạy ở Development hoặc `CvUpload:Endpoint:Enabled = false` (dùng chung chốt chặn với API CV) |
+| `POST /api/applications` trả `400` *Failed to read parameter "CreateApplicationsRequest request"* | JSON sai: tên trường phải là `jobId`, `cvIds`; mã CV phải đúng định dạng GUID |
+| `POST /api/applications` trả `415` | Thiếu `Content-Type: application/json` (PowerShell: `-ContentType 'application/json; charset=utf-8'`) |
+| `DELETE` hồ sơ trả `409` "Không thể bỏ gắn" | Hồ sơ đã được chấm hoặc gán nhãn HR, phải giữ lại để đối chiếu |
 | Cảnh báo `NU1902` / `NU1903` khi build | Package có lỗ hổng bảo mật. Nâng lên bản đã vá; **không tắt cảnh báo** để che lỗi. |
 
 ### 🔒 Bảo mật và dữ liệu
