@@ -153,7 +153,7 @@ flowchart LR
     API --> INFRA[SmartCv.Infrastructure]
     INFRA --> CORE
     INFRA --> DB[(SQL Server<br/>12 bảng)]
-    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID – dự kiến/]
+    INFRA --> FS[/Uploads/CV<br/>file gốc, tên GUID/]
     INFRA --> GEM[Gemini API]
 ```
 
@@ -711,7 +711,7 @@ Khi chạy ở Development còn có tài liệu OpenAPI tại `/openapi/v1.json`
 
 ### 12.2. ✅ API tải CV – `POST /api/cvs/upload` (A4, A5, A6)
 
-Nhận **một hoặc nhiều** file CV trong một request. Từ A5, API **kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256 – xem [Kiểm tra file](#kiem-tra-file)) và trả kết quả từng file; **chưa lưu file, chưa ghi database** (A6).
+Nhận **một hoặc nhiều** file CV trong một request. Từ A5, API **kiểm tra từng file** (rỗng, dung lượng, đuôi, nội dung thật, trùng SHA-256 – xem [Kiểm tra file](#kiem-tra-file)) rồi **lưu file hợp lệ** vào `Uploads/CV` và bảng `Cvs` (A6 – xem [Lưu CV](#luu-cv)) và trả kết quả từng file.
 
 > [!IMPORTANT]
 > Endpoint **chỉ có ở môi trường Development** (`CvUpload:Endpoint:Enabled`), vì chưa có xác thực (M6). Ở Production endpoint trả `404`; bật nhầm thì ứng dụng không khởi động (xem [mục 9.3](#cau-hinh)).
