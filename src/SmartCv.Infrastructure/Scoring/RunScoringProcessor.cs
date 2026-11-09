@@ -170,7 +170,7 @@ public sealed class RunScoringProcessor(
         db.ChangeTracker.Clear();   // mỗi hồ sơ bắt đầu sạch, bộ nhớ không tăng theo số CV
 
         var evaluation = await db.Evaluations.FirstOrDefaultAsync(e => e.EvaluationId == evaluationId, ct);
-        if (evaluation is null || evaluation.Status != EvaluationStatuses.Pending) return false;
+        if (evaluation is null || evaluation.RunId != run.RunId || evaluation.Status != EvaluationStatuses.Pending) return false;
 
         var info = await db.Applications.AsNoTracking()
             .Where(a => a.ApplicationId == evaluation.ApplicationId)
@@ -216,7 +216,11 @@ public sealed class RunScoringProcessor(
             }
         }
 
-        if (failure is not null) MarkFailed(evaluation, failure);
+        if (failure is not null)
+        {
+            MarkFailed(evaluation, failure);
+            await MergeSkillsAsync(evaluationId, info?.JobId ?? 0, [], ct);
+        }
         else
         {
             Apply(evaluation, result!, aiResult!);
@@ -234,6 +238,7 @@ public sealed class RunScoringProcessor(
             db.ChangeTracker.Clear();
             evaluation = await db.Evaluations.FirstAsync(e => e.EvaluationId == evaluationId, CancellationToken.None);
             MarkFailed(evaluation, "Kết quả chấm không lưu được do vi phạm ràng buộc dữ liệu.");
+            await MergeSkillsAsync(evaluationId, info?.JobId ?? 0, [], CancellationToken.None);
             result = null;
             await SaveWithProgressAsync(run.RunId, evaluation);
         }
@@ -260,6 +265,17 @@ public sealed class RunScoringProcessor(
 
     private static void MarkFailed(Evaluation e, string message)
     {
+        // Pending rows may contain stale data from an external/manual reset.
+        // A failed extraction/persistence must never retain a previous score as its result.
+        e.KeywordScore = null;
+        e.AiScore = null;
+        e.FinalScore = null;
+        e.ScoreSource = null;
+        e.FitLabel = null;
+        e.PredictedPass = null;
+        e.YearsExperience = null;
+        e.Reasoning = null;
+        e.AiRawResponse = null;
         e.Status = EvaluationStatuses.Failed;
         e.ErrorMessage = Truncate(message, MaxErrorLength);
     }
@@ -282,7 +298,11 @@ public sealed class RunScoringProcessor(
     /// <summary>Mỗi kỹ năng của job một dòng. Dòng cũ (nếu có) được cập nhật tại chỗ, không tạo trùng khóa.</summary>
     private async Task MergeSkillsAsync(int evaluationId, int jobId, IReadOnlyList<SkillMatch> skills, CancellationToken ct)
     {
-        var existing = await db.EvaluationSkills.Where(s => s.EvaluationId == evaluationId).ToDictionaryAsync(s => s.SkillCode, ct);
+        var rows = await db.EvaluationSkills.Where(s => s.EvaluationId == evaluationId).ToListAsync(ct);
+        // JobId is part of the primary key: a stale row from another job must be removed,
+        // never reused just because its SkillCode matches.
+        db.EvaluationSkills.RemoveRange(rows.Where(s => s.JobId != jobId));
+        var existing = rows.Where(s => s.JobId == jobId).ToDictionary(s => s.SkillCode);
 
         foreach (var skill in skills)
         {
