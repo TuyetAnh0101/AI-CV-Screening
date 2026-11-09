@@ -29,6 +29,16 @@ public sealed class ScoringOptions
     /// </summary>
     public decimal? MissingMustHaveCap { get; set; }
 
+    // ----- A11: chạy nền -----
+    /// <summary>
+    /// Bật tiến trình chấm nền. Mặc định TẮT: khi bật, worker tự chấm mọi lượt Queued/Running của database đang kết nối
+    /// và có thể tốn quota Gemini ngay lúc API khởi động, nên phải bật có chủ đích.
+    /// </summary>
+    public bool WorkerEnabled { get; set; }
+
+    /// <summary>Không có việc thì cứ bao nhiêu giây kiểm tra lại database một lần.</summary>
+    public int PollIntervalSeconds { get; set; } = 3;
+
     /// <summary>Kiểm tra lúc khởi động: ngưỡng đạt và giới hạn điểm nằm trong thang 0–100.</summary>
     public bool HasValidScoreLimits() =>
         PassThreshold is >= 0m and <= 100m && MissingMustHaveCap is null or (>= 0m and <= 100m);
