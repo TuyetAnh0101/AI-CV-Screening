@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
 using SmartCv.Core.Options;
@@ -21,7 +22,12 @@ builder.Services.AddCvUploadRateLimiting(builder.Configuration);
 builder.Services.AddOptions<ScoringOptions>()
     .Bind(builder.Configuration.GetSection(ScoringOptions.SectionName))
     .Validate(o => o.HasValidWeights(), "Scoring: trọng số không được âm, KeywordWeight + AiWeight và 4 trọng số Keyword* phải có tổng bằng 1.")
+    .Validate(o => o.HasValidScoreLimits(), "Scoring: PassThreshold và MissingMustHaveCap phải nằm trong khoảng 0–100.")
     .ValidateOnStart();
+
+// A10: giới hạn tần suất riêng cho API chấm thử (mỗi lần gọi tốn quota Gemini).
+builder.Services.AddOptions<RateLimiterOptions>().Configure(o =>
+    o.AddPolicy<string, AiPreviewRateLimitPolicy>(AiPreviewRateLimitPolicy.PolicyName));
 
 var app = builder.Build();
 
@@ -40,6 +46,7 @@ app.MapControllers();
 app.MapCvEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
+app.MapAiPreviewEndpoints();   // A10: POST /api/applications/{id}/ai-preview (chỉ Development, có giới hạn tần suất)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
 
 app.Run();

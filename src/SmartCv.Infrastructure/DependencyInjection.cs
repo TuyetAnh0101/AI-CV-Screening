@@ -4,10 +4,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Ai;
 using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
+using SmartCv.Infrastructure.Ai;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Extraction;
@@ -29,11 +31,28 @@ public static class DependencyInjection
 
         services.AddDbContext<SmartCvDbContext>(o => o.UseSqlServer(connectionString));
 
-        // Gemini: kiểm tra cấu hình ngay khi khởi động, thiếu key thì báo lỗi rõ ràng
+        // Gemini: kiểm tra cấu hình ngay khi khởi động, thiếu key thì báo lỗi rõ ràng (AI giả không cần key)
         services.AddOptions<GeminiOptions>()
             .Bind(configuration.GetSection(GeminiOptions.SectionName))
             .ValidateDataAnnotations()
+            .Validate(o => o.UseFake || !string.IsNullOrWhiteSpace(o.ApiKey),
+                "Chưa cấu hình Gemini:ApiKey. Xem README, mục User Secrets.")
+            .Validate<IHostEnvironment>((o, env) => !o.UseFake || env.IsDevelopment(),
+                "Gemini:UseFake chỉ được bật ở môi trường Development.")
             .ValidateOnStart();
+
+        // A10: chấm bằng AI. Chọn bản thật / giả lúc resolve để luôn đọc cấu hình đã hoàn chỉnh.
+        services.AddSingleton<GeminiRateLimiter>();   // dùng chung một "cửa" cho mọi lần gọi Gemini trong ứng dụng
+        services.AddHttpClient<GeminiEvaluationService>((sp, client) =>
+        {
+            var gemini = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+            client.BaseAddress = new Uri(gemini.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(gemini.TimeoutSeconds);
+        });
+        services.AddTransient<FakeAiEvaluator>();
+        services.AddTransient<IAiEvaluator>(sp => sp.GetRequiredService<IOptions<GeminiOptions>>().Value.UseFake
+            ? sp.GetRequiredService<FakeAiEvaluator>()
+            : sp.GetRequiredService<GeminiEvaluationService>());
 
         services.AddHttpClient("Gemini", client =>
         {

@@ -15,7 +15,14 @@ public sealed record SkillProfile(string SkillCode, string DisplayName, string S
 }
 
 /// <summary>Kết quả khớp một kỹ năng.</summary>
-public sealed record SkillMatch(string SkillCode, string DisplayName, bool IsMustHave, bool IsMatched, string? Evidence);
+public sealed record SkillMatch(string SkillCode, string DisplayName, bool IsMustHave, bool IsMatched, string? Evidence, string? MatchedBy = null);
+
+/// <summary>A10: nguồn xác nhận kỹ năng sau khi gộp điểm (SkillMatch.MatchedBy).</summary>
+public static class SkillMatchSources
+{
+    public const string Keyword = "Keyword";
+    public const string Ai = "AI";
+}
 
 /// <summary>Kết quả chấm keyword (A9).</summary>
 public sealed record KeywordScoreResult(

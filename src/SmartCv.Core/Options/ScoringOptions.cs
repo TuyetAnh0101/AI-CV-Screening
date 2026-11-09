@@ -22,6 +22,17 @@ public sealed class ScoringOptions
     public decimal KeywordGpaWeight { get; set; } = 0.1m;
     public decimal KeywordExperienceWeight { get; set; } = 0.1m;
 
+    /// <summary>
+    /// A10: thiếu kỹ năng bắt buộc thì điểm cuối không vượt mức này. Giá trị 69 đặt trong appsettings.json.
+    /// Mặc định của lớp phải là null: khi cấu hình ghi "MissingMustHaveCap": null, binder bỏ qua giá trị null
+    /// và giữ mặc định, nên chỉ mặc định null mới tắt được quy tắc này.
+    /// </summary>
+    public decimal? MissingMustHaveCap { get; set; }
+
+    /// <summary>Kiểm tra lúc khởi động: ngưỡng đạt và giới hạn điểm nằm trong thang 0–100.</summary>
+    public bool HasValidScoreLimits() =>
+        PassThreshold is >= 0m and <= 100m && MissingMustHaveCap is null or (>= 0m and <= 100m);
+
     /// <summary>Kiểm tra lúc khởi động: mỗi nhóm trọng số không âm và có tổng đúng bằng 1.</summary>
     public bool HasValidWeights() =>
         new[] { KeywordWeight, AiWeight, KeywordMustHaveWeight, KeywordNiceToHaveWeight, KeywordGpaWeight, KeywordExperienceWeight }.All(w => w >= 0m)
