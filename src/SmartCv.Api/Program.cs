@@ -13,6 +13,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // A7: tiến trình chạy nền đọc chữ CV (PdfPig / OCR Tesseract) từ hàng đợi; đăng ký các service trong AddInfrastructure.
 builder.Services.AddHostedService<CvExtractionWorker>();
 
+// A11: tiến trình chấm điểm nền, chỉ chạy khi Scoring:WorkerEnabled = true.
+builder.Services.AddHostedService<RunScoringWorker>();
+
 // A4: giới hạn tần suất cho API tải CV (mục "CvUpload:Endpoint" trong appsettings).
 // Giới hạn dung lượng request (201 MiB) được gắn riêng cho endpoint tải CV trong CvEndpoints,
 // các endpoint khác giữ mặc định của Kestrel (30 MB).
@@ -23,6 +26,7 @@ builder.Services.AddOptions<ScoringOptions>()
     .Bind(builder.Configuration.GetSection(ScoringOptions.SectionName))
     .Validate(o => o.HasValidWeights(), "Scoring: trọng số không được âm, KeywordWeight + AiWeight và 4 trọng số Keyword* phải có tổng bằng 1.")
     .Validate(o => o.HasValidScoreLimits(), "Scoring: PassThreshold và MissingMustHaveCap phải nằm trong khoảng 0–100.")
+    .Validate(o => o.PollIntervalSeconds >= 1, "Scoring: PollIntervalSeconds phải từ 1 giây trở lên.")
     .ValidateOnStart();
 
 // A10: giới hạn tần suất riêng cho API chấm thử (mỗi lần gọi tốn quota Gemini).
