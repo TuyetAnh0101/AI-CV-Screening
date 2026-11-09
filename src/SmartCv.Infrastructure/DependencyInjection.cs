@@ -13,6 +13,7 @@ using SmartCv.Infrastructure.Ai;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Extraction;
+using SmartCv.Infrastructure.Scoring;
 using SmartCv.Infrastructure.Storage;
 using SmartCv.Infrastructure.Uploads;
 
@@ -59,6 +60,9 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
             client.Timeout = TimeSpan.FromSeconds(60);
         });
+
+        // A11: chấm một lượt; dùng DbContext nên Scoped, worker tạo scope mới cho mỗi lượt.
+        services.AddScoped<RunScoringProcessor>();
 
         // A4: tải CV. Đọc mục "CvUpload" trong appsettings.json.
         // Scoped vì A6 sẽ dùng SmartCvDbContext (cũng Scoped) trong service này.
