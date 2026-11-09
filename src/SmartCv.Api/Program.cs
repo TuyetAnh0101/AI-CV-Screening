@@ -1,5 +1,6 @@
 using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
+using SmartCv.Core.Options;
 using SmartCv.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,12 @@ builder.Services.AddHostedService<CvExtractionWorker>();
 // Giới hạn dung lượng request (201 MiB) được gắn riêng cho endpoint tải CV trong CvEndpoints,
 // các endpoint khác giữ mặc định của Kestrel (30 MB).
 builder.Services.AddCvUploadRateLimiting(builder.Configuration);
+
+// A9: trọng số chấm điểm (mục "Scoring" trong appsettings); sai cấu hình thì dừng ngay lúc khởi động.
+builder.Services.AddOptions<ScoringOptions>()
+    .Bind(builder.Configuration.GetSection(ScoringOptions.SectionName))
+    .Validate(o => o.HasValidWeights(), "Scoring: trọng số không được âm, KeywordWeight + AiWeight và 4 trọng số Keyword* phải có tổng bằng 1.")
+    .ValidateOnStart();
 
 var app = builder.Build();
 
@@ -32,6 +39,7 @@ app.UseRateLimiter();
 app.MapControllers();
 app.MapCvEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
+app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
 
 app.Run();
