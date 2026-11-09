@@ -64,7 +64,7 @@ public static class ScoringPreviewEndpoints
             result.Notes.ToList()));
     }
 
-    private static ProblemHttpResult NotReady(string extractionStatus)
+    internal static ProblemHttpResult NotReady(string extractionStatus)
     {
         var (title, detail) = extractionStatus switch
         {
