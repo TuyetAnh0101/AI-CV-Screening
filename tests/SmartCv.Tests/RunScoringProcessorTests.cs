@@ -13,7 +13,7 @@ using SmartCv.Infrastructure.Scoring;
 namespace SmartCv.Tests;
 
 /// <summary>A11: chấm một lượt trên database InMemory có 5 job nền, AI giả lập bằng stub, không gọi Gemini.</summary>
-public class RunScoringProcessorTests
+public partial class RunScoringProcessorTests
 {
     private const int AiJob = 3;       // Python, Machine Learning, LLM API bắt buộc; không yêu cầu kinh nghiệm
     private const string GoodCv = "GPA 3.5. Python, Machine Learning, LLM API, Prompt Engineering, SQL, NLP.";
@@ -578,6 +578,14 @@ public class RunScoringProcessorTests
         Assert.Equal(EvaluationStatuses.Pending, e.Status);
         Assert.Null(e.ErrorMessage);
         Assert.Equal(0, (await RunOf(env, run)).ProcessedItems);
+        Assert.Empty(await SkillsOf(env, item));
+        Assert.Null(e.FinalScore);
+        Assert.Null(e.AiRawResponse);
+        await using var recovered = env.Fresh();
+        Assert.Equal(1, await env.Processor(new StubAi(), recovered).ProcessRunAsync(run, default));
+        Assert.Equal(EvaluationStatuses.Completed, (await EvalOf(env, item)).Status);
+        Assert.Equal(6, (await SkillsOf(env, item)).Count);
+        Assert.Equal(1, (await RunOf(env, run)).ProcessedItems);
     }
 
     [Fact]
