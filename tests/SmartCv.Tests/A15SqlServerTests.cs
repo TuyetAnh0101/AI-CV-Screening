@@ -129,7 +129,7 @@ public class A15SqlServerTests
     }
 
     [A15SqlFact]
-    public async Task Changed_or_deleted_labels_invalidate_stored_accuracy_without_computing_a16()
+    public async Task Changed_or_deleted_labels_recalculate_accuracy_and_keep_empty_run_accuracy_null()
     {
         await using var env = await SqlEnvironment.CreateAsync();
         var seed = await env.SeedAsync();
@@ -152,13 +152,13 @@ public class A15SqlServerTests
         using var changed = await env.Client.PutAsJsonAsync($"/api/evaluation-sets/{seed.SetId}/labels", labels);
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         var result = await JsonAsync(changed);
-        Assert.Empty(result.GetProperty("recalculatedRunIds").EnumerateArray());
-        Assert.Contains(runId, result.GetProperty("invalidatedRunIds").EnumerateArray().Select(x => x.GetInt32()));
-        Assert.NotEmpty(result.GetProperty("warnings").EnumerateArray());
+        Assert.Contains(runId, result.GetProperty("recalculatedRunIds").EnumerateArray().Select(x => x.GetInt32()));
+        Assert.Empty(result.GetProperty("invalidatedRunIds").EnumerateArray());
         var runs = await env.Client.GetFromJsonAsync<JsonElement>($"/api/prompt-tests?evaluationSetId={seed.SetId}");
         Assert.Equal(JsonValueKind.Null, runs[0].GetProperty("accuracyPercent").ValueKind);
         Assert.Equal("NotCalculated", runs[0].GetProperty("accuracyStatus").GetString());
-        Assert.False(runs[0].TryGetProperty("missedCount", out _));
+        Assert.Equal(0, runs[0].GetProperty("missedCount").GetInt32());
+        Assert.Equal(0, runs[0].GetProperty("totalLabeledCount").GetInt32());
         await using (var db = env.Context())
         {
             var run = await db.EvaluationRuns.SingleAsync(r => r.RunId == runId);
@@ -199,19 +199,20 @@ public class A15SqlServerTests
         var detail = await env.Client.GetFromJsonAsync<JsonElement>($"/api/prompt-tests/{runId}");
         Assert.Equal("Completed", detail.GetProperty("status").GetString());
         Assert.Equal(2, detail.GetProperty("processedItems").GetInt32());
-        Assert.Equal(JsonValueKind.Null, detail.GetProperty("accuracyPercent").ValueKind);
+        Assert.Equal(100m, detail.GetProperty("accuracyPercent").GetDecimal());
+        Assert.Equal(2, detail.GetProperty("correctCount").GetInt32());
         Assert.Equal(2, detail.GetProperty("items").GetArrayLength());
         foreach (var item in detail.GetProperty("items").EnumerateArray())
         {
             Assert.Equal("Completed", item.GetProperty("status").GetString());
             Assert.Equal(JsonValueKind.Number, item.GetProperty("finalScore").ValueKind);
-            Assert.False(item.TryGetProperty("isMatch", out _));
-            Assert.False(item.TryGetProperty("mismatchType", out _));
+            Assert.True(item.GetProperty("isMatch").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, item.GetProperty("mismatchType").ValueKind);
         }
         await using var check = env.Context();
         Assert.True((await check.PromptVersions.SingleAsync(p => p.PromptVersionId == seed.ActivePromptId)).IsActive);
         Assert.False((await check.PromptVersions.SingleAsync(p => p.PromptVersionId == seed.PromptId)).IsActive);
-        Assert.Null((await check.EvaluationRuns.SingleAsync()).AccuracyPercent);
+        Assert.Equal(100m, (await check.EvaluationRuns.SingleAsync()).AccuracyPercent);
     }
 
     [A15SqlFact]

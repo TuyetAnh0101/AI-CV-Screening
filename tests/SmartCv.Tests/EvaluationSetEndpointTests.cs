@@ -307,7 +307,7 @@ public class EvaluationSetEndpointTests
     }
 
     [Fact]
-    public async Task Changing_or_deleting_labels_invalidates_stale_accuracy_without_touching_scores_or_applications()
+    public async Task Changing_or_deleting_labels_recalculates_accuracy_without_touching_scores_or_applications()
     {
         using var factory = Factory();
         using var client = factory.CreateClient();
@@ -332,16 +332,14 @@ public class EvaluationSetEndpointTests
             LabeledBy = "HR", Labels = [new() { ApplicationId = seed.GoodId, IsPass = true }]
         });
         var result = (await saved.Content.ReadFromJsonAsync<SaveHrLabelsResult>())!;
-        Assert.Equal(new[] { runId }, result.InvalidatedRunIds);
-        Assert.Empty(result.RecalculatedRunIds);
-        Assert.Contains(result.Warnings, w => w.Contains("A16"));
+        Assert.Empty(result.InvalidatedRunIds);
+        Assert.Equal(new[] { runId }, result.RecalculatedRunIds);
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
             var run = await db.EvaluationRuns.SingleAsync();
-            Assert.Null(run.AccuracyPercent);
-            run.AccuracyPercent = 75m; // Simulates a previously persisted A16 value before another HR change.
-            await db.SaveChangesAsync();
+            // This completed evaluation has no PredictedPass. It remains unscored in the denominator.
+            Assert.Equal(0m, run.AccuracyPercent);
         }
         Assert.Equal(HttpStatusCode.NoContent,
             (await client.DeleteAsync($"/api/evaluation-sets/{seed.SetId}/labels/{seed.GoodId}")).StatusCode);

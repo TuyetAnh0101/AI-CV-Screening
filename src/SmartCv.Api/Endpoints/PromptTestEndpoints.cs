@@ -10,7 +10,7 @@ using SmartCv.Infrastructure.Prompts;
 
 namespace SmartCv.Api.Endpoints;
 
-/// <summary>A15: queue a prompt test and read persisted progress; scoring uses the existing A11 worker.</summary>
+/// <summary>A15 queue/progress and A16 accuracy. Scoring uses the existing A11 worker.</summary>
 public static class PromptTestEndpoints
 {
     public static WebApplication MapPromptTestEndpoints(this WebApplication app)
@@ -86,7 +86,7 @@ public static class PromptTestEndpoints
     }
 
     private static async Task<IResult> ListAsync(SmartCvDbContext db, CancellationToken ct, int? evaluationSetId = null) =>
-        Results.Ok(await db.QueryRuns(evaluationSetId).ToListAsync(ct));
+        Results.Ok(await db.LoadSummariesAsync(evaluationSetId, ct));
 
     private static async Task<IResult> GetAsync(int runId, SmartCvDbContext db, CancellationToken ct)
     {
