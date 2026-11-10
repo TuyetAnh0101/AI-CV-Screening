@@ -47,6 +47,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+app.MapEvaluationEndpoints();
 app.MapRunEndpoints(); // A12: persist run settings before background scoring.
 app.MapCvEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
