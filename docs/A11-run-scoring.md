@@ -43,6 +43,14 @@ Model, Temperature, SystemPrompt, `KeywordWeight`, `AiWeight`, `PassThreshold` l
 
 Muốn chấm thật phải đặt `true` có chủ đích. Worker chỉ đăng ký một lần trong `Program.cs`.
 
+Từ B6 (giao diện "Phân tích hồ sơ" tạo lượt qua `POST /api/runs`), hai profile `http`/`https` trong
+`src/SmartCv.Api/Properties/launchSettings.json` đặt `Scoring__WorkerEnabled=true`. Nhờ vậy, khi chạy API để phát triển
+(`dotnet run`, Visual Studio), lượt vừa tạo được chấm ngay thay vì đứng mãi ở `Queued`, 0%. `appsettings.json` vẫn để `false`,
+nên test (WebApplicationFactory không đọc launchSettings) và các môi trường khác không tự tốn quota. Khi worker tắt, API ghi log
+**Warning** "Tiến trình chấm điểm đang TẮT ... lượt phân tích mới sẽ đứng ở trạng thái Queued".
+Chạy với `--no-launch-profile` thì tự đặt `$env:Scoring__WorkerEnabled = 'true'` như ví dụ dưới.
+Lưu ý: lần đầu bật trên một database, worker chấm mọi lượt `Queued`/`Running` còn tồn trong database đó.
+
 ## 7. Xử lý từng CV
 
 | Tình huống | Kết quả |

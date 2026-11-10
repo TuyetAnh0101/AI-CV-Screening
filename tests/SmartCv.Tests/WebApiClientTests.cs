@@ -200,5 +200,89 @@ public class WebApiClientTests
         Assert.Equal("Mỗi lần chỉ được tải tối đa 20 file, bạn đã gửi 21 file.", result.ErrorMessage);
     }
 
+    // ---------- Sửa lỗi upload nhiều CV làm circuit Blazor Server chết ----------
 
+    /// <summary>Ghi lại lúc mở / đóng stream để đếm số file đang truyền cùng lúc.</summary>
+    private sealed class OpenTracker
+    {
+        public int Open, MaxOpen, TotalOpened;
+        public void Opened() { TotalOpened++; Open++; MaxOpen = Math.Max(MaxOpen, Open); }
+        public void Closed() => Open--;
+    }
+
+    private sealed class TrackedStream(byte[] bytes, OpenTracker tracker) : MemoryStream(bytes)
+    {
+        private bool closed;
+        protected override void Dispose(bool disposing)
+        {
+            if (!closed) { closed = true; tracker.Closed(); }
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class TrackedBrowserFile(string name, byte[] bytes, OpenTracker tracker) : IBrowserFile
+    {
+        public string Name => name;
+        public DateTimeOffset LastModified => DateTimeOffset.UnixEpoch;
+        public long Size => bytes.Length;
+        public string ContentType => "application/pdf";
+
+        public Stream OpenReadStream(long maxAllowedSize = 512000, CancellationToken cancellationToken = default)
+        {
+            if (Size > maxAllowedSize) throw new IOException("Supplied file exceeds the maximum");
+            tracker.Opened();
+            return new TrackedStream(bytes, tracker);
+        }
+    }
+
+    [Fact]
+    public async Task CvApiClient_opens_browser_files_one_at_a_time_and_only_while_sending()
+    {
+        // Trên Blazor Server mỗi OpenReadStream mở ngay một luồng dữ liệu qua circuit. Mở trước cả nhóm
+        // làm circuit nghẽn và chết sau 1 phút (TimeoutException "Did not receive any data in the allotted time").
+        var tracker = new OpenTracker();
+        int? openedBeforeSend = null;
+        long? contentLength = null;
+        var http = new HttpClient(new StubHandler(async (request, ct) =>
+        {
+            openedBeforeSend = tracker.TotalOpened;
+            contentLength = request.Content!.Headers.ContentLength;
+            await request.Content.CopyToAsync(Stream.Null, ct);   // giống HttpClient thật: gửi lần lượt từng phần
+            return Status(HttpStatusCode.OK, """{"totalFiles":0,"successCount":0,"failedCount":0,"files":[]}""", "application/json");
+        })) { BaseAddress = new Uri("https://api.test/") };
+        var client = new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new SmartCv.Core.Options.CvUploadOptions()),
+            NullLogger<CvApiClient>.Instance);
+        var files = Enumerable.Range(1, 20)
+            .Select(i => (IBrowserFile)new TrackedBrowserFile($"cv-{i}.pdf", TestSupport.Pdf($"cv-{i}", 64 * 1024), tracker))
+            .ToList();
+
+        var result = await client.UploadAsync(files);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(0, openedBeforeSend);        // chưa file nào mở khi bắt đầu gửi
+        Assert.Equal(1, tracker.MaxOpen);         // mỗi lúc chỉ một file đang truyền
+        Assert.Equal(20, tracker.TotalOpened);    // mỗi file mở đúng một lần
+        Assert.Equal(0, tracker.Open);            // gửi xong thì mọi stream đã đóng
+        Assert.NotNull(contentLength);            // biết trước dung lượng: có Content-Length, không gửi chunked
+    }
+
+    [Fact]
+    public async Task CvApiClient_still_rejects_file_larger_than_limit_when_sending()
+    {
+        var tracker = new OpenTracker();
+        var http = new HttpClient(new StubHandler(async (request, ct) =>
+        {
+            await request.Content!.CopyToAsync(Stream.Null, ct);
+            return Status(HttpStatusCode.OK, """{"files":[]}""", "application/json");
+        })) { BaseAddress = new Uri("https://api.test/") };
+        var client = new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new SmartCv.Core.Options.CvUploadOptions { MaxFileSizeMB = 1 }),
+            NullLogger<CvApiClient>.Instance);
+
+        // Trang Upload lọc file quá lớn trước khi gửi; nếu lọt xuống đây, việc đọc vẫn bị chặn.
+        // HttpClient bọc lỗi đọc nội dung thành HttpRequestException → ApiClientBase trả kết quả lỗi, không ném ra circuit.
+        var result = await client.UploadAsync([new TrackedBrowserFile("qua-lon.pdf", new byte[2 * 1024 * 1024], tracker)]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(0, tracker.TotalOpened);   // bị chặn trước khi mở stream
+    }
 }

@@ -36,13 +36,14 @@ Bố cục giữ đúng Figma: sidebar SCApp → topbar → banner → 2 thẻ �
 |---|---|---|---|
 | CV mỗi lần chọn | 25 | – | **25** (`CvUpload:MaxFilesPerSelection`) |
 | File mỗi request | – | **20** (`MaxFilesPerRequest`) | 20, tự chia: 25 file → 20 + 5 |
-| Dung lượng / file | 2 MB | **10 MB** | 10 MB |
-| Tổng / request | – | 10 MB × 20 + 1 MB | chia nhóm không vượt mức này |
+| Dung lượng / file | 2 MB | **2 MB** | 2 MB |
+| Tổng / request | – | 2 MB × 20 + 1 MB = 41 MiB | chia nhóm không vượt mức này |
 | Tần suất | – | 30 request/60 s mỗi IP, 4 đồng thời | gửi tuần tự từng nhóm |
 
-Khác Figma: dung lượng 10 MB thay vì 2 MB (giữ theo cấu hình API thật, không đổi bảo mật A4). Muốn 2 MB thì sửa
-`MaxFileSizeMB` ở **cả** `src/SmartCv.Api/appsettings.json` và `src/SmartCv.Web/appsettings.json`. Test
-`Web_upload_limits_match_api_config` báo lỗi nếu hai bên lệch nhau.
+Từ bản sửa `fix/B6-upload-run-start` (2026-11-10), dung lượng là 2 MB như Figma (trước đó giữ 10 MB).
+`MaxFileSizeMB` phải giống nhau ở **cả** `src/SmartCv.Api/appsettings.json` và `src/SmartCv.Web/appsettings.json`.
+Test `Web_upload_limits_match_api_config` báo lỗi nếu hai bên lệch nhau. Giá trị mặc định trong code
+(`CvUploadOptions`, 10 MB) chỉ dùng khi thiếu cấu hình.
 
 ## Vòng đời IBrowserFile
 
@@ -50,6 +51,13 @@ File chọn trong Blazor Server chỉ đọc được khi `InputFile` chưa bị
 **khóa ô kéo thả** (`Disabled`) cho tới khi mọi nhóm xong. Lần chọn sau chỉ thêm dòng mới, không mất dòng cũ.
 `GetMultipleFiles(1000)` để không bị lỗi mặc định 10 file; file thứ 26 trở đi hiện "Lỗi file", không gửi.
 Bấm Hủy khi đang tải: danh sách xóa ngay, request đang chạy vẫn hoàn tất trên máy chủ (không hủy giữa chừng).
+
+**Chỉ mở một file mỗi lúc** (`BrowserFileContent`). Trong Blazor Server, mỗi `OpenReadStream` mở ngay một luồng dữ liệu
+trình duyệt → máy chủ trên cùng kết nối SignalR. Bản cũ mở stream của cả nhóm (tới 20 file) trước khi gửi; multipart chỉ đọc
+từng file nên các stream còn lại dồn ứ, kết nối bị nghẽn, sau 1 phút Blazor ném `TimeoutException: Did not receive any data
+in the allotted time` cho circuit → giao diện đứng ở "Đang tải lên" rồi hiện "Tải lại trang" (đo được: 25 file × 1,9 MB).
+`BrowserFileContent` chỉ mở stream khi HttpClient gửi tới phần đó và đóng ngay khi gửi xong, không đọc cả file vào bộ nhớ
+(cùng 25 file: xong trong khoảng 7,5 giây). Test `CvApiClient_opens_browser_files_one_at_a_time_and_only_while_sending` giữ điều này.
 
 ## Chạy
 

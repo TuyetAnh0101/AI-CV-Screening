@@ -21,7 +21,8 @@ public sealed class RunScoringWorker(
     {
         if (!options.Value.WorkerEnabled)
         {
-            logger.LogInformation("Tiến trình chấm điểm đang TẮT (Scoring:WorkerEnabled = false)");
+            // Warning (không phải Information): khi tắt, mọi lượt tạo qua POST /api/runs đứng mãi ở Queued, 0%.
+            logger.LogWarning("Tiến trình chấm điểm đang TẮT (Scoring:WorkerEnabled = false): lượt phân tích mới sẽ đứng ở trạng thái Queued cho tới khi bật worker");
             return;
         }
 
