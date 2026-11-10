@@ -1,0 +1,80 @@
+@*
+    B7: hai ô lọc của trang Kết quả.
+    - Lượt chấm: danh sách Screening (GET /api/runs?type=Screening). Chọn → trang đổi địa chỉ thành /results?runId=N.
+    - Vị trí tuyển dụng: các job CỦA LƯỢT ĐANG CHỌN (RankingResponse.Jobs) kèm số CV. Chọn → /results?runId=N&jobId=M.
+    Component chỉ hiển thị và báo ngược; trang Results lo đổi địa chỉ và tải dữ liệu.
+*@
+
+<div class="filters">
+    <label class="field">
+        <span class="field-label">Lượt chấm</span>
+        <select class="form-select" value="@(SelectedRunId?.ToString() ?? string.Empty)" @onchange="RunChanged"
+                aria-describedby="@(RunsError is null ? null : "runs-error")">
+            @if (SelectedRunId is null)
+            {
+                <option value="" disabled>@(RunsLoading ? "Đang tải lượt chấm..." : "Chọn lượt chấm")</option>
+            }
+            @foreach (var run in Runs)
+            {
+                <option value="@run.RunId">@RankingView.RunOption(run)</option>
+            }
+            @if (SelectedRunId is { } id && Runs.All(r => r.RunId != id))
+            {
+                @* Lượt đang mở không nằm trong danh sách (cũ hơn giới hạn hoặc danh sách lỗi): vẫn giữ lựa chọn *@
+                <option value="@id">#@id</option>
+            }
+        </select>
+        @if (RunsError is not null)
+        {
+            <span id="runs-error" class="field-note">Không tải được danh sách lượt chấm: @RunsError</span>
+        }
+    </label>
+
+    <label class="field">
+        <span class="field-label">Vị trí tuyển dụng</span>
+        @if (Jobs is null)
+        {
+            <select class="form-select" disabled>
+                <option>@(JobsLoading ? "Đang tải vị trí..." : "—")</option>
+            </select>
+        }
+        else
+        {
+            <select class="form-select" value="@(SelectedJobId?.ToString() ?? string.Empty)" @onchange="JobChanged">
+                @if (SelectedJobId is { } jobId && Jobs.All(j => j.JobId != jobId))
+                {
+                    <option value="@jobId" disabled>Vị trí #@jobId (không thuộc lượt này)</option>
+                }
+                @foreach (var job in Jobs)
+                {
+                    <option value="@job.JobId">@RankingView.JobOption(job)</option>
+                }
+            </select>
+        }
+    </label>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<RunSummaryDto> Runs { get; set; } = [];
+    [Parameter] public bool RunsLoading { get; set; }
+    [Parameter] public string? RunsError { get; set; }
+    [Parameter] public int? SelectedRunId { get; set; }
+
+    /// <summary>null = chưa biết job của lượt đang chọn (đang tải hoặc lỗi).</summary>
+    [Parameter] public IReadOnlyList<JobCountDto>? Jobs { get; set; }
+    [Parameter] public bool JobsLoading { get; set; }
+    [Parameter] public int? SelectedJobId { get; set; }
+
+    [Parameter] public EventCallback<int> OnRunChanged { get; set; }
+    [Parameter] public EventCallback<int> OnJobChanged { get; set; }
+
+    private Task RunChanged(ChangeEventArgs e) =>
+        RankingView.TryParseId(e.Value?.ToString(), out var id) && id is { } runId
+            ? OnRunChanged.InvokeAsync(runId)
+            : Task.CompletedTask;
+
+    private Task JobChanged(ChangeEventArgs e) =>
+        RankingView.TryParseId(e.Value?.ToString(), out var id) && id is { } jobId
+            ? OnJobChanged.InvokeAsync(jobId)
+            : Task.CompletedTask;
+}

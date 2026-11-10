@@ -183,8 +183,10 @@ else
         }
         @if (finished && outcome is not RunOutcome.Failed)
         {
-            @* Trang Kết quả (B7) chưa có bảng xếp hạng theo runId: chưa đặt liên kết để tránh trang trống *@
-            <span class="run-next">Bảng xếp hạng chi tiết sẽ có ở trang Kết quả (B7).</span>
+            @* B7: mở bảng xếp hạng của đúng lượt vừa chấm *@
+            <span class="run-next">
+                <a class="btn sc-btn-primary mt-2" href="@RankingView.ResultsUrl(run.RunId)">Xem bảng xếp hạng</a>
+            </span>
         }
     </footer>
 }

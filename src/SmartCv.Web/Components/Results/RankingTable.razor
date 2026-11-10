@@ -1,0 +1,159 @@
+@*
+    B7: bảng xếp hạng ứng viên của MỘT job trong MỘT lượt chấm (dữ liệu từ GET /api/runs/{id}/ranking, A13).
+    Tìm kiếm không dấu, lọc nhanh và sắp xếp chạy ngay trên trình duyệt, không gọi lại API.
+    CV chưa có điểm luôn nằm cuối, điểm hiện "—" (không gán 0).
+    Chưa có: màu theo mức (B8), mở trang chi tiết (B9), nhãn lỗi/chỉ keyword chi tiết (B10).
+*@
+@using SmartCv.Core.Constants
+
+<section class="ranking" aria-labelledby="ranking-title" aria-busy="@(Loading ? "true" : "false")">
+    <div class="ranking-head">
+        <div>
+            <h2 id="ranking-title">Bảng xếp hạng ứng viên</h2>
+            <p>Mặc định sắp theo điểm cuối giảm dần · ngưỡng Đạt @RankingView.Score(PassThreshold) điểm · CV chưa có điểm nằm cuối bảng</p>
+        </div>
+    </div>
+
+    <div class="ranking-tools">
+        <div class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input type="search" placeholder="Tìm tên ứng viên, tên file..." aria-label="Tìm ứng viên theo tên hoặc tên file"
+                   @bind="search" @bind:event="oninput" autocomplete="off" />
+            @if (!string.IsNullOrEmpty(search))
+            {
+                <button type="button" class="search-clear" @onclick="ClearSearch" aria-label="Xóa từ khóa tìm kiếm">×</button>
+            }
+        </div>
+
+        <div class="quick" role="group" aria-label="Lọc nhanh">
+            @foreach (var (value, label) in RankingView.Filters)
+            {
+                var on = filter == value;
+                <button type="button" class="quick-btn @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
+                        @onclick="() => filter = value">
+                    @label <span class="count">@RankingView.Count(Items, search, value)</span>
+                </button>
+            }
+        </div>
+
+        <label class="sort">
+            <span class="visually-hidden">Sắp xếp</span>
+            <select class="form-select" @bind="sort" aria-label="Sắp xếp bảng xếp hạng">
+                @foreach (var (value, label) in RankingView.Sorts)
+                {
+                    <option value="@value">@label</option>
+                }
+            </select>
+        </label>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="table-empty" role="status">
+            <p class="empty-title">Vị trí này chưa có CV nào trong lượt chấm</p>
+            <p>Hãy chọn vị trí khác ở ô <strong>Vị trí tuyển dụng</strong>, hoặc tải thêm CV ở trang <a href="upload">Tải hồ sơ lên</a>.</p>
+        </div>
+    }
+    else
+    {
+        var rows = RankingView.Apply(Items, search, filter, sort);
+
+        <div class="table-wrap">
+            <table class="rank-table">
+                <caption class="visually-hidden">Bảng xếp hạng @Items.Count CV, @RankingView.Sorts.First(s => s.Value == sort).Label</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="c-rank">Hạng</th>
+                        <th scope="col">Ứng viên</th>
+                        <th scope="col" class="c-num">Bắt buộc</th>
+                        <th scope="col" class="c-num">Kinh nghiệm</th>
+                        <th scope="col" class="c-num">Keyword</th>
+                        <th scope="col" class="c-num">AI</th>
+                        <th scope="col" class="c-num">Điểm cuối</th>
+                        <th scope="col">Mức phù hợp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        var scored = RankingView.IsScored(r);
+                        var keywordOnly = r.ScoreSource == ScoreSources.KeywordOnly;
+                        <tr class="@(scored ? null : "is-unscored")" @key="r.EvaluationId">
+                            <td class="c-rank" data-label="Hạng">
+                                <span class="rank @(r.Rank is >= 1 and <= 3 ? "top" : null)">@RankingView.RankText(r.Rank)</span>
+                            </td>
+                            <td class="c-who">
+                                <div class="who">
+                                    <span class="avatar" aria-hidden="true">@RankingView.Initials(r.CandidateName, r.FileName)</span>
+                                    <span class="who-text">
+                                        <span class="name">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</span>
+                                        <span class="file" title="@r.FileName">@r.FileName</span>
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="c-num" data-label="Bắt buộc">
+                                @if (scored && r.TotalMustHave > 0)
+                                {
+                                    <span>@r.MatchedMustHave/@r.TotalMustHave</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">—</span>
+                                }
+                            </td>
+                            <td class="c-num" data-label="Kinh nghiệm">@RankingView.Years(r.YearsExperience)</td>
+                            <td class="c-num" data-label="Keyword">@RankingView.Score(r.KeywordScore)</td>
+                            <td class="c-num" data-label="AI">
+                                <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(r.AiScore)</span>
+                            </td>
+                            <td class="c-num c-final" data-label="Điểm cuối">
+                                <strong class="final">@RankingView.Score(r.FinalScore)</strong>
+                            </td>
+                            <td class="c-fit" data-label="Mức phù hợp">
+                                @if (scored)
+                                {
+                                    <span class="fit-text">@(string.IsNullOrEmpty(r.FitLabel) ? FitLevel.FromScore(r.FinalScore) : r.FitLabel)</span>
+                                    <span class="pass">@(r.PredictedPass == true ? "Dự đoán Đạt" : "Dự đoán Không đạt")</span>
+                                }
+                                else
+                                {
+                                    var (statusText, variant) = StatusText.ForEvaluation(r.Status);
+                                    <span class="no-score">Chưa có điểm</span>
+                                    <StatusBadge Text="@statusText" Variant="variant" Title="@r.ErrorMessage" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (rows.Count == 0)
+            {
+                <div class="table-empty" role="status">
+                    <p class="empty-title">Không có CV nào khớp bộ lọc</p>
+                    <button type="button" class="btn sc-btn-secondary" @onclick="ResetFilters">Xóa bộ lọc</button>
+                </div>
+            }
+        </div>
+
+        <div class="ranking-foot" aria-live="polite">Hiển thị @rows.Count/@Items.Count CV</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public List<RankingItemDto> Items { get; set; } = [];
+    [Parameter] public decimal PassThreshold { get; set; }
+    [Parameter] public bool Loading { get; set; }
+
+    private string search = string.Empty;
+    private RankingFilter filter = RankingFilter.All;
+    private RankingSort sort = RankingSort.FinalDesc;
+
+    private void ClearSearch() => search = string.Empty;
+
+    private void ResetFilters()
+    {
+        search = string.Empty;
+        filter = RankingFilter.All;
+    }
+}
