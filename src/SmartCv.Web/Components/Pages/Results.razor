@@ -128,7 +128,7 @@
                 </div>
             </section>
 
-            <RankingTable Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" />
+            <RankingTable Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" />
             break;
 
         case ViewState.NoRuns:

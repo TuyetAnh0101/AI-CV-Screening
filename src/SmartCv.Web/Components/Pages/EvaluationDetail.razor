@@ -1,0 +1,194 @@
+@page "/results/evaluations/{Id:int}"
+@implements IDisposable
+@using SmartCv.Core.Constants
+@inject EvaluationApiClient EvaluationApi
+
+<PageTitle>Chi tiết đánh giá CV · SCApp</PageTitle>
+<div class="evaluation-detail">
+    <nav class="breadcrumb" aria-label="Điều hướng"><a href="@BackUrl">← Bảng xếp hạng</a><span>/ Chi tiết đánh giá #@Id</span></nav>
+    @if (loading)
+    {
+        <section class="panel state" role="status" aria-live="polite"><LoadingIndicator Text="Đang tải chi tiết đánh giá..." /></section>
+    }
+    else if (detail is null)
+    {
+        <section class="panel state error" role="alert"><h1>Không tải được kết quả đánh giá</h1><p>@error</p><button class="btn sc-btn-primary" @onclick="LoadAsync">Thử lại</button></section>
+    }
+    else
+    {
+        var ready = detail.Status == EvaluationStatuses.Completed;
+        var keywordOnly = detail.ScoreSource == ScoreSources.KeywordOnly;
+        <header class="panel candidate">
+            <div class="identity">
+                <p class="eyebrow">HỒ SƠ ĐÁNH GIÁ · HẠNG @(detail.Rank?.ToString() ?? "—")/@detail.RankTotal</p>
+                <h1>@(string.IsNullOrWhiteSpace(detail.CandidateName) ? "Chưa có tên ứng viên" : detail.CandidateName)</h1>
+                <p class="job">@Display.Text(detail.JobTitle)</p>
+                <p class="muted">@Display.Text(detail.CandidateEmail) · @Display.Text(detail.FileName)</p>
+                <div class="badges">
+                    <FitBadge FitLabel="@detail.FitLabel" FinalScore="detail.FinalScore" Status="@detail.Status" ScoreSource="@detail.ScoreSource" />
+                    <span class="prediction">Dự đoán: @(!ready || detail.PredictedPass is null ? "Chưa có" : detail.PredictedPass == true ? "Đạt" : "Không đạt")</span>
+                </div>
+            </div>
+            <div class="cv-actions">
+                @if (cvUrl is null)
+                {
+                    <button type="button" class="btn sc-btn-primary" disabled="@(checkingCv || detail.CvId == Guid.Empty)" @onclick="CheckCvAsync">@(checkingCv ? "Đang kiểm tra CV..." : "Xem CV gốc")</button>
+                }
+                else
+                {
+                    <a class="btn sc-btn-primary" href="@cvUrl" target="_blank" rel="noopener noreferrer">Mở CV gốc ↗</a>
+                    <small>File đã sẵn sàng · mở ở tab mới</small>
+                }
+                @if (cvError is not null) { <p class="error-text" role="alert">@cvError</p> }
+            </div>
+        </header>
+        @if (!ready || keywordOnly)
+        {
+            <aside class="notice" role="status">
+                <strong>@(detail.Status == EvaluationStatuses.Failed ? "Không chấm được CV này" : !ready ? "Chưa có kết quả hoàn tất" : "AI chưa chấm thành công · Chỉ Keyword")</strong>
+                <p>@(!ready ? "Điểm và kỹ năng chưa thể dùng để kết luận về ứng viên." : "Điểm cuối dựa trên Keyword và quy tắc nghiệp vụ; không có điểm AI thay thế bằng 0.")</p>
+                @if (!string.IsNullOrWhiteSpace(detail.ErrorMessage)) { <p>@Display.SafeError(detail.ErrorMessage)</p> }
+            </aside>
+        }
+        <div class="detail-grid">
+            <section class="panel scores" aria-labelledby="scores-title">
+                <div class="section-head"><span class="eyebrow">01 / ĐIỂM ĐÁNH GIÁ</span><h2 id="scores-title">Từ thành phần đến điểm cuối</h2></div>
+                <div class="score-content">
+                    <ErrorBoundary @key="Id"><ChildContent><ScoreRing Final="detail.FinalScore" Keyword="detail.KeywordScore" Status="@detail.Status" ScoreSource="@detail.ScoreSource" /></ChildContent><ErrorContent><p role="alert">Không thể hiển thị vòng điểm. Xem bảng điểm bên cạnh.</p></ErrorContent></ErrorBoundary>
+                    <div class="breakdown">
+                        <table><caption>Cách tính theo trọng số của lượt chấm</caption><thead><tr><th scope="col">Thành phần</th><th scope="col">Phép tính</th></tr></thead><tbody>
+                            <tr><th scope="row">Keyword</th><td>@Display.Score(ready ? detail.KeywordScore : null) × @Display.Weight(detail.KeywordWeight) = <strong>@Display.Score(ready ? detail.KeywordScore * detail.KeywordWeight : null)</strong></td></tr>
+                            <tr><th scope="row">AI</th><td>@Display.Score(ready && !keywordOnly ? detail.AiScore : null) × @Display.Weight(detail.AiWeight) = <strong>@Display.Score(ready && !keywordOnly ? detail.AiScore * detail.AiWeight : null)</strong></td></tr>
+                            <tr><th scope="row">@(keywordOnly ? "Keyword dự phòng" : "Tổng có trọng số")</th><td>@Display.Score(Display.WeightedTotal(detail))</td></tr>
+                            <tr class="total"><th scope="row">Điểm cuối từ Backend</th><td>@Display.Score(ready ? detail.FinalScore : null)</td></tr>
+                        </tbody></table>
+                        <p class="muted">Ngưỡng Đạt: @Display.Score(detail.PassThreshold). Điểm cuối đã áp dụng quy tắc nghiệp vụ.</p>
+                    </div>
+                </div>
+                @if (Display.HasRecordedCap(detail))
+                {
+                    <aside class="notice cap"><strong>Điểm cuối đã được giới hạn do ứng viên chưa đáp ứng kỹ năng bắt buộc.</strong><p>Theo ghi nhận của Backend: @string.Join(", ", Skills.Where(s => s.SkillType == "MustHave" && !s.IsMatched).Select(s => s.DisplayName)).</p></aside>
+                }
+                else if (ready && Display.WeightedTotal(detail) is { } total && detail.FinalScore is { } final && Math.Abs(total - final) > .01m)
+                {
+                    <p class="notice">Điểm cuối khác điểm thành phần. API chưa cung cấp đủ dữ liệu để xác định quy tắc điều chỉnh.</p>
+                }
+            </section>
+            <section class="panel ai" aria-labelledby="ai-title">
+                <div class="section-head"><span class="eyebrow">02 / AI INSIGHTS</span><h2 id="ai-title">Nhận xét của Gemini AI</h2></div>
+                @if (ready && !keywordOnly && detail.ScoreSource == ScoreSources.Combined)
+                {
+                    <p class="prose">@(string.IsNullOrWhiteSpace(detail.Reasoning) ? "Chưa có nhận xét AI trong kết quả." : detail.Reasoning)</p>
+                    <p class="muted">Nhận xét do AI tạo, cần được người tuyển dụng đối chiếu với CV.</p>
+                }
+                else
+                {
+                    <p>Chưa có nhận xét Gemini thành công để hiển thị.</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(detail.AiRawResponse))
+                {
+                    <details><summary>Xem JSON gốc AI trả về</summary><p class="muted">Dữ liệu gốc được lưu; không mặc định là JSON hợp lệ hoặc kết quả AI thành công. Có thể chọn và sao chép nội dung.</p><pre tabindex="0" aria-label="Phản hồi AI gốc">@detail.AiRawResponse</pre></details>
+                }
+                else { <p class="muted">Không có phản hồi AI gốc được lưu.</p> }
+            </section>
+            <section class="panel skills-panel" aria-labelledby="skills-title">
+                <div class="section-head"><span class="eyebrow">03 / ĐỐI CHIẾU NĂNG LỰC</span><h2 id="skills-title">Kỹ năng và bằng chứng</h2><p class="muted">Kết quả theo dữ liệu API. Xác nhận của AI được giữ nguyên nguồn, cần kiểm chứng.</p></div>
+                @if (!ready) { <p>Chưa có kết quả kỹ năng hoàn tất.</p> }
+                else if (Skills.Count == 0) { <p>Chưa có dữ liệu kỹ năng.</p> }
+                else
+                {
+                    <div class="skill-summary"><span>✓ Phù hợp: @Skills.Count(s => s.IsMatched)</span><span>! Còn thiếu: @Skills.Count(s => !s.IsMatched)</span></div>
+                    @foreach (var group in Skills.OrderBy(s => s.SkillType == "MustHave" ? 0 : s.SkillType == "NiceToHave" ? 1 : 2).GroupBy(s => s.SkillType))
+                    {
+                        <h3>@(group.Key == "MustHave" ? "Kỹ năng bắt buộc" : group.Key == "NiceToHave" ? "Kỹ năng ưu tiên" : "Kỹ năng khác theo API")</h3>
+                        <ul class="skills">
+                            @foreach (var skill in group.OrderByDescending(s => s.IsMatched))
+                            {
+                                <li><span class="skill-mark @(skill.IsMatched ? "matched" : "missing")" aria-label="@(skill.IsMatched ? "Phù hợp" : "Còn thiếu")">@(skill.IsMatched ? "✓" : "!")</span><div><strong>@Display.Text(skill.DisplayName)</strong>
+                                    <p>@(!string.IsNullOrWhiteSpace(skill.Evidence) ? skill.Evidence : skill.IsMatched ? "API ghi nhận phù hợp nhưng chưa cung cấp câu bằng chứng từ CV." : "Không tìm thấy trong CV theo kết quả đánh giá.")</p>
+                                </div></li>
+                            }
+                        </ul>
+                    }
+                }
+            </section>
+            <section class="panel metadata" aria-labelledby="metadata-title">
+                <div class="section-head"><span class="eyebrow">04 / THÔNG TIN LẦN ĐÁNH GIÁ</span><h2 id="metadata-title">Nguồn và cấu hình</h2></div>
+                <dl><dt>Lượt chấm / Job</dt><dd>#@detail.RunId / #@detail.JobId</dd><dt>Phiên bản prompt</dt><dd>@Display.Text(detail.PromptVersionName)</dd><dt>Model AI</dt><dd>@Display.Text(detail.ModelName)</dd><dt>Temperature</dt><dd>@Display.Score(detail.Temperature)</dd><dt>Nguồn điểm</dt><dd>@Display.Text(detail.ScoreSource)</dd><dt>Trạng thái</dt><dd>@Display.Text(detail.Status)</dd><dt>Thời gian tạo đánh giá</dt><dd>@Display.VnTime(detail.CreatedAt)</dd><dt>Cách đọc CV</dt><dd>@Display.Text(detail.ExtractionMethod)</dd></dl>
+                <p class="muted">API cung cấp thời gian tạo bản đánh giá, chưa có thời gian hoàn tất riêng.</p>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery(Name = "runId")] public string? RunId { get; set; }
+    [SupplyParameterFromQuery(Name = "jobId")] public string? JobId { get; set; }
+    private EvaluationDetailDto? detail;
+    private bool loading = true, checkingCv, disposed;
+    private string? error, cvError, cvUrl;
+    private int? loadedId;
+    private int version;
+    private CancellationTokenSource? cts;
+    private List<EvaluationSkillDto> Skills => detail?.Skills ?? [];
+    private string BackUrl => Display.BackUrl(RunId, JobId);
+
+    protected override Task OnParametersSetAsync() => loadedId == Id ? Task.CompletedTask : LoadAsync();
+    private async Task LoadAsync()
+    {
+        loadedId = Id;
+        cts?.Cancel();
+        cts?.Dispose();
+        cts = new();
+        var token = cts.Token;
+        var current = ++version;
+        var requestedId = Id;
+        loading = true;
+        detail = null;
+        error = cvError = cvUrl = null;
+        checkingCv = false;
+        try
+        {
+            var result = await EvaluationApi.GetAsync(requestedId, token);
+            if (disposed || current != version) return;
+            if (result.IsSuccess && result.Data?.EvaluationId == requestedId) detail = result.Data;
+            else error = result.IsSuccess ? "Dữ liệu đánh giá trả về không hợp lệ." : Failure(result.StatusCode, requestedId);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally { if (!disposed && current == version) loading = false; }
+    }
+    private static string Failure(int? status, int id) => status switch
+    {
+        404 => $"Không tìm thấy kết quả chấm #{id}.",
+        401 => "Phiên truy cập không hợp lệ. Vui lòng đăng nhập lại.",
+        403 => "Bạn không có quyền xem kết quả đánh giá này.",
+        null => "Không tải được dữ liệu: API mất kết nối, phản hồi quá lâu hoặc trả về dữ liệu không hợp lệ. Vui lòng thử lại.",
+        _ => "Máy chủ không thể tải kết quả đánh giá. Vui lòng thử lại sau."
+    };
+    private async Task CheckCvAsync()
+    {
+        if (detail is null || checkingCv || cts is null) return;
+        var current = version;
+        var cvId = detail.CvId;
+        var token = cts.Token;
+        checkingCv = true;
+        cvError = null;
+        try
+        {
+            var result = await EvaluationApi.CheckCvAsync(cvId, token);
+            if (disposed || current != version) return;
+            if (result.IsSuccess) cvUrl = EvaluationApi.CvUrl(cvId);
+            else cvError = result.StatusCode switch
+            {
+                401 => "Phiên truy cập CV không hợp lệ. Vui lòng đăng nhập lại.",
+                403 => "Bạn không có quyền xem CV này.",
+                404 => "Không tìm thấy file CV gốc trên máy chủ.",
+                _ => "Không mở được CV. Kiểm tra kết nối và thử lại."
+            };
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally { if (!disposed && current == version) checkingCv = false; }
+    }
+    public void Dispose() { disposed = true; ++version; cts?.Cancel(); cts?.Dispose(); }
+}

@@ -1,0 +1,16 @@
+.score-figure { margin: 0; width: min(100%, 240px); --ring-color: var(--sc-brand-700, #0f766e); }
+.ring { position: relative; aspect-ratio: 1; width: 100%; }
+svg { display: block; width: 100%; height: 100%; }
+circle { fill: none; }
+.track { stroke: var(--sc-surface-100, #f1f5f9); }
+.final { stroke: var(--ring-color); }
+.keyword { stroke: #14b8a6; }
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.center strong { font-size: clamp(1.5rem, 6vw, 2.5rem); line-height: 1.2; }
+.center span { font-size: .62rem; letter-spacing: .05em; color: var(--sc-ink-500, #64748b); }
+figcaption { display: grid; gap: .3rem; font-size: .75rem; text-align: center; }
+.tone-excellent { --ring-color: var(--fit-excellent); }
+.tone-good { --ring-color: var(--fit-good); }
+.tone-potential { --ring-color: var(--fit-potential); }
+.tone-poor { --ring-color: var(--fit-poor); }
+.tone-keyword { --ring-color: var(--sc-neutral, #475569); }
