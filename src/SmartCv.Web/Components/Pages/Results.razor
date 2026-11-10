@@ -1,23 +1,418 @@
 @page "/results"
+@*
+    B7 – Trang "Kết quả & xếp hạng". Bộ lọc nằm trên địa chỉ nên F5, Back/Forward và gửi link đều đúng:
+      /results                     → lượt chấm Screening mới nhất (GET /api/runs/latest), job đầu tiên
+      /results?runId=N             → lượt N, job đầu tiên (B6 "Xem bảng xếp hạng" mở địa chỉ này)
+      /results?runId=N&jobId=M     → lượt N, job M
+    API thật A13: GET /api/runs?type=Screening · GET /api/runs/latest · GET /api/runs/{id}/ranking?jobId= · GET /api/runs/{id}
+    Đổi ô chọn chỉ đổi địa chỉ (Nav.NavigateTo) → Blazor gọi lại OnParametersSetAsync → tải lại.
+    Mỗi lần tải có số thứ tự + CancellationToken: phản hồi của lựa chọn cũ về muộn sẽ bị bỏ qua.
+    Chưa làm ở B7: màu theo mức (B8), trang chi tiết (B9), tự cập nhật khi đang chấm (B10), biểu đồ (B11).
+*@
+@implements IDisposable
+@using SmartCv.Core.Constants
+@inject RunApiClient RunApi
+@inject NavigationManager Nav
 
-<PageHeader Title="Kết quả" Subtitle="Bảng xếp hạng ứng viên theo từng vị trí." />
+<PageTitle>Kết quả &amp; xếp hạng · SmartCV</PageTitle>
 
-<div class="card-panel placeholder-panel">
-    <p class="mb-2">Trang đang được xây dựng. Các phần sẽ làm:</p>
-    <ul>
-        <li><strong>B7</strong>: lọc job và bảng xếp hạng</li>
-        <li><strong>B8</strong>: màu theo 4 mức đánh giá</li>
-        <li><strong>B9</strong>: trang chi tiết CV</li>
-        <li><strong>B10</strong>: trạng thái xử lý, lỗi đọc file, lỗi AI</li>
-        <li><strong>B11</strong>: biểu đồ số CV theo mức</li>
-    </ul>
+<div class="results-page">
+    <section class="hero" aria-label="Lượt chấm và vị trí tuyển dụng">
+        <div class="hero-top">
+            <div class="hero-text">
+                @if (ShowCurrent)
+                {
+                    var (statusText, _) = StatusText.ForRun(CurrentStatus);
+                    <p class="eyebrow @StatusCss(CurrentStatus)">
+                        <span class="dot" aria-hidden="true"></span>
+                        Lượt chấm #@ranking!.RunId · @statusText
+                        @if (meta is not null)
+                        {
+                            <span> · @meta.Processed/@meta.Total CV</span>
+                        }
+                    </p>
+                    <h1>@ranking.JobTitle</h1>
+                    <ul class="chips" aria-label="Cấu hình lượt chấm">
+                        <li class="chip"><span>Prompt</span> @ranking.PromptVersionName</li>
+                        @if (meta is not null)
+                        {
+                            <li class="chip"><span>Mô hình</span> @meta.Model</li>
+                            <li class="chip"><span>Tạo lúc</span> @RankingView.VnTime(meta.CreatedAt)</li>
+                        }
+                        <li class="chip"><span>Ngưỡng Đạt</span> @RankingView.Score(ranking.PassThreshold)</li>
+                    </ul>
+                }
+                else
+                {
+                    <p class="eyebrow">Đánh giá AI</p>
+                    <h1>Kết quả &amp; xếp hạng</h1>
+                    <p class="hero-sub">Bảng xếp hạng ứng viên theo từng lượt chấm và vị trí tuyển dụng.</p>
+                }
+            </div>
+            @if (state != ViewState.NoRuns)
+            {
+                <div class="hero-actions">
+                    <button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync" disabled="@(state == ViewState.Loading)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+                        @(state == ViewState.Loading ? "Đang tải..." : "Làm mới")
+                    </button>
+                </div>
+            }
+        </div>
 
-    @* Xem trước 4 màu mức đánh giá đã dựng sẵn cho B8 *@
-    <p class="mb-2 text-secondary small">Màu mức đánh giá (dựng sẵn cho B8):</p>
-    <div class="d-flex flex-wrap gap-2">
-        @foreach (var label in FitLevel.All)
+        @if (state != ViewState.NoRuns)
         {
-            <span class="fit-badge @FitLevel.CssClass(label)">@label</span>
+            <RunJobFilter Runs="runs" RunsLoading="runsLoading" RunsError="@runsError" SelectedRunId="selectedRunId"
+                          Jobs="FilterJobs" JobsLoading="state == ViewState.Loading" SelectedJobId="FilterJobId"
+                          OnRunChanged="GoToRun" OnJobChanged="GoToJob" />
         }
-    </div>
+    </section>
+
+    @switch (state)
+    {
+        case ViewState.Loading when !ShowCurrent:
+            <div class="loading-block" role="status" aria-live="polite">
+                <LoadingIndicator Text="@LoadingText" />
+                <div class="skeleton-grid" aria-hidden="true">
+                    <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+                </div>
+                <div class="skeleton skeleton-table" aria-hidden="true"></div>
+            </div>
+            break;
+
+        case ViewState.Loading:
+        case ViewState.Ready:
+            var summary = RankingView.Summarize(ranking!);
+            @if (state == ViewState.Loading)
+            {
+                <div class="inline-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> @LoadingText</div>
+            }
+            @if (CurrentStatus is RunStatuses.Queued or RunStatuses.Running)
+            {
+                <div class="notice is-info" role="status">
+                    <span class="notice-icon" aria-hidden="true">i</span>
+                    <span>
+                        Lượt chấm đang chạy@(meta is null ? null : $": đã xử lý {meta.Processed}/{meta.Total} CV").
+                        CV chưa chấm hiển thị <strong>Chưa có điểm</strong>. Bấm <strong>Làm mới</strong> để xem kết quả mới nhất.
+                    </span>
+                </div>
+            }
+            else if (CurrentStatus == RunStatuses.Failed)
+            {
+                <div class="notice is-warn" role="alert">
+                    <span class="notice-icon" aria-hidden="true">!</span>
+                    <span>Lượt chấm này bị dừng do lỗi phía máy chủ. CV đã chấm vẫn được xếp hạng; CV còn lại hiển thị <strong>Chưa có điểm</strong>.</span>
+                </div>
+            }
+
+            <section class="kpis" aria-label="Tóm tắt vị trí">
+                <div class="kpi">
+                    <span class="kpi-label">CV trong vị trí</span>
+                    <span class="kpi-value">@summary.Total</span>
+                    <span class="kpi-hint">@summary.Scored đã có điểm · @summary.Unscored chưa có điểm</span>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">Dự đoán Đạt (≥ @RankingView.Score(ranking!.PassThreshold))</span>
+                    <span class="kpi-value">@summary.PassCount<small> / @summary.Total</small></span>
+                    <span class="kpi-hint">Theo ngưỡng của lượt chấm</span>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">Điểm cao nhất</span>
+                    <span class="kpi-value">@RankingView.Score(summary.Top?.FinalScore)</span>
+                    <span class="kpi-hint">@(summary.Top is null ? "Chưa có CV nào có điểm" : summary.Top.CandidateName ?? summary.Top.FileName)</span>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">Điểm trung bình</span>
+                    <span class="kpi-value">@RankingView.Score(summary.Average)</span>
+                    <span class="kpi-hint">@(summary.Scored == 0 ? "Chưa có CV nào có điểm" : $"Tính trên {summary.Scored} CV có điểm")</span>
+                </div>
+            </section>
+
+            <RankingTable Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" />
+            break;
+
+        case ViewState.NoRuns:
+            <section class="state-card" role="status">
+                <img src="images/icons/upload-cloud.svg" width="48" height="48" alt="" class="state-img" />
+                <h2>Chưa có lượt chấm nào</h2>
+                <p>Ở trang <strong>Tải hồ sơ lên</strong>: chọn vị trí tuyển dụng, tải CV lên rồi bấm <strong>Phân tích hồ sơ</strong>.
+                   Khi lượt chấm hoàn tất, bảng xếp hạng sẽ hiện ở đây.</p>
+                <div class="state-actions">
+                    <a class="btn sc-btn-primary" href="upload">Đi tới Tải hồ sơ lên</a>
+                    <button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync">Kiểm tra lại</button>
+                </div>
+            </section>
+            break;
+
+        default:
+            var (title, text, tone) = Problem();
+            <section class="state-card is-@tone" role="alert">
+                <span class="state-icon" aria-hidden="true">@(tone == "danger" ? "!" : "?")</span>
+                <h2>@title</h2>
+                <p>@text</p>
+                @if (state == ViewState.JobNotInRun && fallbackJobs is { Count: > 0 })
+                {
+                    <p class="state-hint">Các vị trí trong lượt chấm #@selectedRunId:</p>
+                    <ul class="job-links">
+                        @foreach (var job in fallbackJobs)
+                        {
+                            <li><a href="@RankingView.ResultsUrl(selectedRunId!.Value, job.JobId)">@RankingView.JobOption(job)</a></li>
+                        }
+                    </ul>
+                }
+                <div class="state-actions">
+                    @if (state is ViewState.Offline or ViewState.ApiError or ViewState.RunNotFound)
+                    {
+                        <button type="button" class="btn sc-btn-primary" @onclick="RefreshAsync">Thử lại</button>
+                    }
+                    @if (state == ViewState.InvalidJobId && selectedRunId is { } runId)
+                    {
+                        <a class="btn sc-btn-secondary" href="@RankingView.ResultsUrl(runId)">Xem lượt chấm #@runId</a>
+                    }
+                    @if (state is not (ViewState.Offline or ViewState.ApiError))
+                    {
+                        <a class="btn sc-btn-secondary" href="results">Mở lượt chấm mới nhất</a>
+                    }
+                </div>
+            </section>
+            break;
+    }
 </div>
+
+@code {
+    /// <summary>Các trạng thái của trang (yêu cầu B7 mục 6).</summary>
+    private enum ViewState
+    {
+        Loading, Ready, NoRuns,
+        InvalidRunId, InvalidJobId, RunNotFound, EmptyRun, NotScreening, JobNotInRun, JobHasNoRun,
+        Offline, ApiError
+    }
+
+    /// <summary>Thông tin lượt chấm cho đầu trang: lấy từ danh sách lượt chấm, hoặc GET /api/runs/{id} khi lượt không có trong danh sách.</summary>
+    private sealed record RunMeta(int RunId, string Status, string Model, DateTime CreatedAt, int Total, int Processed);
+
+    [SupplyParameterFromQuery(Name = "runId")] public string? RunIdQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "jobId")] public string? JobIdQuery { get; set; }
+
+    private ViewState state = ViewState.Loading;
+    private string? problemMessage;
+
+    // Danh sách lượt chấm (ô chọn): tải lần đầu và khi bấm Làm mới
+    private List<RunSummaryDto> runs = [];
+    private bool runsLoaded, runsLoading;
+    private string? runsError;
+
+    private int? selectedRunId;              // lượt đang chọn (từ địa chỉ, hoặc lượt mới nhất khi địa chỉ không có runId)
+    private int? selectedJobId;              // job trên địa chỉ (null = job đầu tiên do API chọn)
+    private RankingResponse? ranking;        // bảng xếp hạng đã tải xong gần nhất
+    private RunMeta? meta;
+    private List<JobCountDto>? fallbackJobs; // job hợp lệ của lượt khi jobId trên địa chỉ không thuộc lượt
+
+    private (string? Run, string? Job)? loadedQuery;
+    private int loadVersion;
+    private CancellationTokenSource? loadCts;
+
+    /// <summary>Đang hiển thị đúng lượt (và job) đang chọn: dùng để giữ bảng cũ mờ đi khi bấm Làm mới thay vì nháy trắng.</summary>
+    private bool ShowCurrent => ranking is not null && state is ViewState.Ready or ViewState.Loading
+                                && ranking.RunId == selectedRunId
+                                && (selectedJobId is null || selectedJobId == ranking.JobId);
+
+    private string CurrentStatus => ranking?.RunStatus ?? meta?.Status ?? string.Empty;
+
+    private IReadOnlyList<JobCountDto>? FilterJobs =>
+        ranking is not null && ranking.RunId == selectedRunId ? ranking.Jobs : fallbackJobs;
+
+    private int? FilterJobId => selectedJobId ?? (ranking is not null && ranking.RunId == selectedRunId ? ranking.JobId : null);
+
+    private string LoadingText => selectedRunId is { } id ? $"Đang tải bảng xếp hạng lượt chấm #{id}..." : "Đang tải lượt chấm mới nhất...";
+
+    protected override Task OnParametersSetAsync() => LoadAsync(force: false);
+
+    private Task RefreshAsync() => LoadAsync(force: true);
+
+    // ---------------- Đổi bộ lọc = đổi địa chỉ ----------------
+
+    private void GoToRun(int runId) => Nav.NavigateTo(RankingView.ResultsUrl(runId));
+
+    private void GoToJob(int jobId)
+    {
+        // Lượt đang chọn (kể cả khi địa chỉ chưa có runId vì đang xem lượt mới nhất)
+        if (selectedRunId is { } runId) Nav.NavigateTo(RankingView.ResultsUrl(runId, jobId));
+    }
+
+    // ---------------- Tải dữ liệu ----------------
+
+    private async Task LoadAsync(bool force)
+    {
+        var query = (RunIdQuery, JobIdQuery);
+        if (!force && loadedQuery == query) return;   // Blazor có thể gọi lại với cùng tham số
+        loadedQuery = query;
+
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+        var ct = loadCts.Token;
+        var version = ++loadVersion;
+
+        var runOk = RankingView.TryParseId(RunIdQuery, out var runId);
+        var jobOk = RankingView.TryParseId(JobIdQuery, out var jobId);
+        selectedRunId = runOk ? runId : null;
+        selectedJobId = jobOk ? jobId : null;
+        problemMessage = null;
+        fallbackJobs = null;
+        state = ViewState.Loading;
+
+        var runsTask = force || !runsLoaded ? RunApi.ListScreeningAsync(ct: ct) : null;
+        runsLoading = runsTask is not null;
+
+        try
+        {
+            if (!runOk || !jobOk)
+            {
+                await ApplyRunsAsync(runsTask, version);
+                if (version == loadVersion) state = !runOk ? ViewState.InvalidRunId : ViewState.InvalidJobId;
+                return;
+            }
+
+            // 1) Không có runId trên địa chỉ: mở lượt Screening mới nhất
+            if (runId is null)
+            {
+                var latest = await RunApi.GetLatestAsync(jobId, ct);
+                if (version != loadVersion) return;
+                if (!latest.IsSuccess)
+                {
+                    await ApplyRunsAsync(runsTask, version);
+                    if (version != loadVersion) return;
+                    if (latest.StatusCode == 404) state = jobId is null ? ViewState.NoRuns : ViewState.JobHasNoRun;
+                    else Fail(latest);
+                    return;
+                }
+                runId = latest.Data!.RunId;
+                selectedRunId = runId;
+            }
+
+            // 2) Bảng xếp hạng của lượt + job đang chọn
+            var result = await RunApi.GetRankingAsync(runId.Value, jobId, ct);
+            if (version != loadVersion) return;
+            await ApplyRunsAsync(runsTask, version);
+            if (version != loadVersion) return;
+
+            if (result.IsSuccess)
+            {
+                var data = result.Data!;
+                var summary = runs.FirstOrDefault(r => r.RunId == data.RunId);
+                RunMeta? newMeta = summary is null ? null
+                    : new(summary.RunId, summary.Status, summary.ModelName, summary.CreatedAt, summary.TotalItems, summary.ProcessedItems);
+
+                if (summary is null)
+                {
+                    // Lượt không nằm trong danh sách Screening: hỏi thêm loại lượt (PromptTest không thuộc trang này)
+                    var run = await RunApi.GetRunAsync(data.RunId, ct);
+                    if (version != loadVersion) return;
+                    if (run.IsSuccess && run.Data!.RunType != RunTypes.Screening)
+                    {
+                        state = ViewState.NotScreening;
+                        return;
+                    }
+                    if (run.IsSuccess)
+                    {
+                        var p = run.Data!;
+                        newMeta = new(p.RunId, p.Status, p.ModelName, p.CreatedAt, p.TotalItems, p.ProcessedItems);
+                    }
+                }
+
+                ranking = data;
+                meta = newMeta;
+                state = ViewState.Ready;
+                return;
+            }
+
+            if (result.StatusCode == 404)
+            {
+                if (jobId is not null)
+                {
+                    // Phân biệt "job không thuộc lượt" với "lượt không tồn tại": hỏi lại không kèm jobId
+                    var fallback = await RunApi.GetRankingAsync(runId.Value, null, ct);
+                    if (version != loadVersion) return;
+                    if (fallback.IsSuccess)
+                    {
+                        fallbackJobs = fallback.Data!.Jobs;
+                        state = ViewState.JobNotInRun;
+                        return;
+                    }
+                    if (fallback.StatusCode != 404)
+                    {
+                        Fail(fallback);
+                        return;
+                    }
+                }
+                state = runs.Any(r => r.RunId == runId) ? ViewState.EmptyRun : ViewState.RunNotFound;
+                return;
+            }
+
+            Fail(result);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Người dùng đã chọn lượt/job khác hoặc rời trang: bỏ kết quả cũ
+        }
+    }
+
+    private async Task ApplyRunsAsync(Task<ApiResult<List<RunSummaryDto>>>? task, int version)
+    {
+        if (task is null) return;
+        var result = await task;
+        if (version != loadVersion) return;
+        runsLoading = false;
+        if (result.IsSuccess)
+        {
+            runs = result.Data!;
+            runsLoaded = true;
+            runsError = null;
+        }
+        else
+        {
+            runsError = RunFlow.FailureMessage(result, "Máy chủ API gặp lỗi.");   // 5xx: không hiện chi tiết kỹ thuật
+        }
+    }
+
+    private void Fail<T>(ApiResult<T> result)
+    {
+        state = result.StatusCode is null ? ViewState.Offline : ViewState.ApiError;
+        problemMessage = RunFlow.FailureMessage(result,
+            "Máy chủ API gặp lỗi khi tải kết quả. Xem log ở terminal đang chạy API rồi thử lại.");
+    }
+
+    private (string Title, string Text, string Tone) Problem() => state switch
+    {
+        ViewState.InvalidRunId => ("Mã lượt chấm không hợp lệ",
+            $"Địa chỉ có runId = \"{RunIdQuery}\". Mã lượt chấm phải là số nguyên dương, ví dụ /results?runId=3.", "warn"),
+        ViewState.InvalidJobId => ("Mã vị trí không hợp lệ",
+            $"Địa chỉ có jobId = \"{JobIdQuery}\". Mã vị trí phải là số nguyên dương, ví dụ /results?runId=3&jobId=1.", "warn"),
+        ViewState.RunNotFound => ($"Không tìm thấy lượt chấm #{selectedRunId}",
+            "Lượt chấm này không tồn tại hoặc đã bị xóa. Hãy chọn lượt khác ở ô Lượt chấm.", "warn"),
+        ViewState.EmptyRun => ($"Lượt chấm #{selectedRunId} chưa có hồ sơ nào",
+            "Lượt chấm này không có CV để xếp hạng. Hãy chọn lượt khác ở ô Lượt chấm.", "warn"),
+        ViewState.NotScreening => ($"Lượt #{selectedRunId} không phải lượt sàng lọc CV",
+            "Đây là lượt kiểm thử prompt. Trang này chỉ hiển thị kết quả của các lượt sàng lọc (Screening).", "warn"),
+        ViewState.JobNotInRun => ($"Vị trí #{selectedJobId} không thuộc lượt chấm #{selectedRunId}",
+            "Hãy chọn một vị trí có trong lượt chấm này.", "warn"),
+        ViewState.JobHasNoRun => ($"Chưa có lượt chấm nào cho vị trí #{selectedJobId}",
+            "Vị trí này chưa được phân tích, hoặc mã vị trí không đúng.", "warn"),
+        ViewState.Offline => ("Không kết nối được máy chủ API", problemMessage ?? string.Empty, "danger"),
+        _ => ("API trả về lỗi", problemMessage ?? string.Empty, "danger")
+    };
+
+    private static string StatusCss(string status) => status switch
+    {
+        RunStatuses.Completed => "is-done",
+        RunStatuses.Failed => "is-failed",
+        _ => "is-running"
+    };
+
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+    }
+}

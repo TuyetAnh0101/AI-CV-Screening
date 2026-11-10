@@ -397,8 +397,10 @@ public class RunProgressUiTests
         Assert.Contains("CV chưa trích xuất được nội dung.", text);
         Assert.DoesNotContain("ExtractionStatus = Failed", text);
         Assert.Contains("Đã dừng cập nhật", text);
-        Assert.DoesNotContain("results?runId", string.Concat(r.Frames().Where(f => f.FrameType == RenderTreeFrameType.Attribute)
-            .Select(f => f.AttributeValue as string)));   // B7 chưa có: không đặt liên kết
+        // B7: lượt đã xong → liên kết "Xem bảng xếp hạng" mở đúng lượt vừa chấm
+        Assert.Contains("Xem bảng xếp hạng", text);
+        Assert.Contains("results?runId=31", r.Frames().Where(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "href")
+            .Select(f => f.AttributeValue as string));
 
         // Đã Completed: ngừng hỏi API
         var after = polls;
