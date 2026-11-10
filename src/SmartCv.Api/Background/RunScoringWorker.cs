@@ -27,6 +27,7 @@ public sealed class RunScoringWorker(
 
         var idle = TimeSpan.FromSeconds(options.Value.PollIntervalSeconds);
         logger.LogInformation("Tiến trình chấm điểm đã chạy (kiểm tra mỗi {Seconds} giây)", idle.TotalSeconds);
+        var (database, userAccess) = await CheckDatabaseAsync(stoppingToken);
 
         var consecutiveErrors = 0;
         while (!stoppingToken.IsCancellationRequested)
@@ -46,7 +47,18 @@ public sealed class RunScoringWorker(
                 // Mất kết nối database...: không làm sập API, trạng thái đã lưu vẫn nguyên
                 consecutiveErrors++;
                 didWork = false;
-                logger.LogError(ex, "Lỗi trong tiến trình chấm điểm (lần {Count} liên tiếp)", consecutiveErrors);
+                // Không mở được database: mã lỗi rõ ràng (4060, 924...) HOẶC lúc khởi động đã thấy database không MULTI_USER.
+                // Với SINGLE_USER, kết nối thứ hai có lúc bị từ chối (4060), có lúc bị treo tới hết thời gian chờ (-2),
+                // nên phải dựa cả vào kết quả kiểm tra lúc khởi động. Chưa chấm hồ sơ nào, chưa gọi Gemini, trạng thái lượt giữ nguyên.
+                if (WorkerDatabaseDiagnostics.TryGetDatabaseAccessError(ex, out _) || !WorkerDatabaseDiagnostics.SupportsWorker(userAccess))
+                    logger.LogError(ex,
+                        "Tiến trình chấm điểm không mở được database {Database} (chế độ lúc khởi động: {UserAccess}, lỗi SQL {SqlNumber}, lần {Count} liên tiếp). " +
+                        "Mỗi vòng chấm cần 2 kết nối đồng thời (khóa worker + xử lý lượt), nên các lượt sẽ đứng ở Queued. " +
+                        "Kiểm tra database có ở chế độ MULTI_USER và tài khoản có quyền truy cập. {Hint}",
+                        database, userAccess ?? "(chưa đọc được)", WorkerDatabaseDiagnostics.FirstSqlErrorNumber(ex)?.ToString() ?? "-",
+                        consecutiveErrors, WorkerDatabaseDiagnostics.FixHint(database));
+                else
+                    logger.LogError(ex, "Lỗi trong tiến trình chấm điểm (lần {Count} liên tiếp)", consecutiveErrors);
             }
 
             if (didWork) continue;   // vừa chấm được: kiểm tra việc tiếp theo ngay
@@ -56,6 +68,43 @@ public sealed class RunScoringWorker(
         }
 
         logger.LogInformation("Tiến trình chấm điểm đã dừng");
+    }
+
+    /// <summary>
+    /// Kiểm tra một lần lúc worker khởi động: database phải cho phép nhiều kết nối đồng thời.
+    /// Chỉ ĐỌC và chỉ ghi log; không dừng worker (sửa database xong là vòng sau tự chạy, không cần khởi động lại API).
+    /// Trả tên database và chế độ truy cập (null: không phải SQL Server hoặc chưa đọc được) để các log lỗi sau dùng lại.
+    /// </summary>
+    private async Task<(string Database, string? UserAccess)> CheckDatabaseAsync(CancellationToken ct)
+    {
+        var database = "(không rõ)";
+        string? access = null;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SmartCv.Infrastructure.Data.SmartCvDbContext>();
+            database = WorkerDatabaseDiagnostics.DatabaseName(db);
+            access = await WorkerDatabaseDiagnostics.ReadUserAccessAsync(db, ct);
+            if (!WorkerDatabaseDiagnostics.SupportsWorker(access))
+                logger.LogError(
+                    "Tiến trình chấm điểm KHÔNG chạy được: database {Database} đang ở chế độ {UserAccess}. " +
+                    "Mỗi vòng chấm cần 2 kết nối đồng thời (khóa worker sp_getapplock + DbContext xử lý lượt), " +
+                    "nên mọi lượt sẽ đứng ở Queued và Gemini không được gọi. {Hint}",
+                    database, access, WorkerDatabaseDiagnostics.FixHint(database));
+            else if (access is not null)
+                logger.LogInformation("Database {Database} ở chế độ {UserAccess}: tiến trình chấm điểm dùng được", database, access);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Chưa kết nối được lúc khởi động: vòng chấm sẽ tự thử lại và ghi log lỗi chi tiết
+            logger.LogWarning("Chưa kiểm tra được chế độ truy cập của database {Database} ({ErrorType}); tiến trình chấm điểm sẽ thử lại",
+                database, ex.GetType().Name);
+        }
+        return (database, access);
     }
 
     private async Task<bool> RunPassAsync(CancellationToken ct)
