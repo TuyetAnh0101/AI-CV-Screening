@@ -1,7 +1,8 @@
 # A15 – Bộ CV đánh giá, nhãn HR và PromptTest
 
-Phạm vi: quản lý bộ/nhãn, CSV và khởi chạy/đọc lượt chấm. Không tính accuracy,
-không phân loại Missed/WrongPick, không so sánh prompt. Không có migration mới.
+Phạm vi A15: quản lý bộ/nhãn, CSV và khởi chạy/đọc lượt chấm. A16 hiện bổ sung
+accuracy và phân loại Missed/WrongPick, xem [A16-accuracy.md](A16-accuracy.md).
+Không có API so sánh prompt hoặc migration mới.
 
 ## API
 
@@ -44,17 +45,14 @@ import không tự xóa dấu nháy này khỏi nội dung người dùng.
 
 ## Ranh giới với A16/A17
 
-`PromptTestRunDto`/`PromptTestProgressDto` chỉ có danh tính, snapshot cấu hình,
-trạng thái, số CV, thời điểm và kết quả chấm đã lưu. `AccuracyPercent` chỉ đọc
-giá trị lịch sử; `AccuracyStatus` là `Stored` hoặc `NotCalculated`.
-Không trả các counter A16 bằng số 0 giả, không trả `isMatch`/`mismatchType`.
-Các DTO A16/A17 đã có trong `PromptContracts.cs` được giữ để các nhiệm vụ sau
-tiếp tục phát triển; không đăng ký endpoint compare.
+`PromptTestRunDto`/`PromptTestProgressDto` giữ các trường A15 và bổ sung thống kê
+A16. Chỉ công bố accuracy/counter tổng hợp khi Completed; khi chưa xong là null.
+Chi tiết có `isMatch`/`mismatchType`, sử dụng PredictedPass thay vì AiScore.
 
-Khi nhãn thêm/sửa/xóa, accuracy đã lưu của bộ được đặt `null` trong cùng giao
-dịch. `invalidatedRunIds` liệt kê lượt bị vô hiệu hóa; `recalculatedRunIds`
-luôn rỗng. A16 chịu trách nhiệm tính/lưu lại. Danh sách Evaluation của lượt cũ
-giữ nguyên: bỏ nhãn không làm mất kết quả, nhưng `hrIsPass` hiện tại có thể null.
+Khi nhãn thêm/sửa/xóa, accuracy của các PromptTest Completed được tính lại
+trong cùng giao dịch; `recalculatedRunIds` liệt kê cache đã thay đổi.
+`invalidatedRunIds` được giữ tương thích và rỗng. Danh sách Evaluation cũ giữ
+nguyên: bỏ nhãn không làm mất kết quả, nhưng `hrIsPass` hiện tại có thể null.
 Thêm hồ sơ sau khi chạy cần tạo lượt mới nếu muốn đánh giá toàn bộ bộ hiện tại.
 
 SQL Server dùng giao dịch Serializable và khóa hàng EvaluationSets để đồng bộ

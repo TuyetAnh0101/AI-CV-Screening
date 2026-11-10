@@ -152,7 +152,7 @@ public class PromptTestEndpointTests
     }
 
     [Fact]
-    public async Task Read_progress_uses_saved_results_including_removed_hr_labels_without_a16_or_a17_metrics()
+    public async Task Running_progress_preserves_results_and_removed_labels_without_publishing_final_accuracy()
     {
         using var factory = Factory();
         using var client = factory.CreateClient();
@@ -182,9 +182,9 @@ public class PromptTestEndpointTests
         Assert.Single((await client.GetFromJsonAsync<List<PromptTestRunDto>>($"/api/prompt-tests?evaluationSetId={ids.Set}"))!);
         Assert.Empty((await client.GetFromJsonAsync<List<PromptTestRunDto>>("/api/prompt-tests?evaluationSetId=999999"))!);
         using var json = JsonDocument.Parse(await client.GetStringAsync($"/api/prompt-tests/{runId}"));
-        Assert.False(json.RootElement.TryGetProperty("correctCount", out _));
-        Assert.False(json.RootElement.GetProperty("items")[0].TryGetProperty("isMatch", out _));
-        Assert.False(json.RootElement.GetProperty("items")[0].TryGetProperty("mismatchType", out _));
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("correctCount").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("items")[0].GetProperty("isMatch").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("items")[0].GetProperty("mismatchType").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompt-tests/999999")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompt-tests/compare")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompts/compare")).StatusCode);

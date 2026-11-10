@@ -9,6 +9,7 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Prompts;
 
 namespace SmartCv.Infrastructure.Scoring;
 
@@ -117,8 +118,11 @@ public sealed class RunScoringProcessor(
     /// <summary>Các lượt chấm đang chờ hoặc đang chạy, cũ nhất trước.</summary>
     public Task<List<int>> FindActiveRunsAsync(CancellationToken ct) =>
         db.EvaluationRuns.AsNoTracking()
-            .Where(r => (r.Status == RunStatuses.Queued || r.Status == RunStatuses.Running)
+            .Where(r => ((r.Status == RunStatuses.Queued || r.Status == RunStatuses.Running)
                         && (r.RunType == RunTypes.Screening || r.RunType == RunTypes.PromptTest))
+                || (r.RunType == RunTypes.PromptTest && r.Status == RunStatuses.Completed
+                    && r.AccuracyPercent == null
+                    && r.Evaluations.Any(e => e.Application.HrLabels.Any(h => h.EvaluationSetId == r.EvaluationSetId))))
             .OrderBy(r => r.CreatedAt).ThenBy(r => r.RunId)
             .Select(r => r.RunId)
             .ToListAsync(ct);
@@ -130,7 +134,19 @@ public sealed class RunScoringProcessor(
     public async Task<int> ProcessRunAsync(int runId, CancellationToken ct)
     {
         var run = await db.EvaluationRuns.FirstOrDefaultAsync(r => r.RunId == runId, ct);
-        if (run is null || run.Status is not (RunStatuses.Queued or RunStatuses.Running)) return 0;
+        if (run is null) return 0;
+        // A16 restart recovery: completed CV results are never sent to AI again.
+        if (run.RunType == RunTypes.PromptTest && run.Status == RunStatuses.Completed)
+        {
+            if (run.AccuracyPercent is null && run.EvaluationSetId is { } setId)
+            {
+                await using var transaction = await EvaluationSetWriteScope.BeginAsync(db, setId, ct);
+                await SaveAccuracyAsync(run.RunId, ct);
+                if (transaction is not null) await transaction.CommitAsync(ct);
+            }
+            return 0;
+        }
+        if (run.Status is not (RunStatuses.Queued or RunStatuses.Running)) return 0;
 
         if (run.Status == RunStatuses.Queued)
         {
@@ -158,9 +174,7 @@ public sealed class RunScoringProcessor(
 
         // Lượt không có hồ sơ cần chấm trong vòng này: vẫn đếm lại để hoàn tất nếu đã hết Pending
         db.ChangeTracker.Clear();
-        run = await db.EvaluationRuns.FirstAsync(r => r.RunId == runId, ct);
-        await RefreshProgressAsync(run, current: null, ct);
-        await db.SaveChangesAsync(CancellationToken.None);
+        await SaveWithProgressAsync(runId, current: null);
         return scored;
     }
 
@@ -256,11 +270,27 @@ public sealed class RunScoringProcessor(
     /// Lưu kết quả cùng tiến độ. Dùng CancellationToken.None: kết quả AI đã có (đã tốn quota) thì lưu cho xong
     /// kể cả khi API đang tắt, phần chưa gọi AI đã dừng theo token từ trước.
     /// </summary>
-    private async Task SaveWithProgressAsync(int runId, Evaluation current)
+    private async Task SaveWithProgressAsync(int runId, Evaluation? current)
     {
         var run = await db.EvaluationRuns.FirstAsync(r => r.RunId == runId, CancellationToken.None);
+        // A16: same lock order as HR label writes. AI computation has already finished outside this lock.
+        await using var transaction = run.RunType == RunTypes.PromptTest && run.EvaluationSetId is { } setId
+            ? await EvaluationSetWriteScope.BeginAsync(db, setId, CancellationToken.None) : null;
         await RefreshProgressAsync(run, current, CancellationToken.None);
         await db.SaveChangesAsync(CancellationToken.None);
+        if (run.RunType == RunTypes.PromptTest && run.Status == RunStatuses.Completed)
+            await SaveAccuracyAsync(runId, CancellationToken.None);
+        if (transaction is not null) await transaction.CommitAsync(CancellationToken.None);
+    }
+
+    private async Task SaveAccuracyAsync(int runId, CancellationToken ct)
+    {
+        var result = await db.SaveCompletedAccuracyAsync(runId, ct);
+        if (result is null) return;
+        logger.LogInformation(
+            "Lượt PromptTest {RunId}: đúng {Correct}/{Total}, accuracy {Accuracy}, bỏ sót {Missed}, chọn nhầm {WrongPick}, chưa chấm được {Unscored}, chỉ keyword {KeywordOnly}",
+            runId, result.Correct, result.Total, result.AccuracyPercent, result.Missed, result.WrongPick,
+            result.Unscored, result.KeywordOnly);
     }
 
     private static void MarkFailed(Evaluation e, string message)

@@ -1,6 +1,6 @@
 namespace SmartCv.Core.Contracts;
 
-/// <summary>A15 run data. A16 accuracy counters are deliberately absent until they are calculated.</summary>
+/// <summary>A15 run metadata with A16 statistics. Final counters remain null until Completed.</summary>
 public class PromptTestRunDto
 {
     public int RunId { get; init; }
@@ -21,9 +21,15 @@ public class PromptTestRunDto
         Math.Round(ProcessedItems * 100m / TotalItems, 2, MidpointRounding.AwayFromZero), 0, 100);
     public DateTime CreatedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
-    /// <summary>Historical value only. A15 never calculates an accuracy percentage.</summary>
+    /// <summary>Completed-run accuracy calculated from this run's evaluations and current HR labels.</summary>
     public decimal? AccuracyPercent { get; init; }
     public string AccuracyStatus => AccuracyPercent is null ? "NotCalculated" : "Stored";
+    public int? TotalLabeledCount { get; init; }
+    public int? CorrectCount { get; init; }
+    public int? MissedCount { get; init; }
+    public int? WrongPickCount { get; init; }
+    public int? UnscoredCount { get; init; }
+    public int? KeywordOnlyCount { get; init; }
 }
 
 public sealed class PromptTestProgressDto : PromptTestRunDto
@@ -53,4 +59,6 @@ public sealed class PromptTestEvaluationDto
     public string? FitLabel { get; init; }
     public string? Reasoning { get; init; }
     public string? ErrorMessage { get; init; }
+    public bool? IsMatch { get; init; }
+    public string? MismatchType { get; init; }
 }

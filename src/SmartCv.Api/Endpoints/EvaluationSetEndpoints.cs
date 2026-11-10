@@ -24,7 +24,7 @@ namespace SmartCv.Api.Endpoints;
 ///   POST   /api/evaluation-sets/{id}/labels/import           nhập nhãn từ file CSV (form: file, labeledBy)
 ///   GET    /api/evaluation-sets/{id}/labels/template         tải file CSV mẫu cho HR điền bằng Excel
 ///   DELETE /api/evaluation-sets/{id}/labels/{applicationId}  bỏ nhãn một hồ sơ
-/// Nhãn đổi → hủy accuracy đã lưu có thể lỗi thời; tính lại thuộc A16.
+/// A16: nhãn đổi → tính lại accuracy trong cùng transaction và khóa bộ đánh giá.
 /// </summary>
 public static class EvaluationSetEndpoints
 {
@@ -289,8 +289,8 @@ public static class EvaluationSetEndpoints
         if (label is null) return Problem(404, "Không tìm thấy", $"Hồ sơ {applicationId} chưa có nhãn trong bộ #{id}.");
 
         db.HrLabels.Remove(label);
-        await InvalidateStoredAccuracyAsync(db, id, ct);
         await db.SaveChangesAsync(ct);
+        await db.RecalculateSetAccuracyAsync(id, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         return TypedResults.NoContent();
     }
@@ -354,10 +354,9 @@ public static class EvaluationSetEndpoints
                 added++;
             }
         }
-        var invalidated = added + updated > 0 ? await InvalidateStoredAccuracyAsync(db, setId, ct) : [];
         await db.SaveChangesAsync(ct);
-        if (added + updated > 0)
-            warnings.Add("Nhãn đã thay đổi; accuracy đã lưu có thể lỗi thời đã được bỏ. A15 chưa tính lại accuracy (thuộc A16).");
+        // Re-read current HR labels after saving, while the A15 set lock is still held.
+        var recalculated = added + updated > 0 ? await db.RecalculateSetAccuracyAsync(setId, ct) : [];
         if (added > 0 && await db.EvaluationRuns.AnyAsync(r => r.EvaluationSetId == setId, ct))
             warnings.Add($"Đã thêm {added} hồ sơ mới vào bộ: các lần chạy cũ giữ nguyên danh sách hồ sơ lúc tạo. Hãy chạy lại để đánh giá bộ hiện tại.");
 
@@ -372,17 +371,8 @@ public static class EvaluationSetEndpoints
         {
             Added = added, Updated = updated, Unchanged = unchanged,
             LabelCount = total, PassCount = pass,
-            RecalculatedRunIds = [], InvalidatedRunIds = invalidated, Warnings = warnings
+            RecalculatedRunIds = recalculated, InvalidatedRunIds = [], Warnings = warnings
         });
-    }
-
-    private static async Task<List<int>> InvalidateStoredAccuracyAsync(SmartCvDbContext db, int setId, CancellationToken ct)
-    {
-        var runs = await db.EvaluationRuns
-            .Where(r => r.RunType == RunTypes.PromptTest && r.EvaluationSetId == setId && r.AccuracyPercent != null)
-            .ToListAsync(ct);
-        foreach (var run in runs) run.AccuracyPercent = null;
-        return runs.Select(r => r.RunId).OrderBy(id => id).ToList();
     }
 
     private static ProblemHttpResult NotFoundSet(int id) => Problem(404, "Không tìm thấy", $"Không có bộ CV đánh giá #{id}.");
