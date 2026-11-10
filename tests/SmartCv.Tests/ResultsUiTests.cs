@@ -439,7 +439,7 @@ public class ResultsUiTests
         Assert.Contains("Lượt chấm đang chạy: đã xử lý 1/3 CV", text);
         // CV đang chờ chấm: không có điểm, nằm cuối
         AssertOrder(text, "Võ Thành Nam", "Đỗ Chưa Chấm");
-        Assert.Contains("Chưa có điểm Chờ chấm", text);
+        Assert.Contains("Đang chấm Chưa có điểm", text);   // B8: nhãn trạng thái Pending
     }
 
     [Fact]
@@ -480,7 +480,8 @@ public class ResultsUiTests
         var text = r.TableText;
         AssertOrder(text, "Nguyễn Văn An", "Trần Thị Bình", "Lê Hoàng Cường", "Lý Văn Minh");
         var failedRow = text[text.IndexOf("Lý Văn Minh", StringComparison.Ordinal)..];
-        Assert.StartsWith("Lý Văn Minh CV_14.pdf — — — — — Chưa có điểm Lỗi", failedRow);
+        // B8: bắt buộc —, kinh nghiệm —, thanh điểm "KW — · AI —", điểm cuối —, nhãn "Lỗi xử lý" (không có điểm 0 giả)
+        Assert.StartsWith("Lý Văn Minh CV_14.pdf — — KW — · AI — — Lỗi xử lý Chưa có điểm", failedRow);
         Assert.Contains("01 VA Nguyễn Văn An", text);
         Assert.Contains("Rất phù hợp Dự đoán Đạt", text);
         Assert.Contains("Tiềm năng Dự đoán Không đạt", text);

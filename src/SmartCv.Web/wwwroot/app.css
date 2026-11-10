@@ -72,11 +72,24 @@ h1:focus {
     --text-main: #163333;      /* tiêu đề, nội dung chính */
     --text-muted: #526767;     /* mô tả, nhãn phụ */
 
-    /* 4 mức đánh giá (B8) */
-    --fit-excellent: #15803d;  /* Rất phù hợp */
-    --fit-good: #0f766e;       /* Phù hợp */
-    --fit-potential: #b45309;  /* Tiềm năng */
-    --fit-poor: #b91c1c;       /* Chưa phù hợp */
+    /* 4 mức đánh giá (B8, Design System v2): chữ + nền nhạt. Tên biến giữ như B2 để chỗ cũ dùng tiếp. */
+    --fit-excellent: #047857;  --fit-excellent-bg: #d1fae5;   /* Rất phù hợp  85–100 */
+    --fit-good: #0f766e;       --fit-good-bg: #ccfbf1;        /* Phù hợp      70–84 */
+    --fit-potential: #b45309;  --fit-potential-bg: #fef3c7;   /* Tiềm năng    55–69 */
+    --fit-poor: #be123c;       --fit-poor-bg: #ffe4e6;        /* Chưa phù hợp 0–54 */
+
+    /* Trạng thái xử lý (B8): KHÁC mức đánh giá */
+    --sc-error: #b91c1c;   --sc-error-bg: #fee2e2;    /* Lỗi xử lý (Status = Failed) */
+    --sc-info: #0369a1;    --sc-info-bg: #e0f2fe;     /* Đang chấm (Status = Pending) */
+    --sc-neutral: #475569; --sc-neutral-bg: #f1f5f9;  /* Chỉ chấm Keyword (ScoreSource = KeywordOnly), chưa có kết quả */
+    --sc-ink-900: #0f2a2a;                            /* vạch ngưỡng Đạt */
+
+    /* AI Glow: chỉ dùng cho thứ do Gemini tạo ra */
+    --sc-grad-ai: linear-gradient(135deg, #14b8a6, #06b6d4 50%, #6366f1);
+
+    /* Font v2: tiêu đề + số điểm; dữ liệu kỹ thuật (tên phiên bản prompt, mô hình) */
+    --sc-font-display: "Be Vietnam Pro", "Inter", "Segoe UI", system-ui, sans-serif;
+    --sc-font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
 }
 
 body {
@@ -174,22 +187,41 @@ body {
 .api-status.offline { color: var(--fit-poor); border-color: #fecaca; background: #fef2f2; }
 .api-status.offline .dot { background: var(--fit-poor); }
 
-/* ---------- Nhãn mức đánh giá (B6 dùng, B8 dùng tiếp) ---------- */
+/* ---------- Nhãn mức đánh giá (B8): viên thuốc nền nhạt + chấm tròn ----------
+   Dùng chung cho component FitBadge (B7 bảng xếp hạng) và thẻ tiến độ B6. Màu lấy từ biến --fit-* / --sc-* ở trên. */
 .fit-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 100px;
+    gap: 6px;
     height: 24px;
     padding: 0 10px;
-    border-radius: 100px;
+    border: 1px solid transparent;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
-    color: #fff;
-    background: #94a3b8;
+    line-height: 1;
     white-space: nowrap;
+    color: var(--sc-neutral);
+    background: var(--sc-neutral-bg);
 }
-.fit-badge.fit-excellent { background: var(--fit-excellent); }
-.fit-badge.fit-good { background: var(--fit-good); }
-.fit-badge.fit-potential { background: var(--fit-potential); }
-.fit-badge.fit-poor { background: var(--fit-poor); }
+.fit-badge::before {
+    content: "";
+    flex: 0 0 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.fit-badge.fit-excellent { color: var(--fit-excellent); background: var(--fit-excellent-bg); }
+.fit-badge.fit-good      { color: var(--fit-good);      background: var(--fit-good-bg); }
+.fit-badge.fit-potential { color: var(--fit-potential); background: var(--fit-potential-bg); }
+.fit-badge.fit-poor      { color: var(--fit-poor);      background: var(--fit-poor-bg); }
+.fit-badge.fit-none      { color: var(--sc-neutral);    background: var(--sc-neutral-bg); }
+.fit-badge.is-error      { color: var(--sc-error);      background: var(--sc-error-bg); }
+.fit-badge.is-pending    { color: var(--sc-info);       background: var(--sc-info-bg); }
+.fit-badge.is-pending::before { animation: fit-pulse 1.2s ease-in-out infinite; }
+/* Nhãn phụ (vd "Chỉ chấm Keyword"): viền thay nền để không lẫn với mức đánh giá */
+.fit-badge.is-keyword    { color: var(--sc-neutral);    background: #fff; border-color: #cbd5e1; }
+.fit-badge.is-keyword::before { border-radius: 1px; }
+@keyframes fit-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .fit-badge.is-pending::before { animation: none; } }

@@ -1,0 +1,36 @@
+@*
+    B8: thanh điểm của MỘT CV.
+      Lớp mờ  = KeywordScore (kèm vạch nhỏ ở đầu để thấy được cả khi nằm dưới lớp đậm)
+      Lớp đậm = FinalScore, màu theo 4 mức (FitLevel); ScoreSource = KeywordOnly → xám trung tính
+      Vạch đen = PassThreshold của LƯỢT CHẤM (lấy từ API, không viết cứng)
+    Điểm null → không vẽ lớp đó (không có thanh giả, không coi là 0). Vị trí vẽ kẹp trong 0–100, điểm gốc không đổi.
+*@
+
+<span class="score-bar @FitLevel.ScoreTone(Final, ScoreSource)" role="img" aria-label="@FitLevel.ScoreBarLabel(Keyword, Final, Threshold, ScoreSource)">
+    <span class="track">
+        @if (FitLevel.BarPercent(Keyword) is { } kw)
+        {
+            <span class="kw" style="width:@Css(kw)%"></span>
+            <span class="kw-tick" style="left:@Css(kw)%"></span>
+        }
+        @if (FitLevel.BarPercent(Final) is { } final)
+        {
+            <span class="final" style="width:@Css(final)%"></span>
+        }
+        @if (FitLevel.BarPercent(Threshold) is { } pass)
+        {
+            <span class="pass-line" style="left:@Css(pass)%"></span>
+        }
+    </span>
+</span>
+
+@code {
+    [Parameter] public decimal? Keyword { get; set; }
+    [Parameter] public decimal? Final { get; set; }
+    /// <summary>Ngưỡng Đạt của lượt chấm (RankingResponse.PassThreshold). null → không vẽ vạch.</summary>
+    [Parameter] public decimal? Threshold { get; set; }
+    /// <summary>Evaluations.ScoreSource: Combined | KeywordOnly</summary>
+    [Parameter] public string? ScoreSource { get; set; }
+
+    private static string Css(decimal percent) => percent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

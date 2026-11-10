@@ -33,10 +33,10 @@
                     </p>
                     <h1>@ranking.JobTitle</h1>
                     <ul class="chips" aria-label="Cấu hình lượt chấm">
-                        <li class="chip"><span>Prompt</span> @ranking.PromptVersionName</li>
+                        <li class="chip"><span>Prompt</span> <code class="tech">@ranking.PromptVersionName</code></li>
                         @if (meta is not null)
                         {
-                            <li class="chip"><span>Mô hình</span> @meta.Model</li>
+                            <li class="chip"><span>Mô hình</span> <code class="tech">@meta.Model</code></li>
                             <li class="chip"><span>Tạo lúc</span> @RankingView.VnTime(meta.CreatedAt)</li>
                         }
                         <li class="chip"><span>Ngưỡng Đạt</span> @RankingView.Score(ranking.PassThreshold)</li>
