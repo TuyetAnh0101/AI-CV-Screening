@@ -1,0 +1,62 @@
+/* B8: thanh điểm. Màu theo mức lấy từ biến --fit-* trong app.css. */
+.score-bar {
+    display: block;
+    width: 100%;
+    max-width: 180px;
+    padding: 5px 0;
+}
+
+.track {
+    position: relative;
+    display: block;
+    height: 8px;
+    border-radius: 999px;
+    background: #e7efee;
+}
+
+.kw, .final {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    border-radius: 999px;
+}
+
+/* Lớp mờ: điểm keyword */
+.kw { background: rgba(20, 184, 166, .28); }
+/* Vạch nhỏ ở cuối lớp keyword, nằm TRÊN lớp đậm để không bị che */
+.kw-tick {
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, .9);
+    box-shadow: 0 0 0 1px rgba(15, 118, 110, .35);
+    z-index: 2;
+}
+
+/* Lớp đậm: điểm cuối, màu theo mức */
+.final { z-index: 1; background: var(--sc-neutral); }
+.tone-excellent .final { background: var(--fit-excellent); }
+.tone-good .final      { background: var(--fit-good); }
+.tone-potential .final { background: var(--fit-potential); }
+.tone-poor .final      { background: var(--fit-poor); }
+/* Chỉ chấm keyword: xám có sọc để không nhầm với điểm có AI */
+.tone-keyword .final {
+    background: repeating-linear-gradient(135deg, #64748b 0 4px, #94a3b8 4px 8px);
+}
+.tone-none .track { background: repeating-linear-gradient(90deg, #e7efee 0 6px, transparent 6px 10px); }
+
+/* Vạch đen: ngưỡng Đạt */
+.pass-line {
+    position: absolute;
+    top: -4px;
+    width: 2px;
+    height: 16px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--sc-ink-900);
+    z-index: 3;
+}

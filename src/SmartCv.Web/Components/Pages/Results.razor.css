@@ -45,6 +45,7 @@
 
 .hero h1 {
     margin: 0;
+    font-family: var(--sc-font-display);
     font-size: 30px;
     font-weight: 700;
     line-height: 1.2;
@@ -71,6 +72,8 @@
     color: var(--text-main);
 }
 .chip span { margin-right: 2px; font-weight: 400; color: var(--text-muted); }
+/* B8: dữ liệu kỹ thuật (tên phiên bản prompt, mô hình) dùng font chữ đều */
+.chip .tech { padding: 0; background: none; color: var(--text-main); font-family: var(--sc-font-mono); font-size: 12px; font-weight: 500; }
 
 .hero-actions { display: flex; gap: 8px; }
 .hero-actions .btn { gap: 8px; min-width: 0; background: #fff; }
@@ -126,7 +129,7 @@
     min-width: 0;
 }
 .kpi-label { color: var(--text-muted); font-size: 13px; font-weight: 600; }
-.kpi-value { font-size: 30px; font-weight: 700; line-height: 1.15; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.kpi-value { font-family: var(--sc-font-display); font-size: 30px; font-weight: 700; line-height: 1.15; color: var(--text-main); font-variant-numeric: tabular-nums; }
 .kpi-value small { font-size: 18px; font-weight: 600; color: var(--text-muted); }
 .kpi-hint {
     overflow: hidden;

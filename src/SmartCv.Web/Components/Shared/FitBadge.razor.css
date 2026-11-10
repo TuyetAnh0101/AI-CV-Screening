@@ -1,0 +1,23 @@
+/* B8: bố cục nhãn kết quả. Màu và hình viên thuốc nằm ở .fit-badge trong app.css (dùng chung với thẻ tiến độ B6). */
+.fit-result {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+/* Dấu "!" khi nhãn của API cần kiểm tra: vòng viền cùng màu chữ của mức, không chỉ dựa vào màu */
+.fit-warn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-left: 2px;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+}
