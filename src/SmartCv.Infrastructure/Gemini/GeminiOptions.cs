@@ -9,8 +9,8 @@ public sealed class GeminiOptions
     /// <summary>Bắt buộc khi gọi Gemini thật; kiểm tra lúc khởi động trong AddInfrastructure. Chỉ đặt bằng User Secrets.</summary>
     public string ApiKey { get; set; } = string.Empty;
 
-    [Required]
-    public string Model { get; set; } = "gemini-3.1-flash-lite";
+    // Không có thuộc tính Model ở đây: model chấm điểm chỉ cấu hình ở Scoring:ModelName (một nguồn duy nhất).
+    // Trước đây Gemini:Model chỉ được /api/health/gemini dùng, nên health báo OK cho model khác model đang chấm.
 
     [Range(0.0, 2.0)]
     public double Temperature { get; set; } = 0.2;

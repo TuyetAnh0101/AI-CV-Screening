@@ -19,7 +19,12 @@ public sealed record AiEvaluationRequest(
     JobProfile Job,
     string CvText);
 
-public enum AiErrorKind { None, QuotaExceeded, Network, InvalidResponse, Blocked, Configuration, InvalidRequest, Other }
+/// <summary>
+/// Loại lỗi AI (không lưu database; database chỉ lưu ErrorMessage). Thêm ở CUỐI để giữ giá trị số cũ.
+/// Network: mất kết nối, HTTP 500/502/504. Overloaded: HTTP 503 (Gemini quá tải, "high demand").
+/// Timeout: Gemini không phản hồi trong TimeoutSeconds. ModelUnavailable: HTTP 404, model không tồn tại hoặc đã bị gỡ.
+/// </summary>
+public enum AiErrorKind { None, QuotaExceeded, Network, InvalidResponse, Blocked, Configuration, InvalidRequest, Other, Overloaded, Timeout, ModelUnavailable }
 
 /// <summary>Kết quả AI. Kỹ năng trả về theo MÃ (SkillCode) cố định, không theo tên tự do.</summary>
 public sealed record AiEvaluationResult

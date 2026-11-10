@@ -185,7 +185,7 @@ Hồ sơ 13 (CV lỗi) trả 409, hồ sơ không tồn tại trả 404.
 ## 16. Rủi ro còn lại
 
 - Chưa gọi Gemini thật: schema (đặc biệt `enum`, `propertyOrdering`) và model chưa được xác nhận trên tài khoản.
-- `Gemini:Model` (`gemini-3.1-flash-lite`, dùng cho `/api/health/gemini`) khác `Scoring:ModelName` (`gemini-2.5-flash`, dùng để chấm), nên health check có thể báo sai model.
+- ~~`Gemini:Model` khác `Scoring:ModelName`, nên health check có thể báo sai model.~~ Đã sửa, xem mục 18.
 - Chưa có xác thực.
 - Bộ giới hạn tần suất chỉ trong một instance.
 - CV dài bị cắt 12.000 ký tự đầu.
@@ -200,3 +200,43 @@ Hồ sơ 13 (CV lỗi) trả 409, hồ sơ không tồn tại trả 404.
 - Không lưu kết quả `IsSimulated = true` như đánh giá thật.
 - `OperationCanceledException` nghĩa là dừng xử lý, không phải lỗi hồ sơ.
 - Dùng cùng `GeminiRateLimiter` Singleton.
+
+## 18. Sửa lỗi model và quá tải Gemini (2026-11-10, nhánh `fix/A10-gemini-model`)
+
+**Lỗi thật đã gặp:** lượt #13 (`gemini-2.5-flash`) bị `HTTP 404 ... no longer available to new users`; lượt #16 (`gemini-3.8-flash`)
+bị `HTTP 503 ... experiencing high demand` cả 3 lần thử. Cả hai lưu `KeywordOnly`, `AiScore = NULL`. 503 là Google quá tải, không phải
+lỗi API key, SQL Server hay worker.
+
+**Model, một nguồn duy nhất:** `Scoring:ModelName`, mặc định `gemini-3.1-flash-lite` (trong `appsettings.json` và mặc định của
+`ScoringOptions`, có test bắt hai giá trị này trùng nhau). Đổi tạm bằng biến môi trường `Scoring__ModelName`; ứng dụng không đọc
+`GEMINI_MODEL`. Đã bỏ `Gemini:Model`: khóa này không dùng khi chấm, chỉ health check dùng nên health báo OK cho model khác.
+Mỗi lượt chụp `ModelName` lúc tạo; lượt cũ chụp `gemini-2.5-flash` sẽ tiếp tục nhận 404 (không tự đổi model của lượt).
+Lưu ý tên khóa: `"Scoring": { "Model": ... }` sai tên nên binder bỏ qua và dùng mặc định trong code.
+
+**Chọn model (2026-11-10):** `gemini-3.1-flash-lite`. `gemini-2.5-flash` bị gỡ (404); `gemini-3.8-flash` trả 503 "high demand" liên tục ở
+lượt #16. `models.list`/`models.get` (chỉ đọc thông tin): `gemini-3.1-flash-lite` và `gemini-3.5-flash-lite` đều có trong danh sách của
+API key, hỗ trợ `generateContent`, cùng giới hạn 1 048 576 token vào / 65 536 token ra. Không có khác biệt nào bất lợi nên dùng
+`gemini-3.1-flash-lite` (ưu tiên của nhóm); `gemini-3.5-flash-lite` là phương án dự phòng (`Scoring__ModelName=gemini-3.5-flash-lite`).
+`gemini-2.5-flash` cũng vẫn qua `models.get` dù `generateContent` trả 404, nên **danh sách model và `/api/health/gemini` không chứng minh
+model chấm được**; chỉ một lần gọi `generateContent` thật mới xác nhận.
+
+**Smoke test Gemini thật (2026-11-10, được nhóm cho phép):** gọi đúng `GeminiEvaluationService` (cùng `responseSchema`) với 1 CV và 1 job
+tự soạn, `gemini-3.1-flash-lite`, `MaxRetries = 2`. Kết quả: **1 lời gọi, HTTP 200 sau 10,7 s**, JSON đúng schema (`score` 85,
+`matchedSkills` = csharp, aspnet_core, sql_server, git; `missingSkills` = docker; không có mã lạ; `yearsExperience` 1.5, `gpa` 3.2,
+`reasoning` tiếng Việt). Không cần gọi `gemini-3.5-flash-lite`. Chưa kiểm chứng: độ ổn định khi chấm nhiều CV liên tiếp với Gemini thật.
+
+**Phân loại lỗi (`AiErrorKind`):** 503 = `Overloaded`; 500/502/504 và mất kết nối = `Network`; hết thời gian chờ = `Timeout`;
+404 = `ModelUnavailable`; 429 = `QuotaExceeded`; 400/401/403 = `Configuration`/`InvalidRequest`. Database chỉ lưu `ErrorMessage`;
+giao diện (`RunFlow.AiFailureReason`) đổi thành lý do ngắn: "AI chưa chấm được (Gemini đang quá tải, có thể thử lại sau), điểm chỉ tính theo từ khóa."
+
+**Thử lại:** tối đa `MaxRetries` (2 → 3 lần gọi) cho 429/5xx/mất mạng/hết giờ/JSON hỏng; không thử lại 400/401/403/404.
+Chờ đúng `retryDelay` hoặc `Retry-After` (số giây hoặc ngày giờ) nếu Gemini gửi; nếu không thì 2 s, 4 s cộng jitter 0–25%;
+không vượt `MaxRetryDelaySeconds`. Log ghi model thực sự đã gọi, không ghi API key hay nội dung CV.
+
+**Fallback sang model khác: CHƯA làm, có chủ đích.** Lượt chụp một `ModelName`; nếu một CV được chấm bằng model khác thì kết quả không còn
+khớp snapshot, và so sánh prompt / accuracy của A16 mất ý nghĩa. Làm đúng cần thêm cột model thực tế cho từng Evaluation (đổi database)
+và quy tắc riêng cho PromptTest, nên cần quyết định trước.
+
+**Kiểm thử:** `GeminiEvaluationServiceTests` (200, 404 model bị gỡ, 429, 503 rồi thành công, 503 liên tục, jitter, `Retry-After`, timeout,
+JSON hỏng); `GeminiScoringFlowTests` (worker + API thật, chỉ HTTP tới Google là giả: 503 rồi thành công → `Combined`, 503 liên tục →
+`KeywordOnly` có lý do, 404 không thử lại, không chấm lại CV đã xong); `GeminiModelConfigurationTests`.

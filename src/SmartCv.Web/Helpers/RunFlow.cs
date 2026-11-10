@@ -86,11 +86,35 @@ public static partial class RunFlow
     public static string? FriendlyItemError(RunItemDto item)
     {
         if (item.Status == EvaluationStatuses.Completed)
-            return item.ScoreSource == ScoreSources.KeywordOnly ? "AI chưa chấm được, điểm chỉ tính theo từ khóa." : null;
+            return item.ScoreSource == ScoreSources.KeywordOnly
+                ? AiFailureReason(item.ErrorMessage) is { } reason
+                    ? $"AI chưa chấm được ({reason}), điểm chỉ tính theo từ khóa."
+                    : "AI chưa chấm được, điểm chỉ tính theo từ khóa."
+                : null;
 
         if (string.IsNullOrWhiteSpace(item.ErrorMessage)) return null;
         var text = TechnicalParens().Replace(item.ErrorMessage, string.Empty).Trim();
         return text.Length == 0 ? "Không chấm được hồ sơ này." : text;
+    }
+
+    /// <summary>
+    /// Nguyên nhân AI lỗi, ngắn gọn cho HR, suy từ ErrorMessage mà máy chủ lưu (GeminiEvaluationService).
+    /// Không hiện chi tiết kỹ thuật tiếng Anh của Google. Không nhận ra thì trả null (dùng câu chung).
+    /// </summary>
+    public static string? AiFailureReason(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage)) return null;
+        bool Has(string text) => errorMessage.Contains(text, StringComparison.OrdinalIgnoreCase);
+
+        if (Has("HTTP 503") || Has("quá tải")) return "Gemini đang quá tải, có thể thử lại sau";
+        if (Has("HTTP 404") || Has("Không tìm thấy model")) return "model Gemini không khả dụng, cần kiểm tra cấu hình model";
+        if (Has("HTTP 429") || Has("vượt hạn mức")) return "đã vượt hạn mức gọi Gemini";
+        if (Has("không phản hồi sau")) return "Gemini không phản hồi kịp";
+        if (Has("API key") || Has("Không có quyền")) return "lỗi cấu hình API key Gemini";
+        if (Has("JSON") || Has("trả về rỗng")) return "Gemini trả kết quả không hợp lệ";
+        if (Has("từ chối nội dung") || Has("dừng trả lời")) return "Gemini từ chối xử lý nội dung CV";
+        if (Has("Không kết nối được Gemini") || Has("lỗi tạm thời")) return "không kết nối được Gemini";
+        return null;
     }
 
     [GeneratedRegex(@"\s*\((?:[A-Za-z]+\s*=\s*\w+|[A-Za-z.]*Exception)\)")]
