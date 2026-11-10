@@ -20,6 +20,25 @@ public static class StatusText
         _ => ("Lỗi file", BadgeVariant.Danger)
     };
 
+    /// <summary>B6 – EvaluationRuns.Status: Queued | Running | Completed | Failed.</summary>
+    public static (string Text, BadgeVariant Variant) ForRun(string? status) => status switch
+    {
+        "Queued" => ("Đang chờ", BadgeVariant.Neutral),
+        "Running" => ("Đang phân tích", BadgeVariant.Info),
+        "Completed" => ("Hoàn thành", BadgeVariant.Success),
+        "Failed" => ("Thất bại", BadgeVariant.Danger),
+        _ => (string.IsNullOrWhiteSpace(status) ? "Không rõ" : status, BadgeVariant.Neutral)
+    };
+
+    /// <summary>B6 – Evaluations.Status: Pending | Completed | Failed.</summary>
+    public static (string Text, BadgeVariant Variant) ForEvaluation(string? status) => status switch
+    {
+        "Pending" => ("Chờ chấm", BadgeVariant.Neutral),
+        "Completed" => ("Đã chấm", BadgeVariant.Success),
+        "Failed" => ("Lỗi", BadgeVariant.Danger),
+        _ => (string.IsNullOrWhiteSpace(status) ? "Không rõ" : status, BadgeVariant.Neutral)
+    };
+
     /// <summary>Dung lượng dễ đọc: 512 B, 845 KB, 1,2 MB.</summary>
     public static string FileSize(long bytes) => bytes switch
     {
