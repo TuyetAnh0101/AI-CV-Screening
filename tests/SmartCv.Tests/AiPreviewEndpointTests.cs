@@ -203,7 +203,7 @@ public class AiPreviewEndpointTests
         Assert.Equal(1, handler.Calls);
         Assert.Equal(ScoreSources.Combined, r.ScoreSource);
         Assert.Equal(52m, r.FinalScore);   // 0.3 × 33.33 + 0.7 × 60 = 52.00, thiếu llm_api nhưng dưới mức giới hạn
-        Assert.Equal("gemini-2.5-flash", r.Model);
+        Assert.Equal("gemini-3.1-flash-lite", r.Model);   // Scoring:ModelName trong appsettings.json
         Assert.False(r.AiSimulated);
         Assert.Equal(SkillMatchSourcesAi, r.Skills.Single(s => s.SkillCode == "machine_learning").MatchedBy);
         Assert.DoesNotContain("rawResponse", text, StringComparison.OrdinalIgnoreCase);

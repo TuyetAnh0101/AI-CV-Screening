@@ -1,0 +1,63 @@
+@*
+    B8: nhãn kết quả của MỘT CV. Tách bạch 3 thông tin khác nhau:
+      Status      (trạng thái xử lý): Failed → "Lỗi xử lý", Pending → "Đang chấm"
+      FitLabel    (mức đánh giá)    : 4 màu theo FitLevel; ưu tiên nhãn của API, chỉ đối chiếu để cảnh báo
+      ScoreSource (nguồn điểm)      : KeywordOnly → GIỮ mức đánh giá + nhãn phụ "Chỉ chấm Keyword" (AI chưa chấm được,
+                                      không phải lỗi xử lý, cũng không được coi là AI đã chấm thành công)
+    Không có điểm lẫn nhãn → "Chưa có kết quả".
+*@
+@using SmartCv.Core.Constants
+
+<span class="fit-result">
+    @switch (Status)
+    {
+        case EvaluationStatuses.Failed:
+            <span class="fit-badge is-error" title="@(Message ?? "Không chấm được CV này.")">Lỗi xử lý</span>
+            break;
+        case EvaluationStatuses.Pending:
+            <span class="fit-badge is-pending" title="CV đang chờ hệ thống chấm điểm.">Đang chấm</span>
+            break;
+        default:
+            if (fit is null)
+            {
+                <span class="fit-badge fit-none" title="Chưa có điểm và mức đánh giá cho CV này.">Chưa có kết quả</span>
+            }
+            else
+            {
+                <span class="fit-badge @fit.CssClass" title="@BadgeTitle">
+                    @fit.Label
+                    @if (fit.HasIssue)
+                    {
+                        <span class="fit-warn" aria-hidden="true">!</span>
+                        <span class="visually-hidden">(dữ liệu cần kiểm tra)</span>
+                    }
+                </span>
+            }
+            if (KeywordOnly)
+            {
+                <span class="fit-badge is-keyword" title="AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa.">Chỉ chấm Keyword</span>
+            }
+            break;
+    }
+</span>
+
+@code {
+    [Parameter] public string? FitLabel { get; set; }
+    [Parameter] public decimal? FinalScore { get; set; }
+    /// <summary>Evaluations.Status: Pending | Completed | Failed</summary>
+    [Parameter] public string? Status { get; set; }
+    /// <summary>Evaluations.ScoreSource: Combined | KeywordOnly</summary>
+    [Parameter] public string? ScoreSource { get; set; }
+    /// <summary>Lý do lỗi (ErrorMessage) hiển thị khi rê chuột vào nhãn "Lỗi xử lý".</summary>
+    [Parameter] public string? Message { get; set; }
+
+    private FitDisplay? fit;
+
+    private bool KeywordOnly => ScoreSource == ScoreSources.KeywordOnly;
+
+    private string BadgeTitle =>
+        FitLevel.IssueText(fit, FitLabel)
+        ?? $"{fit!.Label}: {FitLevel.Range(fit.Label)} điểm";
+
+    protected override void OnParametersSet() => fit = FitLevel.Resolve(FitLabel, FinalScore);
+}

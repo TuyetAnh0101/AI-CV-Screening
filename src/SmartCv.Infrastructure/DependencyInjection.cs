@@ -55,9 +55,11 @@ public static class DependencyInjection
             ? sp.GetRequiredService<FakeAiEvaluator>()
             : sp.GetRequiredService<GeminiEvaluationService>());
 
-        services.AddHttpClient("Gemini", client =>
+        // /api/health/gemini: cùng Gemini:BaseUrl với lúc chấm (trước đây ghi cứng địa chỉ Google nên bỏ qua cấu hình)
+        services.AddHttpClient("Gemini", (sp, client) =>
         {
-            client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+            var gemini = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+            client.BaseAddress = new Uri(gemini.BaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(60);
         });
 

@@ -158,6 +158,6 @@ CV mẫu của A7 đúng job đạt 100: `cv-backend-pdf-chu.pdf` (PdfText, hồ
 
 - Gọi Gemini, gộp `KeywordWeight` / `AiWeight` trong `ScoreCombiner`.
 - Thêm `MissingMustHaveCap` (A10) và `PollIntervalSeconds` (A11) vào `ScoringOptions` và `appsettings.json`; A9 chưa thêm vì không dùng.
-- Thống nhất tên model: `Gemini:Model` đang là `gemini-3.1-flash-lite`, `Scoring:ModelName` là `gemini-2.5-flash`.
+- ~~Thống nhất tên model: `Gemini:Model` đang là `gemini-3.1-flash-lite`, `Scoring:ModelName` là `gemini-2.5-flash`.~~ Đã xong (2026-11-10): chỉ còn `Scoring:ModelName`, xem A10 mục 18.
 - `Program.A10.cs.txt` neo vào dòng `Configure<ScoringOptions>`; ở A9 đăng ký bằng `AddOptions<ScoringOptions>()` trong `Program.cs`.
 - Bắt `ArgumentException` khi CV rỗng và xét `HasApplicableCriteria` trước khi lưu điểm.

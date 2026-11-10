@@ -49,7 +49,11 @@ public class GeminiEvaluationServiceTests
 
     private sealed record Env(GeminiEvaluationService Service, StubHandler Handler, List<TimeSpan> Delays, ListLogger<GeminiEvaluationService> Logger);
 
-    private static Env Create(Func<int, HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond, GeminiOptions? custom = null)
+    private static readonly DateTimeOffset Now = new(2026, 11, 10, 8, 0, 0, TimeSpan.Zero);
+
+    /// <summary>Jitter mặc định = 0 để thời gian chờ xác định được; test jitter truyền giá trị riêng.</summary>
+    private static Env Create(Func<int, HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond, GeminiOptions? custom = null,
+        double jitter = 0)
     {
         var options = Options.Create(custom ?? new GeminiOptions { ApiKey = ApiKey, MinDelayBetweenCallsMs = 0 });
         var handler = new StubHandler(respond);
@@ -58,7 +62,9 @@ public class GeminiEvaluationServiceTests
         var http = new HttpClient(handler) { BaseAddress = new Uri("https://gemini.test/v1beta/") };
         var service = new GeminiEvaluationService(http, new GeminiRateLimiter(options), options, logger)
         {
-            DelayAsync = (delay, _) => { delays.Add(delay); return Task.CompletedTask; }
+            DelayAsync = (delay, _) => { delays.Add(delay); return Task.CompletedTask; },
+            NextJitter = () => jitter,
+            UtcNow = () => Now
         };
         return new Env(service, handler, delays, logger);
     }
@@ -258,7 +264,6 @@ public class GeminiEvaluationServiceTests
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]
-    [InlineData(HttpStatusCode.ServiceUnavailable)]
     [InlineData(HttpStatusCode.GatewayTimeout)]
     public async Task Server_errors_are_retried_with_backoff(HttpStatusCode status)
     {
@@ -269,6 +274,91 @@ public class GeminiEvaluationServiceTests
         Assert.Equal(AiErrorKind.Network, r.ErrorKind);
         Assert.Equal(3, env.Handler.Calls.Count);
         Assert.Equal([TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)], env.Delays);
+    }
+
+    // ---------- HTTP 503 "high demand" (lỗi thật của lượt #16) ----------
+
+    private const string HighDemand = "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.";
+
+    [Fact]
+    public async Task Overloaded_503_is_retried_then_reported_as_overloaded_without_score()
+    {
+        var env = Always(HttpStatusCode.ServiceUnavailable, ApiError("UNAVAILABLE", HighDemand));
+
+        var r = await env.Service.EvaluateAsync(Request);
+
+        Assert.False(r.IsSuccess);
+        Assert.Null(r.Score);                                   // không bao giờ tạo điểm AI giả
+        Assert.Equal(AiErrorKind.Overloaded, r.ErrorKind);
+        Assert.Equal(3, r.Attempts);
+        Assert.Equal(3, env.Handler.Calls.Count);               // có giới hạn: MaxRetries = 2 → 3 lần gọi
+        Assert.Equal([TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)], env.Delays);
+        Assert.StartsWith("Gemini lỗi sau 3 lần thử (Gemini đang quá tải (HTTP 503: This model is currently experiencing high demand.", r.ErrorMessage);
+        Assert.Contains(env.Logger.Lines, l => l.Contains("model-x") && l.Contains("Overloaded"));   // log model thực sự đã gọi
+    }
+
+    [Fact]
+    public async Task Overloaded_503_then_success_returns_ai_score()
+    {
+        var env = Create((n, _, _) => Task.FromResult(n < 3 ? Response(HttpStatusCode.ServiceUnavailable, ApiError("UNAVAILABLE", HighDemand)) : Ok()));
+
+        var r = await env.Service.EvaluateAsync(Request);
+
+        Assert.True(r.IsSuccess);
+        Assert.Equal(82m, r.Score);
+        Assert.Equal(3, r.Attempts);
+        Assert.Equal(AiErrorKind.None, r.ErrorKind);
+    }
+
+    [Fact]
+    public async Task Backoff_adds_bounded_jitter_but_server_delay_is_kept_exactly()
+    {
+        var jittered = Create((_, _, _) => Task.FromResult(Response(HttpStatusCode.ServiceUnavailable, "{}")), jitter: 1);
+        await jittered.Service.EvaluateAsync(Request);
+        Assert.Equal([TimeSpan.FromSeconds(2.5), TimeSpan.FromSeconds(5)], jittered.Delays);   // +25% tối đa
+
+        var body = ApiError("UNAVAILABLE", HighDemand, """[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"7s"}]""");
+        var server = Create((_, _, _) => Task.FromResult(Response(HttpStatusCode.ServiceUnavailable, body)), jitter: 1);
+        await server.Service.EvaluateAsync(Request);
+        Assert.Equal([TimeSpan.FromSeconds(7), TimeSpan.FromSeconds(7)], server.Delays);       // đúng yêu cầu của Gemini
+    }
+
+    [Fact]
+    public async Task Retry_after_header_in_seconds_or_date_is_respected_and_capped()
+    {
+        HttpResponseMessage Busy(Action<HttpResponseMessage> header)
+        {
+            var response = Response(HttpStatusCode.ServiceUnavailable, "{}");
+            header(response);
+            return response;
+        }
+
+        var seconds = Create((_, _, _) => Task.FromResult(Busy(m => m.Headers.RetryAfter = new(TimeSpan.FromSeconds(9)))));
+        await seconds.Service.EvaluateAsync(Request);
+        Assert.Equal([TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(9)], seconds.Delays);
+
+        var date = Create((_, _, _) => Task.FromResult(Busy(m => m.Headers.RetryAfter = new(Now.AddSeconds(30)))));
+        await date.Service.EvaluateAsync(Request);
+        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)], date.Delays);
+
+        var tooLong = Create((_, _, _) => Task.FromResult(Busy(m => m.Headers.RetryAfter = new(Now.AddHours(1)))));
+        await tooLong.Service.EvaluateAsync(Request);
+        Assert.All(tooLong.Delays, d => Assert.Equal(TimeSpan.FromSeconds(60), d));            // không vượt MaxRetryDelaySeconds
+
+        var past = Create((_, _, _) => Task.FromResult(Busy(m => m.Headers.RetryAfter = new(Now.AddSeconds(-5)))));
+        await past.Service.EvaluateAsync(Request);
+        Assert.Equal([TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)], past.Delays);          // ngày đã qua: lùi theo hàm mũ
+    }
+
+    [Fact]
+    public async Task Calls_the_model_given_by_the_caller_and_never_switches_model_on_failure()
+    {
+        var env = Always(HttpStatusCode.ServiceUnavailable, ApiError("UNAVAILABLE", HighDemand));
+
+        await env.Service.EvaluateAsync(Request with { Model = "gemini-3.1-flash-lite" });
+
+        Assert.All(env.Handler.Calls, c =>
+            Assert.Equal("https://gemini.test/v1beta/models/gemini-3.1-flash-lite:generateContent", c.Message.RequestUri!.ToString()));
     }
 
     [Fact]
@@ -314,26 +404,41 @@ public class GeminiEvaluationServiceTests
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.Unauthorized, "Không có quyền")]
-    [InlineData(HttpStatusCode.Forbidden, "Không có quyền")]
-    [InlineData(HttpStatusCode.NotFound, "Không tìm thấy model")]
-    public async Task Permission_and_model_errors_are_not_retried(HttpStatusCode status, string expected)
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task Permission_errors_are_not_retried(HttpStatusCode status)
     {
         var env = Always(status, ApiError("X", "denied"));
         var r = await env.Service.EvaluateAsync(Request);
 
         Assert.Equal(AiErrorKind.Configuration, r.ErrorKind);
-        Assert.Contains(expected, r.ErrorMessage);
+        Assert.Contains("Không có quyền", r.ErrorMessage);
         Assert.Single(env.Handler.Calls);
     }
 
     [Fact]
-    public async Task Timeout_is_retried_and_reported_as_network()
+    public async Task Retired_model_404_is_model_unavailable_and_not_retried()
+    {
+        // Thông báo thật của Google cho lượt #13 (gemini-2.5-flash)
+        var env = Always(HttpStatusCode.NotFound, ApiError("NOT_FOUND",
+            "This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash."));
+
+        var r = await env.Service.EvaluateAsync(Request);
+
+        Assert.Equal(AiErrorKind.ModelUnavailable, r.ErrorKind);
+        Assert.Contains("Không tìm thấy model hoặc model không còn khả dụng, kiểm tra Scoring:ModelName", r.ErrorMessage);
+        Assert.Contains("HTTP 404", r.ErrorMessage);
+        Assert.Single(env.Handler.Calls);   // không thử lại lỗi cấu hình: thử lại cũng 404 và tốn thời gian
+        Assert.Empty(env.Delays);
+    }
+
+    [Fact]
+    public async Task Timeout_is_retried_and_reported_as_timeout()
     {
         var env = Create((_, _, _) => throw new TaskCanceledException("timeout", new TimeoutException()));
         var r = await env.Service.EvaluateAsync(Request);
 
-        Assert.Equal(AiErrorKind.Network, r.ErrorKind);
+        Assert.Equal(AiErrorKind.Timeout, r.ErrorKind);
         Assert.Contains("không phản hồi sau 90 giây", r.ErrorMessage);
         Assert.Equal(3, env.Handler.Calls.Count);
     }

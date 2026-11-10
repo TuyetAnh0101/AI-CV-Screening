@@ -1,0 +1,196 @@
+@*
+    B7: bảng xếp hạng ứng viên của MỘT job trong MỘT lượt chấm (dữ liệu từ GET /api/runs/{id}/ranking, A13).
+    Tìm kiếm không dấu, lọc nhanh và sắp xếp chạy ngay trên trình duyệt, không gọi lại API.
+    CV chưa có điểm luôn nằm cuối, điểm hiện "—" (không gán 0).
+    B8: nhãn 4 mức (FitBadge), thanh điểm keyword/điểm cuối/ngưỡng Đạt (ScoreBar), cột kỹ năng bắt buộc đủ/thiếu.
+    Chưa có: mở trang chi tiết (B9), dải tiến độ tự cập nhật (B10).
+*@
+@using SmartCv.Core.Constants
+
+<section class="ranking" aria-labelledby="ranking-title" aria-busy="@(Loading ? "true" : "false")">
+    <div class="ranking-head">
+        <div>
+            <h2 id="ranking-title">Bảng xếp hạng ứng viên</h2>
+            <p>Mặc định sắp theo điểm cuối giảm dần · CV chưa có điểm nằm cuối bảng</p>
+        </div>
+        <ul class="legend" aria-label="Chú giải thanh điểm">
+            <li><span class="lg lg-kw" aria-hidden="true"></span>Điểm keyword</li>
+            <li><span class="lg lg-final" aria-hidden="true"></span>Điểm cuối (màu theo mức)</li>
+            <li><span class="lg lg-pass" aria-hidden="true"></span>Ngưỡng Đạt @RankingView.Score(PassThreshold)</li>
+        </ul>
+    </div>
+
+    @if (IssueCount > 0)
+    {
+        <div class="data-issue" role="status">
+            <span class="data-issue-icon" aria-hidden="true">!</span>
+            <span>@IssueCount CV có nhãn mức từ API không khớp quy tắc điểm hoặc không hợp lệ. Giao diện giữ nguyên nhãn của API và đánh dấu <strong>!</strong> — rê chuột vào nhãn để xem chi tiết, cần kiểm tra dữ liệu chấm.</span>
+        </div>
+    }
+
+    <div class="ranking-tools">
+        <div class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input type="search" placeholder="Tìm tên ứng viên, tên file..." aria-label="Tìm ứng viên theo tên hoặc tên file"
+                   @bind="search" @bind:event="oninput" autocomplete="off" />
+            @if (!string.IsNullOrEmpty(search))
+            {
+                <button type="button" class="search-clear" @onclick="ClearSearch" aria-label="Xóa từ khóa tìm kiếm">×</button>
+            }
+        </div>
+
+        <div class="quick" role="group" aria-label="Lọc nhanh">
+            @foreach (var (value, label) in RankingView.Filters)
+            {
+                var on = filter == value;
+                <button type="button" class="quick-btn @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
+                        @onclick="() => filter = value">
+                    @label <span class="count">@RankingView.Count(Items, search, value)</span>
+                </button>
+            }
+        </div>
+
+        <label class="sort">
+            <span class="visually-hidden">Sắp xếp</span>
+            <select class="form-select" @bind="sort" aria-label="Sắp xếp bảng xếp hạng">
+                @foreach (var (value, label) in RankingView.Sorts)
+                {
+                    <option value="@value">@label</option>
+                }
+            </select>
+        </label>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <div class="table-empty" role="status">
+            <p class="empty-title">Vị trí này chưa có CV nào trong lượt chấm</p>
+            <p>Hãy chọn vị trí khác ở ô <strong>Vị trí tuyển dụng</strong>, hoặc tải thêm CV ở trang <a href="upload">Tải hồ sơ lên</a>.</p>
+        </div>
+    }
+    else
+    {
+        var rows = RankingView.Apply(Items, search, filter, sort);
+
+        <div class="table-wrap">
+            <table class="rank-table">
+                <caption class="visually-hidden">Bảng xếp hạng @Items.Count CV, @RankingView.Sorts.First(s => s.Value == sort).Label</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="c-rank">Hạng</th>
+                        <th scope="col">Ứng viên</th>
+                        <th scope="col" class="c-num">Bắt buộc</th>
+                        <th scope="col" class="c-num">Kinh nghiệm</th>
+                        <th scope="col" class="c-bar">Điểm keyword / AI</th>
+                        <th scope="col" class="c-num">Điểm cuối</th>
+                        <th scope="col">Mức phù hợp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        var scored = RankingView.IsScored(r);
+                        var keywordOnly = r.ScoreSource == ScoreSources.KeywordOnly;
+                        var must = MustHaveDisplay.From(r.MatchedMustHave, r.TotalMustHave, scored);
+                        <tr class="@RowClass(r, scored)" @key="r.EvaluationId">
+                            <td class="c-rank" data-label="Hạng">
+                                <span class="rank @(r.Rank == 1 ? "gold" : r.Rank is >= 2 and <= 3 ? "top" : null)">@RankingView.RankText(r.Rank)</span>
+                            </td>
+                            <td class="c-who">
+                                <div class="who">
+                                    <span class="avatar" aria-hidden="true">@RankingView.Initials(r.CandidateName, r.FileName)</span>
+                                    <span class="who-text">
+                                        <span class="name">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</span>
+                                        <span class="file" title="@r.FileName">@r.FileName</span>
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="c-must" data-label="Bắt buộc">
+                                @if (must is null)
+                                {
+                                    <span class="muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="must @must.CssClass" title="@must.Detail">
+                                        <span class="must-text">
+                                            <span class="must-icon" aria-hidden="true">@(must.CssClass == "must-ok" ? "✓" : must.CssClass == "must-missing" ? "!" : "–")</span>
+                                            @must.Text
+                                        </span>
+                                        @if (must.ShowDots)
+                                        {
+                                            <span class="dots" aria-hidden="true">
+                                                @for (var i = 0; i < must.Total; i++)
+                                                {
+                                                    <span class="d @(i < must.Matched ? "on" : null)"></span>
+                                                }
+                                            </span>
+                                        }
+                                        <span class="visually-hidden">@must.Detail</span>
+                                    </span>
+                                }
+                            </td>
+                            <td class="c-num" data-label="Kinh nghiệm">@RankingView.Years(r.YearsExperience)</td>
+                            <td class="c-bar" data-label="Điểm keyword / AI">
+                                <ScoreBar Keyword="r.KeywordScore" Final="r.FinalScore" Threshold="PassThreshold" ScoreSource="@r.ScoreSource" />
+                                <span class="parts">
+                                    KW @RankingView.Score(r.KeywordScore) · AI
+                                    <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(r.AiScore)</span>
+                                </span>
+                            </td>
+                            <td class="c-num c-final" data-label="Điểm cuối">
+                                <strong class="final">@RankingView.Score(r.FinalScore)</strong>
+                            </td>
+                            <td class="c-fit" data-label="Mức phù hợp">
+                                <FitBadge FitLabel="@r.FitLabel" FinalScore="r.FinalScore" Status="@r.Status" ScoreSource="@r.ScoreSource" Message="@r.ErrorMessage" />
+                                @if (scored)
+                                {
+                                    <span class="pass @(r.PredictedPass == true ? "is-pass" : null)">@(r.PredictedPass == true ? "Dự đoán Đạt" : "Dự đoán Không đạt")</span>
+                                }
+                                else
+                                {
+                                    <span class="no-score">Chưa có điểm</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (rows.Count == 0)
+            {
+                <div class="table-empty" role="status">
+                    <p class="empty-title">Không có CV nào khớp bộ lọc</p>
+                    <button type="button" class="btn sc-btn-secondary" @onclick="ResetFilters">Xóa bộ lọc</button>
+                </div>
+            }
+        </div>
+
+        <div class="ranking-foot" aria-live="polite">Hiển thị @rows.Count/@Items.Count CV</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public List<RankingItemDto> Items { get; set; } = [];
+    [Parameter] public decimal PassThreshold { get; set; }
+    [Parameter] public bool Loading { get; set; }
+
+    private string search = string.Empty;
+    private RankingFilter filter = RankingFilter.All;
+    private RankingSort sort = RankingSort.FinalDesc;
+
+    /// <summary>Số CV có nhãn mức từ API cần kiểm tra (không khớp điểm hoặc không hợp lệ) — B8 báo, không tự sửa.</summary>
+    private int IssueCount => Items.Count(i => i.Status == EvaluationStatuses.Completed
+                                               && FitLevel.Resolve(i.FitLabel, i.FinalScore)?.HasIssue == true);
+
+    private static string? RowClass(RankingItemDto r, bool scored) =>
+        r.Status == EvaluationStatuses.Failed ? "is-unscored is-failed" : scored ? null : "is-unscored";
+
+    private void ClearSearch() => search = string.Empty;
+
+    private void ResetFilters()
+    {
+        search = string.Empty;
+        filter = RankingFilter.All;
+    }
+}

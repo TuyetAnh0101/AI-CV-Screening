@@ -146,3 +146,29 @@ Test tự động: **458/458**, trong đó có 45 test mới của A11 (InMemory
 - Audit đầy đủ cấu hình chấm (bao gồm `MissingMustHaveCap`).
 - Quy trình chấm lại có kiểm soát và các script kiểm tra dữ liệu.
 - Quyết định cách lưu kết quả FakeAI khi nghiệm thu, vì `ModelName` của lượt không phản ánh AI giả.
+
+## 19. Database phải ở chế độ MULTI_USER (sửa lỗi 2026-11-10)
+
+**Hiện tượng:** worker bật nhưng lượt mới đứng mãi ở `Queued`, 0%; lượt `Running` không tiến thêm. Gemini chưa hề được gọi.
+
+**Nguyên nhân:** mỗi vòng chấm cần **hai kết nối SQL cùng lúc**: một kết nối giữ khóa `sp_getapplock` (mục 13) suốt vòng, một kết nối
+của `DbContext` xử lý từng lượt. `SmartCvDb` trên máy phát triển ở chế độ `SINGLE_USER` (kế thừa từ database hệ thống `model`,
+xem `sys.databases.user_access_desc`), nên kết nối thứ hai luôn bị từ chối (`4060`, SQL Server ghi
+"Failed to open the explicitly specified database") hoặc treo tới hết thời gian chờ (`-2`). Vòng chấm hỏng trước khi đổi
+`Queued → Running`, trạng thái lượt và hồ sơ giữ nguyên (không có hồ sơ bị đánh dấu Failed).
+
+**Khắc phục (không phải migration):** dừng API, từ database `master` chạy `ALTER DATABASE [SmartCvDb] SET MULTI_USER;`
+(không cần `WITH ROLLBACK IMMEDIATE` khi đã dừng API). Database mới tạo kế thừa chế độ của `model`; muốn tránh tái diễn thì
+DBA đổi `model` sang `MULTI_USER` (thao tác trên database hệ thống, cần quyết định riêng).
+
+**Chẩn đoán trong code:** lúc khởi động, worker đọc `user_access_desc` của database đang kết nối (`WorkerDatabaseDiagnostics`).
+Khác `MULTI_USER` thì ghi log **Error** "Tiến trình chấm điểm KHÔNG chạy được: database … đang ở chế độ SINGLE_USER …" kèm câu lệnh sửa.
+Mỗi vòng chấm hỏng vì không mở được database ghi log "Tiến trình chấm điểm không mở được database …" kèm tên database, chế độ lúc
+khởi động và mã lỗi SQL. Log chỉ có tên database, không có connection string. Worker không tự dừng: sửa database xong, vòng sau
+tự chấm tiếp mà không cần khởi động lại API.
+
+**Kiểm thử SQL Server thật** (`A11SqlServerTests`, database tạm `SmartCv_A11_Test_{guid}`, AI giả, đặt
+`SMARTCV_A11_TEST_SQL_CONNECTION=Server=...;Database=SmartCv_A11_Test_;...`): lượt 3 CV tạo qua `POST /api/runs` chạy
+Queued → Running → Completed với tiến độ tăng dần; khóa nhả và không còn kết nối sau khi dừng host; database `SINGLE_USER` được
+chẩn đoán, không đổi trạng thái lượt, không gọi AI, rồi tự chấm tiếp khi đổi sang `MULTI_USER`; hai worker cùng database không chấm
+trùng; tắt giữa chừng rồi chạy lại chỉ chấm hồ sơ còn Pending; khóa độc quyền và nhả cùng kết nối.
