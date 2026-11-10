@@ -18,7 +18,8 @@ namespace SmartCv.Tests;
 /// </summary>
 public class CvUploadEndpointTests
 {
-    private const long MaxRequestBytes = 201L * 1024 * 1024;
+    // appsettings: MaxFileSizeMB 2 × MaxFilesPerRequest 20 + 1 MiB dự phòng multipart = 41 MiB
+    private const long MaxRequestBytes = 41L * 1024 * 1024;
 
     private static WebApplicationFactory<Program> CreateFactory(
         string environment = "Development", Dictionary<string, string?>? settings = null) =>

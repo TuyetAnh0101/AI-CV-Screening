@@ -309,9 +309,11 @@
                     result = await CvApi.UploadAsync(batch.Select(b => b.File).ToList());
                     batchError = UploadFlow.DescribeBatchFailure(result);
                 }
-                catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException)
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException
+                                               or TimeoutException or Microsoft.JSInterop.JSException)
                 {
-                    // Ví dụ: file trên trình duyệt không đọc được nữa, mất kết nối giữa chừng
+                    // Ví dụ: file trên trình duyệt không đọc được nữa (JSException), không nhận được dữ liệu file
+                    // (TimeoutException), mất kết nối giữa chừng. Chỉ nhóm này lỗi; nhóm đã xong giữ nguyên, circuit không chết.
                     Logger.LogWarning(ex, "Không đọc/gửi được nhóm {Count} file", batch.Count);
                     result = ApiResult<CvUploadResponse>.Failure("Không đọc hoặc gửi được file. Vui lòng chọn lại file.");
                     batchError = ("Không đọc hoặc gửi được file",
