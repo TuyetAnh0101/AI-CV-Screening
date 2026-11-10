@@ -1,6 +1,7 @@
 @*
-    B3: "Danh sách CV" (Component Data trong Figma).
-    Cột: ô tích | Tên file (+ dòng phụ) | Dung lượng | Trạng thái | Thao tác (menu ⋯: Xem file gốc, Xóa khỏi danh sách).
+    B3 + B5: "Danh sách CV" (Component Data trong Figma).
+    Cột: ô tích | Tên file (+ dòng phụ: loại file hoặc lý do lỗi) | Dung lượng | Trạng thái | Thao tác (menu ⋯: Xem file gốc, Xóa khỏi danh sách).
+    B5: dòng "Lỗi file" / "Bị từ chối" có viền trái đỏ, biểu tượng "!", lý do bằng chữ; ô tích bị khóa.
 *@
 
 <div class="cv-table-wrap">
@@ -31,15 +32,30 @@
                 var (text, variant) = StatusText.ForUpload(item.State);
                 // Hai dòng cuối mở menu lên trên để không bị cắt ở đáy bảng
                 var dropUp = Items.Count > 2 && i >= Items.Count - 2;
-                <tr class="@(item.State is UploadItemState.Invalid or UploadItemState.Rejected ? "is-error" : null)" @key="item.LocalId">
+                var subId = $"cv-sub-{item.LocalId:N}";
+                var hint = UploadFlow.RejectedHint(item);
+                <tr class="@RowClass(item)" @key="item.LocalId">
                     <td class="col-check">
-                        <input type="checkbox" class="sc-check" aria-label="Chọn @item.FileName"
+                        <input type="checkbox" class="sc-check" aria-label="Chọn @item.FileName" aria-describedby="@subId"
+                               title="@(item.IsError ? "File lỗi, không thể chọn để phân tích" : null)"
                                checked="@(item.Selected && item.CanAnalyze)" disabled="@(!item.CanAnalyze)"
                                @onchange="e => OnToggle.InvokeAsync((item, (bool)e.Value!))" />
                     </td>
                     <td class="col-name">
                         <div class="file-name" title="@item.FileName">@item.FileName</div>
-                        <div class="file-sub">@SubLine(item)</div>
+                        <div class="file-sub" id="@subId">
+                            @if (item.IsError)
+                            {
+                                @* B5: không chỉ dùng màu – có biểu tượng và chữ "Lý do" cho trình đọc màn hình *@
+                                <span class="sub-icon" aria-hidden="true">!</span>
+                                <span class="visually-hidden">Lý do lỗi: </span>
+                            }
+                            <span>@SubLine(item)</span>
+                        </div>
+                        @if (hint is not null)
+                        {
+                            <div class="file-hint">@hint</div>
+                        }
                     </td>
                     <td class="col-size">@StatusText.FileSize(item.SizeBytes)</td>
                     <td class="col-status">
@@ -90,11 +106,20 @@
     private IEnumerable<UploadItem> SelectableItems => Items.Where(i => i.CanAnalyze);
     private bool AllSelected => SelectableItems.Any() && SelectableItems.All(i => i.Selected);
 
+    private static string? RowClass(UploadItem item) => item.State switch
+    {
+        UploadItemState.Invalid => "is-error is-invalid",
+        UploadItemState.Rejected => "is-error is-rejected",
+        UploadItemState.Existing => "is-existing",
+        _ => null
+    };
+
     // Dòng phụ dưới tên file (Figma: chữ 13px dưới tên đậm 15px)
     private static string SubLine(UploadItem item) => item.State switch
     {
         UploadItemState.Uploading => $"{item.Extension} • đang gửi lên máy chủ...",
         UploadItemState.Uploaded => $"{item.Extension} • sẵn sàng phân tích",
+        UploadItemState.Existing => $"{item.Message ?? "CV đã có trong hệ thống."} Vẫn chọn được để phân tích.",
         _ => item.Message ?? item.Extension
     };
 }

@@ -16,7 +16,7 @@ public static class StatusText
         UploadItemState.Uploading => ("Đang tải lên", BadgeVariant.Info),
         UploadItemState.Uploaded => ("Hoàn thành", BadgeVariant.Success),
         UploadItemState.Existing => ("Đã có sẵn", BadgeVariant.Warning),
-        UploadItemState.Rejected => ("Không thành công", BadgeVariant.Danger),
+        UploadItemState.Rejected => ("Bị từ chối", BadgeVariant.Danger),   // B5: API từ chối / lỗi kết nối
         _ => ("Lỗi file", BadgeVariant.Danger)
     };
 
