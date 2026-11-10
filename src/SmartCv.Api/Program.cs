@@ -55,6 +55,8 @@ app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-sc
 app.MapAiPreviewEndpoints();   // A10: POST /api/applications/{id}/ai-preview (chỉ Development, có giới hạn tần suất)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
 app.MapPromptEndpoints(); // A14
+app.MapEvaluationSetEndpoints(); // A15: HR labels and CSV import.
+app.MapPromptTestEndpoints(); // A15: queue and inspect persisted prompt-test results.
 
 app.Run();
 
