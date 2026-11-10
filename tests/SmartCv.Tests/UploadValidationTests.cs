@@ -245,7 +245,7 @@ public class UploadValidationTests
             Assert.True(label >= 0, $"Không thấy ô có aria-label \"{ariaLabel}\"");
             var element = frames.Take(label).ToList().FindLastIndex(f => f.FrameType == RenderTreeFrameType.Element);
             return frames.Skip(element + 1).TakeWhile(f => f.FrameType == RenderTreeFrameType.Attribute)
-                .GroupBy(f => f.AttributeName).ToDictionary(g => g.Key, g => g.Last().AttributeValue);
+                .GroupBy(f => f.AttributeName).ToDictionary(g => g.Key, g => (object?)g.Last().AttributeValue);
         }
 
         public Task ClickButtonWithTextAsync(string text) => Dispatcher.InvokeAsync(async () =>
@@ -288,6 +288,10 @@ public class UploadValidationTests
         var http = new HttpClient(api) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new JobApiClient(http, NullLogger<JobApiClient>.Instance));
         services.AddSingleton(new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance));
+        // B6: trang Upload inject thêm 3 service này (test B5 không gọi tới)
+        services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
+        services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));
+        services.AddSingleton<NavigationManager>(new TestNavigationManager());
         return services.BuildServiceProvider();
     }
 

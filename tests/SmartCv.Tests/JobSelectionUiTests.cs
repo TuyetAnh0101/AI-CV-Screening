@@ -69,6 +69,10 @@ public class JobSelectionUiTests
         services.AddSingleton<Microsoft.JSInterop.IJSRuntime, NoJs>();
         services.AddSingleton(new JobApiClient(new HttpClient(new Handler(respond)) { BaseAddress = new Uri("https://api.test/") }, NullLogger<JobApiClient>.Instance));
         services.AddSingleton(new CvApiClient(new HttpClient(), Microsoft.Extensions.Options.Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance));
+        // B6: trang Upload inject thêm 3 service này (test B4 không gọi tới)
+        services.AddSingleton(new ApplicationApiClient(new HttpClient(), NullLogger<ApplicationApiClient>.Instance));
+        services.AddSingleton(new RunApiClient(new HttpClient(), NullLogger<RunApiClient>.Instance));
+        services.AddSingleton<NavigationManager>(new TestNavigationManager());
         return services.BuildServiceProvider();
     }
 

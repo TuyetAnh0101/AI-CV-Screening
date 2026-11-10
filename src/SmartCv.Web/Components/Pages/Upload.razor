@@ -4,12 +4,17 @@
     B3 (đã làm): ô kéo thả, tải lên ngay qua POST /api/cvs/upload (A4–A6), danh sách CV, ô tích, menu ⋯, nút Hủy.
     B4 (đã làm): chọn công việc thật và hiển thị yêu cầu.
     B5: kiểm tra file trên giao diện (UploadValidator), hiện lỗi từng dòng, tổng kết, xóa file lỗi, báo mất kết nối API.
-    B6: nút Phân tích + thẻ tiến độ.
+    B6: nút "Phân tích hồ sơ" → POST /api/applications (A8) → POST /api/runs → /upload?runId=N;
+        thẻ "Phân tích hồ sơ" hỏi GET /api/runs/{id} mỗi 2 giây tới khi Completed/Failed (RunProgressPanel).
 *@
+@implements IAsyncDisposable
 @using Microsoft.Extensions.Options
 @using SmartCv.Core.Options
 @inject CvApiClient CvApi
 @inject JobApiClient JobApi
+@inject ApplicationApiClient ApplicationApi
+@inject RunApiClient RunApi
+@inject NavigationManager Nav
 @inject IOptions<CvUploadOptions> UploadOptions
 @inject IConfiguration Configuration
 @inject ILogger<Upload> Logger
@@ -32,6 +37,11 @@
     <button type="button" role="tab" aria-selected="@(tab == Tab.Analyze ? "true" : "false")"
             class="tab @(tab == Tab.Analyze ? "active" : null)" @onclick="() => tab = Tab.Analyze">
         Phân tích hồ sơ
+        @if (run is not null && !RunFlow.IsFinished(run.Status))
+        {
+            <span class="tab-dot" aria-hidden="true"></span>
+            <span class="visually-hidden">(đang phân tích)</span>
+        }
     </button>
 </nav>
 
@@ -40,6 +50,9 @@
     {
         @* B5: lỗi của cả lần tải (mất kết nối API, máy chủ lỗi) – khác lỗi từng file hiện trong bảng *@
         <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" />
+
+        @* B6: không phân tích được (chưa chọn job / CV, API gắn CV hoặc tạo lượt lỗi) *@
+        <ErrorAlert Title="@(analyzeError?.Title ?? string.Empty)" Message="@analyzeError?.Message" />
 
         @* B5: thông báo tổng kết sau mỗi lần tải *@
         @if (notice is not null)
@@ -57,7 +70,9 @@
         @* ---------- B4: Chọn công việc và yêu cầu tuyển dụng ---------- *@
         <div class="field">
             <label for="job" class="field-label">Chọn công việc</label>
-            <select id="job" class="sc-select" @bind="selectedJobId" disabled="@(loadingJobs || jobs.Count == 0)"
+            <select id="job" class="sc-select @(jobInvalid ? "is-invalid" : null)" @bind="selectedJobId" @bind:after="OnJobChanged"
+                    disabled="@(loadingJobs || jobs.Count == 0 || analyzing)"
+                    aria-invalid="@(jobInvalid ? "true" : "false")"
                     aria-describedby="job-details" aria-busy="@(loadingJobs ? "true" : "false")">
                 <option value="">@(loadingJobs ? "Đang tải công việc..." : "Chọn công việc")</option>
                 @foreach (var job in jobs)
@@ -66,6 +81,10 @@
                 }
             </select>
             <div id="job-details" aria-live="polite">
+                @if (jobInvalid)
+                {
+                    <div class="field-error">Hãy chọn công việc trước khi phân tích.</div>
+                }
                 @if (jobsError is not null)
                 {
                     <div class="field-error" role="alert">
@@ -130,18 +149,30 @@
 
         @* ---------- Nút (Figma: Hủy | Phân tích hồ sơ) ---------- *@
         <div class="page-actions">
-            <button type="button" class="btn sc-btn-secondary" @onclick="Reset" disabled="@(items.Count == 0)">Hủy</button>
-            <button type="button" class="btn sc-btn-primary" disabled
-                    title="Chức năng phân tích hồ sơ sẽ được triển khai ở B6">
-                Phân tích hồ sơ
+            <button type="button" class="btn sc-btn-secondary" @onclick="Reset" disabled="@(items.Count == 0 || analyzing)">Hủy</button>
+            @* B6: khóa trong lúc tải lên / đang phân tích để không tạo request trùng *@
+            <button type="button" class="btn sc-btn-primary sc-btn-analyze" @onclick="AnalyzeAsync"
+                    disabled="@(busy || analyzing)" aria-busy="@(analyzing ? "true" : "false")"
+                    title="@(busy ? "Đang tải CV lên, vui lòng chờ" : null)">
+                @if (analyzing)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    <span role="status">@analyzeStep</span>
+                }
+                else
+                {
+                    <span>Phân tích hồ sơ</span>
+                    @if (SelectedCount > 0) { <span class="analyze-count">@SelectedCount</span> }
+                }
             </button>
         </div>
     }
     else
     {
-        <p class="analyze-placeholder">
-            Tiến độ phân tích hồ sơ sẽ hiển thị tại đây sau khi chức năng phân tích (B6) được triển khai.
-        </p>
+        @* ---------- B6: Tiến độ phân tích ---------- *@
+        <RunProgressPanel Run="run" RunId="trackedRunId" Loading="runLoading" NotFound="runNotFound"
+                          Error="@runError" Notice="@runNotice" Polling="polling" LastUpdated="runUpdatedAt"
+                          OnRetry="RetryRunAsync" OnBackToUpload="() => tab = Tab.Upload" />
     }
 </section>
 
@@ -161,6 +192,28 @@
     private bool loadingJobs = true;
     private string? jobsError;
     private JobDto? SelectedJob => jobs.FirstOrDefault(j => j.JobId == selectedJobId);
+
+    // ---------- B6: phân tích hồ sơ ----------
+    /// <summary>/upload?runId=N: mở thẳng thẻ tiến độ của lượt N (F5 hoặc gửi đường dẫn vẫn đúng lượt).</summary>
+    [SupplyParameterFromQuery(Name = "runId")] public int? RunId { get; set; }
+
+    private bool analyzing;                                 // đang gắn CV / tạo lượt: khóa nút, chặn bấm lặp
+    private string analyzeStep = string.Empty;
+    private (string Title, string Message)? analyzeError;
+    private bool jobInvalid;
+
+    private RunProgressDto? run;
+    private int? trackedRunId;                              // lượt đang theo dõi (khớp ?runId)
+    private bool runLoading;
+    private bool runNotFound;
+    private bool polling;
+    private string? runError;
+    private string? runNotice;
+    private DateTime? runUpdatedAt;
+    private CancellationTokenSource? pollCts;               // mỗi lượt theo dõi một CTS; đổi lượt / rời trang thì hủy
+
+    // Mặc định 2 giây. Khóa "RunProgress:PollIntervalMs" chỉ để test chạy nhanh, không cần đặt trong appsettings.
+    private TimeSpan PollInterval => TimeSpan.FromMilliseconds(Math.Clamp(Configuration.GetValue("RunProgress:PollIntervalMs", 2000), 20, 60_000));
 
     private CvUploadOptions Limits => UploadOptions.Value;
     private int MaxFilesPerSelection => Math.Max(1, Configuration.GetValue("CvUpload:MaxFilesPerSelection", Limits.MaxFilesPerRequest));
@@ -321,5 +374,210 @@
         items.Clear();
         notice = null;
         uploadError = null;
+        analyzeError = null;
+        jobInvalid = false;
+    }
+
+    // =====================================================================
+    // B6: "Phân tích hồ sơ" = gắn CV vào job (A8) → tạo lượt (POST /api/runs) → theo dõi tiến độ
+    // =====================================================================
+
+    private void OnJobChanged()
+    {
+        jobInvalid = false;
+        if (analyzeError is not null && SelectedJob is not null) analyzeError = null;
+    }
+
+    private async Task AnalyzeAsync()
+    {
+        if (analyzing || busy) return;   // chặn bấm lặp: kiểm tra trước lần await đầu tiên
+
+        analyzeError = null;
+        jobInvalid = false;
+        if (RunFlow.ValidateAnalyze(SelectedJob, items) is { } invalid)
+        {
+            jobInvalid = invalid.JobMissing;
+            analyzeError = (invalid.JobMissing ? "Chưa chọn công việc" : "Chưa thể phân tích", invalid.Message);
+            return;
+        }
+
+        analyzing = true;
+        analyzeStep = "Đang gắn CV vào công việc...";
+        try
+        {
+            // 1. Gắn CV đã chọn vào job. Gọi lại an toàn: CV đã gắn trả AlreadyExists kèm ApplicationId cũ.
+            var assign = await ApplicationApi.AssignSelectedAsync(SelectedJob, items);
+            if (!assign.IsSuccess || assign.Data is null)
+            {
+                analyzeError = ("Không gắn được CV vào công việc",
+                    RunFlow.FailureMessage(assign, "Máy chủ gặp lỗi khi gắn CV vào công việc. Vui lòng thử lại sau."));
+                return;
+            }
+
+            var (applicationIds, notFound) = RunFlow.ApplicationIdsFrom(assign.Data);
+            if (applicationIds.Count == 0)
+            {
+                analyzeError = ("Không gắn được CV vào công việc",
+                    "Không CV nào gắn được vào công việc (CV có thể không còn trên máy chủ). Hãy tải lại CV rồi thử lại.");
+                return;
+            }
+
+            // 2. Tạo lượt phân tích
+            analyzeStep = "Đang tạo lượt phân tích...";
+            StateHasChanged();
+            var start = await RunApi.StartAsync(applicationIds);
+            if (!start.IsSuccess || start.Data is null)
+            {
+                analyzeError = ("Không tạo được lượt phân tích",
+                    RunFlow.FailureMessage(start, "Máy chủ gặp lỗi khi tạo lượt phân tích. Vui lòng thử lại sau.")
+                    + " CV đã được gắn vào công việc; bấm \"Phân tích hồ sơ\" lần nữa để thử lại.");
+                return;
+            }
+
+            // 3. Ghi runId lên địa chỉ: OnParametersSet sẽ mở thẻ tiến độ và bắt đầu hỏi API
+            run = start.Data;
+            runNotice = notFound > 0
+                ? $"{notFound} CV không còn trên máy chủ nên không được đưa vào lượt phân tích."
+                : null;
+            Nav.NavigateTo($"upload?runId={run.RunId}");
+        }
+        finally
+        {
+            analyzing = false;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (RunId == trackedRunId) return;
+
+        if (RunId is > 0 and var id) StartTracking(id);
+        else if (RunId is not null)
+        {
+            // ?runId=0 hoặc số âm: không gọi API, báo không tìm thấy
+            StopTracking();
+            run = null;
+            trackedRunId = RunId;
+            runNotFound = true;
+            runLoading = false;
+            tab = Tab.Analyze;
+        }
+        else
+        {
+            // Quay lại /upload (không có runId): dừng theo dõi, về thẻ tải hồ sơ, giữ danh sách CV
+            StopTracking();
+            trackedRunId = null;
+            run = null;
+            runError = runNotice = null;
+            runNotFound = runLoading = false;
+            tab = Tab.Upload;
+        }
+    }
+
+    private void StartTracking(int runId)
+    {
+        StopTracking();
+        var keepCreated = run?.RunId == runId;   // vừa tạo: hiện ngay kết quả của POST, không chờ lần hỏi đầu
+        if (!keepCreated) { run = null; runNotice = null; }
+        trackedRunId = runId;
+        tab = Tab.Analyze;
+        runNotFound = false;
+        runError = null;
+        runUpdatedAt = keepCreated ? DateTime.UtcNow : null;
+        runLoading = !keepCreated;
+
+        // Lúc prerender chưa tương tác được: không hỏi API, trang tương tác sẽ bắt đầu lại.
+        if (!RendererInfo.IsInteractive) return;
+
+        var cts = new CancellationTokenSource();
+        pollCts = cts;
+        polling = true;
+        _ = PollLoopAsync(runId, cts);
+    }
+
+    private void StopTracking()
+    {
+        pollCts?.Cancel();
+        pollCts?.Dispose();
+        pollCts = null;
+        polling = false;
+    }
+
+    /// <summary>
+    /// Hỏi GET /api/runs/{id} cho tới khi lượt kết thúc, không tồn tại, đổi lượt khác hoặc rời trang.
+    /// Mỗi vòng gắn với CTS riêng: kết quả trả về muộn của lượt cũ bị bỏ, không ghi đè lượt mới.
+    /// Lỗi kết nối / máy chủ: giữ dữ liệu cũ, báo lỗi và thử lại thưa dần (tối đa 5 lần khoảng thường).
+    /// </summary>
+    private async Task PollLoopAsync(int runId, CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        var failures = 0;
+        try
+        {
+            while (true)
+            {
+                var result = await RunApi.GetRunAsync(runId, ct);
+                if (ct.IsCancellationRequested || pollCts != cts) return;
+
+                runLoading = false;
+                var stop = false;
+                if (result.IsSuccess && result.Data is { } data && data.RunId == runId)
+                {
+                    run = data;
+                    runError = null;
+                    runUpdatedAt = DateTime.UtcNow;
+                    failures = 0;
+                    stop = RunFlow.IsFinished(data.Status);
+                }
+                else if (result.StatusCode == 404)
+                {
+                    run = null;
+                    runNotFound = true;
+                    runError = null;
+                    stop = true;
+                }
+                else
+                {
+                    failures++;
+                    runError = result.StatusCode >= 500
+                        ? "Máy chủ API đang gặp lỗi."
+                        : result.ErrorMessage ?? "Không lấy được tiến độ phân tích.";
+                }
+
+                if (stop) polling = false;
+                await InvokeAsync(StateHasChanged);
+                if (stop) return;
+
+                await Task.Delay(PollInterval * Math.Min(failures + 1, 5), ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // đổi lượt khác hoặc rời trang
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dừng theo dõi tiến độ lượt {RunId} do lỗi không mong muốn", runId);
+            if (pollCts == cts && !ct.IsCancellationRequested)
+            {
+                polling = false;
+                runLoading = false;
+                runError = "Không cập nhật được tiến độ. Bấm \"Thử lại ngay\" để tiếp tục.";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    /// <summary>"Thử lại ngay": khởi động lại vòng hỏi (hủy vòng cũ trước, nên không bao giờ có hai vòng song song).</summary>
+    private Task RetryRunAsync()
+    {
+        if (trackedRunId is > 0 and var id) StartTracking(id);   // giữ dữ liệu cũ của cùng lượt trong lúc chờ
+        return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        StopTracking();
+        return ValueTask.CompletedTask;
     }
 }

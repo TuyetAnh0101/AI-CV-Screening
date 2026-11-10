@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         Add<HealthApiClient>(TimeSpan.FromSeconds(5));
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
         Add<ApplicationApiClient>(TimeSpan.FromSeconds(30));
+        Add<RunApiClient>(TimeSpan.FromSeconds(30));   // B6: tạo lượt phân tích, hỏi tiến độ
         Add<CvApiClient>(TimeSpan.FromMinutes(5));   // tải nhiều file cần lâu hơn
 
         // B3: giới hạn tải CV, đọc mục "CvUpload" trong appsettings.json của Web.
