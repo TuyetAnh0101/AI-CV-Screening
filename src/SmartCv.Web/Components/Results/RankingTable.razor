@@ -3,7 +3,7 @@
     Tìm kiếm không dấu, lọc nhanh và sắp xếp chạy ngay trên trình duyệt, không gọi lại API.
     CV chưa có điểm luôn nằm cuối, điểm hiện "—" (không gán 0).
     B8: nhãn 4 mức (FitBadge), thanh điểm keyword/điểm cuối/ngưỡng Đạt (ScoreBar), cột kỹ năng bắt buộc đủ/thiếu.
-    Chưa có: mở trang chi tiết (B9), dải tiến độ tự cập nhật (B10).
+    B9: liên kết chi tiết giữ nguyên lượt chấm và vị trí. Chưa có dải tiến độ B10.
 *@
 @using SmartCv.Core.Constants
 
@@ -100,7 +100,7 @@
                                 <div class="who">
                                     <span class="avatar" aria-hidden="true">@RankingView.Initials(r.CandidateName, r.FileName)</span>
                                     <span class="who-text">
-                                        <span class="name">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</span>
+                                        <a class="name" href="@DetailUrl(r.EvaluationId)">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</a>
                                         <span class="file" title="@r.FileName">@r.FileName</span>
                                     </span>
                                 </div>
@@ -174,6 +174,10 @@
     [Parameter, EditorRequired] public List<RankingItemDto> Items { get; set; } = [];
     [Parameter] public decimal PassThreshold { get; set; }
     [Parameter] public bool Loading { get; set; }
+    [Parameter] public int? RunId { get; set; }
+    [Parameter] public int? JobId { get; set; }
+
+    private string DetailUrl(int id) => $"/results/evaluations/{id}" + Display.BackUrl(RunId?.ToString(), JobId?.ToString())["/results".Length..];
 
     private string search = string.Empty;
     private RankingFilter filter = RankingFilter.All;

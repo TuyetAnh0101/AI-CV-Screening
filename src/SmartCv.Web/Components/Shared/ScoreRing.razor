@@ -1,0 +1,31 @@
+@using SmartCv.Core.Constants
+<figure class="score-figure @FitLevel.ScoreTone(VisibleFinal, ScoreSource)">
+    <div class="ring">
+        <svg viewBox="0 0 160 160" role="img" aria-label="@Label">
+            <circle class="track" cx="80" cy="80" r="68" stroke-width="10" />
+            @if (VisibleFinal is not null)
+            {
+                <circle class="final" cx="80" cy="80" r="68" stroke-width="10" pathLength="100" stroke-dasharray="@Dash(VisibleFinal)" transform="rotate(-90 80 80)" />
+            }
+            <circle class="track" cx="80" cy="80" r="53" stroke-width="6" />
+            @if (VisibleKeyword is not null)
+            {
+                <circle class="keyword" cx="80" cy="80" r="53" stroke-width="6" pathLength="100" stroke-dasharray="@Dash(VisibleKeyword)" transform="rotate(-90 80 80)" />
+            }
+        </svg>
+        <div class="center" aria-hidden="true"><strong>@Display.Score(VisibleFinal)</strong><span>ĐIỂM CUỐI / 100</span></div>
+    </div>
+    <figcaption><span>● Vòng ngoài: Điểm cuối @Display.Score(VisibleFinal)</span><span>○ Vòng trong: Keyword @Display.Score(VisibleKeyword)</span></figcaption>
+</figure>
+
+@code {
+    [Parameter] public decimal? Final { get; set; }
+    [Parameter] public decimal? Keyword { get; set; }
+    [Parameter] public string? Status { get; set; }
+    [Parameter] public string? ScoreSource { get; set; }
+    private bool Unavailable => Status is EvaluationStatuses.Pending or EvaluationStatuses.Failed;
+    private decimal? VisibleFinal => Unavailable ? null : Final;
+    private decimal? VisibleKeyword => Unavailable ? null : Keyword;
+    private string Label => FitLevel.ScoreBarLabel(VisibleKeyword, VisibleFinal, null, ScoreSource);
+    private static string Dash(decimal? score) => $"{FitLevel.BarPercent(score)?.ToString(System.Globalization.CultureInfo.InvariantCulture)} 100";
+}
