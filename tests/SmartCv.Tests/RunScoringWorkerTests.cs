@@ -135,6 +135,25 @@ public class RunScoringWorkerTests
         Assert.Single(factory.Services.GetServices<IHostedService>().OfType<RunScoringWorker>());
     }
 
+    /// <summary>
+    /// B6: POST /api/runs chỉ ghi lượt Queued; nếu worker tắt thì lượt đứng mãi ở 0%.
+    /// appsettings giữ mặc định TẮT (A11, test và môi trường khác không tự tốn quota),
+    /// còn chạy API để phát triển (dotnet run / Visual Studio) thì launchSettings bật worker ở cả hai profile.
+    /// </summary>
+    [Fact]
+    public void Launch_profiles_enable_the_scoring_worker()
+    {
+        var path = TestSupport.RepoFile(Path.Combine("src", "SmartCv.Api", "Properties", "launchSettings.json"));
+        using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        foreach (var name in new[] { "http", "https" })
+        {
+            var env = json.RootElement.GetProperty("profiles").GetProperty(name).GetProperty("environmentVariables");
+            Assert.Equal("Development", env.GetProperty("ASPNETCORE_ENVIRONMENT").GetString());
+            Assert.Equal("true", env.GetProperty("Scoring__WorkerEnabled").GetString());
+        }
+    }
+
     [Fact]
     public void Invalid_poll_interval_stops_startup()
     {

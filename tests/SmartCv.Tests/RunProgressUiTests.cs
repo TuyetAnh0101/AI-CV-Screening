@@ -139,7 +139,14 @@ public class RunProgressUiTests
     /// <summary>API giả: ghi lại mọi request; mỗi endpoint trả theo hàm do test đặt.</summary>
     private sealed class FakeApi : HttpMessageHandler
     {
-        public List<string> Calls { get; } = [];
+        private readonly List<string> calls = [];
+
+        /// <summary>
+        /// Bản chụp các request đã nhận. Vòng hỏi tiến độ của trang ghi vào đây từ luồng khác trong lúc test đọc
+        /// (Assert.Single / DoesNotContain duyệt bằng foreach), nên phải khóa: List không an toàn đa luồng và từng
+        /// làm test lúc PASS lúc FAIL với "Collection was modified; enumeration operation may not execute".
+        /// </summary>
+        public IReadOnlyList<string> Calls { get { lock (calls) return [.. calls]; } }
         public Func<HttpRequestMessage, Task<HttpResponseMessage>> Applications { get; set; } = _ => throw new InvalidOperationException("Không mong gọi /api/applications");
         public Func<HttpRequestMessage, Task<HttpResponseMessage>> StartRun { get; set; } = _ => throw new InvalidOperationException("Không mong gọi POST /api/runs");
         public Func<int, Task<HttpResponseMessage>> GetRun { get; set; } = _ => throw new InvalidOperationException("Không mong gọi GET /api/runs/{id}");
@@ -149,7 +156,7 @@ public class RunProgressUiTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var path = request.RequestUri!.AbsolutePath;
-            Calls.Add($"{request.Method} {path}");
+            lock (calls) calls.Add($"{request.Method} {path}");
             if (path == "/api/jobs")
                 return Json(new[] { new JobDto { JobId = 1, Title = "Backend Developer (.NET)", IsActive = true } });
             if (request.Method == HttpMethod.Post && path == "/api/applications")
@@ -204,6 +211,11 @@ public class RunProgressUiTests
                 RenderTreeFrameType.Markup => System.Text.RegularExpressions.Regex.Replace(f.MarkupContent, "<[^>]+>", " "),
                 _ => " "
             }))), @"\s+", " ")).Result;
+
+        /// <summary>Giá trị chuỗi của mọi thuộc tính tên <paramref name="name"/>, đọc TRÊN dispatcher như <see cref="Text"/>.</summary>
+        public List<string?> AttributeValues(string name) => Dispatcher.InvokeAsync(() => Frames()
+            .Where(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == name)
+            .Select(f => f.AttributeValue as string).ToList()).Result;
 
         public List<UploadItem> Items => (List<UploadItem>)Frames()
             .First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "Items").AttributeValue;
@@ -399,8 +411,7 @@ public class RunProgressUiTests
         Assert.Contains("Đã dừng cập nhật", text);
         // B7: lượt đã xong → liên kết "Xem bảng xếp hạng" mở đúng lượt vừa chấm
         Assert.Contains("Xem bảng xếp hạng", text);
-        Assert.Contains("results?runId=31", r.Frames().Where(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "href")
-            .Select(f => f.AttributeValue as string));
+        Assert.Contains("results?runId=31", r.AttributeValues("href"));
 
         // Đã Completed: ngừng hỏi API
         var after = polls;

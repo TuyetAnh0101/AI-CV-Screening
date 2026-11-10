@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Contracts;
@@ -20,12 +19,9 @@ public sealed class CvApiClient(HttpClient http, IOptions<CvUploadOptions> optio
 
         foreach (var file in files)
         {
-            // Mặc định Blazor chỉ cho đọc 500 KB, nên phải truyền maxAllowedSize
-            var stream = file.OpenReadStream(maxAllowedSize: Options.MaxFileSizeBytes, cancellationToken: ct);
-            var part = new StreamContent(stream);
-            part.Headers.ContentType = new MediaTypeHeaderValue(
-                string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
-            content.Add(part, "files", file.Name);
+            // KHÔNG mở stream ở đây: BrowserFileContent chỉ mở stream của file khi HttpClient gửi tới phần đó,
+            // nên mỗi lúc chỉ một file truyền qua circuit (mở trước cả nhóm làm circuit nghẽn rồi chết sau 1 phút).
+            content.Add(new BrowserFileContent(file, Options.MaxFileSizeBytes, ct), "files", file.Name);
         }
 
         return await PostAsync<CvUploadResponse>("api/cvs/upload", content, ct);
