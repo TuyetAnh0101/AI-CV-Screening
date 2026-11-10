@@ -1,0 +1,290 @@
+/* B6: thẻ "Phân tích hồ sơ". CSS cô lập theo component, không ảnh hưởng trang khác. */
+
+/* ---------- Trạng thái Empty / NotFound / Loading ---------- */
+.run-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 40px 16px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    text-align: center;
+}
+.run-state.is-danger { border-color: #fecaca; background: #fef2f2; }
+.state-img { opacity: .85; }
+.state-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 20px;
+    font-weight: 700;
+}
+.state-title { margin: 4px 0 0; font-size: 16px; font-weight: 600; color: var(--text-main); }
+.state-text { max-width: 520px; margin: 0 0 8px; font-size: 14px; color: var(--text-muted); }
+
+.run-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+.skeleton {
+    border-radius: 8px;
+    background: linear-gradient(90deg, #eef4f4 25%, #f7fafa 50%, #eef4f4 75%);
+    background-size: 200% 100%;
+    animation: sc-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-title { width: 40%; height: 22px; }
+.skeleton-bar { height: 12px; }
+.skeleton-row { height: 64px; }
+@keyframes sc-shimmer { to { background-position: -200% 0; } }
+
+/* ---------- Thông báo ---------- */
+.run-stale { margin: 0; font-size: 14px; }
+.run-notice {
+    padding: 10px 14px;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    background: #f0f9ff;
+    color: #0c4a6e;
+    font-size: 14px;
+}
+
+/* ---------- Tiêu đề lượt + cấu hình ---------- */
+.run-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+.run-head-main { min-width: 0; }
+.run-title { margin: 0 0 8px; font-size: 20px; font-weight: 600; color: var(--text-main); }
+.run-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.run-meta li {
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    background: #fff;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.run-meta strong { color: var(--text-main); font-weight: 600; }
+
+/* ---------- Dải kết quả tổng (biểu tượng + chữ, không chỉ dùng màu) ---------- */
+.run-outcome {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    font-size: 14px;
+    color: var(--text-main);
+}
+.outcome-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #94a3b8;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+.run-outcome.is-running .outcome-icon { background: #0369a1; }
+.run-outcome.is-completed { background: #f0fdfa; border-color: #99f6e4; }
+.run-outcome.is-completed .outcome-icon { background: var(--brand); }
+.run-outcome.is-partialfailure { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
+.run-outcome.is-partialfailure .outcome-icon { background: #d97706; }
+.run-outcome.is-allfailed,
+.run-outcome.is-failed { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
+.run-outcome.is-allfailed .outcome-icon,
+.run-outcome.is-failed .outcome-icon { background: #dc2626; }
+
+/* ---------- Thanh tiến độ ---------- */
+.progress-line {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+.progress-line strong { font-size: 16px; color: var(--text-main); }
+
+.sc-progress {
+    height: 12px;
+    overflow: hidden;
+    border-radius: 100px;
+    background: #e3eeed;
+}
+.sc-progress-bar {
+    position: relative;
+    height: 100%;
+    min-width: 0;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--brand), var(--brand-accent));
+    transition: width .5s ease;
+}
+.sc-progress-bar.is-warn { background: linear-gradient(90deg, var(--brand), #d97706); }
+.sc-progress-bar.is-err { background: #dc2626; }
+/* Vạch sáng chạy trên thanh khi đang phân tích */
+.sc-progress-bar.is-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+    animation: sc-sweep 1.6s linear infinite;
+}
+@keyframes sc-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* ---------- Thống kê ---------- */
+.run-stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+}
+.stat {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+}
+.stat dt { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.stat dd { margin: 2px 0 0; font-size: 22px; font-weight: 700; color: var(--text-main); }
+.stat.is-ok dd { color: #15803d; }
+.stat.is-err dd { color: #b91c1c; }
+
+/* ---------- Kết quả từng hồ sơ ---------- */
+.run-items {
+    border: 1px solid #06b6d4;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.ri-head,
+.run-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 150px 120px 140px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+}
+.ri-head {
+    background: var(--surface-soft);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+.ri-list { margin: 0; padding: 0; list-style: none; }
+.run-item { border-top: 1px solid var(--border); background: #fff; }
+.run-item:hover { background: #fbfdfd; }
+.run-item.is-failed { box-shadow: inset 3px 0 0 #dc2626; background: #fffafa; }
+.ri-empty { margin: 0; padding: 20px 16px; text-align: center; font-size: 14px; color: var(--text-muted); }
+
+.ri-name {
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: 600;
+    color: #000;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ri-sub { margin-top: 4px; font-size: 13px; color: var(--text-muted); }
+.ri-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: #b91c1c;
+}
+.ri-error.is-note { color: #92400e; }
+.ri-error-icon {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+.ri-error.is-note .ri-error-icon { background: #d97706; }
+
+.ri-status { display: flex; align-items: center; gap: 6px; }
+.ri-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand-accent);
+    animation: sc-blink 1.2s ease-in-out infinite;
+}
+@keyframes sc-blink { 50% { opacity: .3; } }
+
+.ri-score strong { font-size: 18px; color: var(--text-main); }
+.ri-max { font-size: 12px; color: var(--text-muted); }
+.ri-parts { font-size: 12px; color: var(--text-muted); }
+.ri-none { color: var(--text-muted); }
+
+/* ---------- Chân thẻ ---------- */
+.run-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand-accent);
+    animation: sc-blink 1.2s ease-in-out infinite;
+}
+.run-next { flex-basis: 100%; }
+
+/* ---------- Bàn phím ---------- */
+.run-state .btn:focus-visible,
+.run-stale .btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+/* ---------- Màn hình hẹp ---------- */
+@media (max-width: 991.98px) {
+    .run-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 767.98px) {
+    .run-head { flex-direction: column; }
+    .run-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ri-head { display: none; }
+    .run-item { grid-template-columns: 1fr auto; }
+    .ri-main { grid-column: 1 / -1; }
+}
+
+/* ---------- Giảm chuyển động ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    .sc-progress-bar.is-active::after,
+    .ri-pulse,
+    .live-dot { animation: none; }
+    .sc-progress-bar { transition: none; }
+}

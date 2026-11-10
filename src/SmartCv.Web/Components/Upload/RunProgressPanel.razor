@@ -1,0 +1,247 @@
+@*
+    B6: thẻ "Phân tích hồ sơ" – tiến độ MỘT lượt phân tích lấy từ GET /api/runs/{id}.
+    Component chỉ hiển thị. Trang Upload lo việc hỏi API mỗi 2 giây và truyền dữ liệu mới nhất vào đây.
+    Trạng thái: Empty | Loading | NotFound | Queued | Running | Completed | PartialFailure | AllFailed | Failed.
+*@
+@using System.Globalization
+@using SmartCv.Core.Constants
+
+@if (NotFound)
+{
+    <div class="run-state is-danger" role="alert">
+        <span class="state-icon" aria-hidden="true">?</span>
+        <p class="state-title">Không tìm thấy lượt phân tích #@RunId</p>
+        <p class="state-text">Lượt phân tích này không tồn tại hoặc đã bị xóa. Kiểm tra lại đường dẫn, hoặc tạo lượt mới ở thẻ <strong>Tải nhiều hồ sơ</strong>.</p>
+        <button type="button" class="btn sc-btn-secondary" @onclick="OnBackToUpload">Về thẻ Tải nhiều hồ sơ</button>
+    </div>
+}
+else if (Run is null && Loading)
+{
+    <div class="run-loading" role="status" aria-live="polite">
+        <span class="spinner-border spinner-border-sm text-secondary" aria-hidden="true"></span>
+        <span>Đang tải lượt phân tích @(RunId is null ? null : $"#{RunId}")...</span>
+        <div class="skeleton skeleton-title" aria-hidden="true"></div>
+        <div class="skeleton skeleton-bar" aria-hidden="true"></div>
+        <div class="skeleton skeleton-row" aria-hidden="true"></div>
+    </div>
+}
+else if (Run is null)
+{
+    <ErrorAlert Title="Không tải được tiến độ" Message="@Error" OnRetry="OnRetry" />
+    @if (Error is null)
+    {
+        <div class="run-state">
+            <img src="images/icons/upload-cloud.svg" width="40" height="40" alt="" class="state-img" />
+            <p class="state-title">Chưa có lượt phân tích nào</p>
+            <p class="state-text">Ở thẻ <strong>Tải nhiều hồ sơ</strong>: chọn công việc, tải CV lên, tích chọn CV rồi bấm <strong>Phân tích hồ sơ</strong>.</p>
+            <button type="button" class="btn sc-btn-secondary" @onclick="OnBackToUpload">Đi tới Tải nhiều hồ sơ</button>
+        </div>
+    }
+}
+else
+{
+    var run = Run;
+    var outcome = RunFlow.Outcome(run);
+    var (runText, runVariant) = StatusText.ForRun(run.Status);
+    var percent = RunFlow.Percent(run);
+    var finished = RunFlow.IsFinished(run.Status);
+
+    @if (Error is not null)
+    {
+        @* Đã có dữ liệu cũ nhưng lần hỏi gần nhất lỗi: giữ dữ liệu, báo rõ và cho thử lại *@
+        <div class="alert alert-warning d-flex align-items-start gap-3 run-stale" role="alert">
+            <div class="flex-grow-1">
+                <strong>Tạm thời không cập nhật được tiến độ</strong>
+                <div>@Error @(Polling ? "Trang sẽ tự thử lại." : null)</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnRetry">Thử lại ngay</button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Notice))
+    {
+        <div class="run-notice" role="status"><span aria-hidden="true">ⓘ</span> @Notice</div>
+    }
+
+    <header class="run-head">
+        <div class="run-head-main">
+            <h2 class="run-title">Lượt phân tích #@run.RunId</h2>
+            <ul class="run-meta" aria-label="Cấu hình lượt phân tích">
+                <li><span>Prompt</span> <strong>@run.PromptVersionName</strong></li>
+                <li><span>Mô hình</span> <strong>@run.ModelName</strong></li>
+                <li><span>Trọng số</span> <strong>Từ khóa @Pct(run.KeywordWeight) · AI @Pct(run.AiWeight)</strong></li>
+                <li><span>Ngưỡng đạt</span> <strong>@Num(run.PassThreshold) điểm</strong></li>
+                <li><span>Tạo lúc</span> <strong>@Time(run.CreatedAt)</strong></li>
+            </ul>
+        </div>
+        <StatusBadge Text="@runText" Variant="runVariant" />
+    </header>
+
+    <div class="run-outcome is-@outcome.ToString().ToLowerInvariant()" role="status">
+        <span class="outcome-icon" aria-hidden="true">@OutcomeIcon(outcome)</span>
+        <span>@OutcomeText(run, outcome)</span>
+    </div>
+
+    <div class="progress-box">
+        <div class="progress-line">
+            <span>@ProgressLabel(run)</span>
+            <strong>@percent%</strong>
+        </div>
+        <div class="sc-progress" role="progressbar" aria-label="Tiến độ phân tích hồ sơ"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="@percent"
+             aria-valuetext="@($"{percent}%, đã xử lý {run.ProcessedItems}/{run.TotalItems} hồ sơ")">
+            <div class="sc-progress-bar @BarClass(outcome)" style="width:@(percent)%"></div>
+        </div>
+        @* Trình đọc màn hình chỉ đọc khi số thay đổi, không đọc lại mỗi 2 giây *@
+        <span class="visually-hidden" aria-live="polite">@($"Đã xử lý {run.ProcessedItems} trên {run.TotalItems} hồ sơ, lỗi {run.FailedItems}.")</span>
+    </div>
+
+    <dl class="run-stats">
+        <div class="stat"><dt>Tổng CV</dt><dd>@run.TotalItems</dd></div>
+        <div class="stat"><dt>Đã xử lý</dt><dd>@run.ProcessedItems</dd></div>
+        <div class="stat is-ok"><dt>Thành công</dt><dd>@RunFlow.Succeeded(run)</dd></div>
+        <div class="stat is-err"><dt>Thất bại</dt><dd>@run.FailedItems</dd></div>
+        <div class="stat"><dt>Đang chờ</dt><dd>@RunFlow.Pending(run)</dd></div>
+    </dl>
+
+    <section class="run-items" aria-label="Kết quả từng hồ sơ">
+        <div class="ri-head" aria-hidden="true">
+            <span>Hồ sơ</span><span>Trạng thái</span><span>Điểm</span><span>Đánh giá</span>
+        </div>
+        @if (run.Items.Count == 0)
+        {
+            <p class="ri-empty">Chưa có thông tin từng hồ sơ.</p>
+        }
+        <ul class="ri-list">
+            @foreach (var item in run.Items)
+            {
+                var (evText, evVariant) = StatusText.ForEvaluation(item.Status);
+                var error = RunFlow.FriendlyItemError(item);
+                <li class="run-item @(item.Status == EvaluationStatuses.Failed ? "is-failed" : null)" @key="item.EvaluationId">
+                    <div class="ri-main">
+                        <div class="ri-name" title="@item.FileName">@(item.CandidateName ?? item.FileName)</div>
+                        <div class="ri-sub">
+                            @if (item.CandidateName is not null) { <span>@item.FileName · </span> }
+                            <span>@item.JobTitle</span>
+                        </div>
+                        @if (error is not null)
+                        {
+                            <div class="ri-error @(item.Status == EvaluationStatuses.Failed ? null : "is-note")">
+                                <span class="ri-error-icon" aria-hidden="true">!</span>
+                                <span><span class="visually-hidden">Ghi chú: </span>@error</span>
+                            </div>
+                        }
+                    </div>
+                    <div class="ri-status">
+                        @if (item.Status == EvaluationStatuses.Pending && run.Status == RunStatuses.Running)
+                        {
+                            <span class="ri-pulse" aria-hidden="true"></span>
+                        }
+                        <StatusBadge Text="@evText" Variant="evVariant" />
+                    </div>
+                    <div class="ri-score">
+                        @if (item.FinalScore is { } score)
+                        {
+                            <strong>@Num(score)</strong><span class="ri-max">/100</span>
+                            <div class="ri-parts">
+                                Từ khóa @(item.KeywordScore is { } k ? Num(k) : "–") · AI @(item.AiScore is { } a ? Num(a) : "–")
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="ri-none">–</span>
+                        }
+                    </div>
+                    <div class="ri-fit">
+                        @if (item.Status == EvaluationStatuses.Completed && !string.IsNullOrEmpty(item.FitLabel))
+                        {
+                            <span class="fit-badge @FitLevel.CssClass(item.FitLabel)">@item.FitLabel</span>
+                        }
+                        else
+                        {
+                            <span class="ri-none">–</span>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    </section>
+
+    <footer class="run-foot">
+        @if (Polling && !finished)
+        {
+            <span class="live-dot" aria-hidden="true"></span>
+            <span>Tự động cập nhật mỗi 2 giây</span>
+        }
+        else if (finished)
+        {
+            <span>Đã dừng cập nhật vì lượt phân tích đã kết thúc.</span>
+        }
+        @if (LastUpdated is { } updated)
+        {
+            <span>· Cập nhật lúc @updated.ToLocalTime().ToString("HH:mm:ss", Vi)</span>
+        }
+        @if (finished && outcome is not RunOutcome.Failed)
+        {
+            @* Trang Kết quả (B7) chưa có bảng xếp hạng theo runId: chưa đặt liên kết để tránh trang trống *@
+            <span class="run-next">Bảng xếp hạng chi tiết sẽ có ở trang Kết quả (B7).</span>
+        }
+    </footer>
+}
+
+@code {
+    private static readonly CultureInfo Vi = CultureInfo.GetCultureInfo("vi-VN");
+
+    [Parameter] public RunProgressDto? Run { get; set; }
+    [Parameter] public int? RunId { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool NotFound { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Notice { get; set; }
+    [Parameter] public bool Polling { get; set; }
+    [Parameter] public DateTime? LastUpdated { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnBackToUpload { get; set; }
+
+    private static string Pct(decimal weight) => $"{Math.Round(weight * 100):0}%";
+    private static string Num(decimal value) => value.ToString("0.#", CultureInfo.InvariantCulture);
+    private static string Time(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm dd/MM/yyyy", Vi);
+
+    private static string ProgressLabel(RunProgressDto run) => run.Status switch
+    {
+        RunStatuses.Queued => "Đang chờ máy chủ bắt đầu...",
+        RunStatuses.Running => $"Đang phân tích hồ sơ {Math.Min(run.ProcessedItems + 1, run.TotalItems)}/{run.TotalItems}...",
+        RunStatuses.Completed => $"Đã xử lý {run.ProcessedItems}/{run.TotalItems} hồ sơ",
+        RunStatuses.Failed => $"Dừng ở {run.ProcessedItems}/{run.TotalItems} hồ sơ",
+        _ => $"{run.ProcessedItems}/{run.TotalItems} hồ sơ"
+    };
+
+    private static string OutcomeIcon(RunOutcome o) => o switch
+    {
+        RunOutcome.Completed => "✓",
+        RunOutcome.PartialFailure => "!",
+        RunOutcome.AllFailed or RunOutcome.Failed => "✕",
+        _ => "…"
+    };
+
+    private static string? BarClass(RunOutcome o) => o switch
+    {
+        RunOutcome.Running => "is-active",
+        RunOutcome.Queued => "is-queued",
+        RunOutcome.PartialFailure => "is-warn",
+        RunOutcome.AllFailed or RunOutcome.Failed => "is-err",
+        _ => null
+    };
+
+    private static string OutcomeText(RunProgressDto run, RunOutcome o) => o switch
+    {
+        RunOutcome.Queued => "Lượt phân tích đã được tạo và đang chờ máy chủ bắt đầu chấm.",
+        RunOutcome.Running => "Hệ thống đang chấm điểm từng hồ sơ bằng từ khóa và AI.",
+        RunOutcome.Completed => $"Đã phân tích xong {run.TotalItems} hồ sơ.",
+        RunOutcome.PartialFailure => $"Đã xong: {RunFlow.Succeeded(run)} hồ sơ chấm thành công, {run.FailedItems} hồ sơ lỗi. Xem lý do ở từng dòng bên dưới.",
+        RunOutcome.AllFailed => "Không chấm được hồ sơ nào. Xem lý do ở từng dòng bên dưới.",
+        RunOutcome.Failed => "Lượt phân tích bị dừng do lỗi phía máy chủ. Hãy tạo lượt phân tích mới hoặc báo cho quản trị hệ thống.",
+        _ => string.Empty
+    };
+}
