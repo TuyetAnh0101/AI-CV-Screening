@@ -166,6 +166,7 @@ public sealed class LabelCandidateDto
 public sealed class HrLabelInput
 {
     public int ApplicationId { get; set; }
+    [System.Text.Json.Serialization.JsonRequired]
     public bool IsPass { get; set; }
     public string? Note { get; set; }                          // NVARCHAR(500)
 }
@@ -178,6 +179,8 @@ public sealed class SaveHrLabelsRequest
 
 public sealed class SaveHrLabelsResult
 {
+    // A15 invalidates stale stored accuracy; recalculation belongs to A16.
+    public List<int> InvalidatedRunIds { get; init; } = [];
     public int Added { get; init; }
     public int Updated { get; init; }
     public int Unchanged { get; init; }
