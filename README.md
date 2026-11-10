@@ -429,7 +429,6 @@ Nằm trong `src/SmartCv.Api/appsettings.json`:
 
 ```json
 "Gemini": {
-  "Model": "gemini-3.1-flash-lite",
   "Temperature": 0.2,
   "MaxCvCharacters": 12000,
   "MaxRetries": 2
@@ -457,7 +456,9 @@ Nằm trong `src/SmartCv.Api/appsettings.json`:
 }
 ```
 
-Mỗi thành viên nên kiểm tra API key của mình có dùng được model này không bằng cách gọi `/api/health/gemini`.
+**Model Gemini** chỉ cấu hình ở một chỗ: `Scoring:ModelName` (mặc định `gemini-3.1-flash-lite`). Đổi tạm bằng biến môi trường `Scoring__ModelName`, ví dụ `set "Scoring__ModelName=gemini-3.5-flash-lite"`. Ứng dụng **không** đọc `GEMINI_MODEL` (tên dùng trong notebook Python). Mục `Gemini` không còn khóa `Model`. Lượt chấm đã tạo luôn dùng model đã chụp lúc tạo lượt.
+
+`/api/health/gemini` chỉ kiểm tra API key nhìn thấy model này (`models.get`). Nó **không** chứng minh `generateContent` dùng được: `gemini-2.5-flash` vẫn qua `models.get` nhưng khi chấm lại trả 404.
 
 Mục `CvUpload` quyết định giới hạn của API tải CV (xem [mục 12.2](#api-upload)). `MaxFilesPerRequest` có hiệu lực ngay từ A4; `MaxFileSizeMB` hiện chỉ dùng để tính giới hạn tổng của request, việc từ chối từng file quá lớn và kiểm tra `AllowedExtensions` là của A5; `StorageRoot` dùng ở A6. Có thể ghi đè tạm bằng biến môi trường, ví dụ `CvUpload__MaxFilesPerRequest=2`, mà không phải sửa file.
 
@@ -704,7 +705,7 @@ Kết quả mong đợi (`503` kèm thông báo lỗi nếu không kết nối �
 
 ```json
 { "status": "OK", "server": "TEN_SERVER", "database": "SmartCvDb" }
-{ "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx" }
+{ "status": "OK", "model": "gemini-3.1-flash-lite", "key": "AIza...xxxx", "note": "Đã kiểm tra thông tin model (models.get). Chưa chứng minh generateContent: ..." }
 ```
 
 ### 12.1b. ✅ API job và health cho giao diện (tiền đề B2, `Endpoints/JobEndpoints.cs`)
@@ -1489,7 +1490,8 @@ Sau đó tạo Pull Request vào `main` trên GitHub, ghi rõ đã thay đổi g
 | `Violation of PRIMARY KEY constraint 'PK_Jobs'` | Đang dùng migration cũ không có kiểm tra an toàn. Lấy code mới nhất từ `main` rồi chạy lại. |
 | `InvalidOperationException` về `ConnectionStrings:SmartCvDb` hoặc `OptionsValidationException` khi khởi động | Chưa đặt User Secrets hoặc gõ sai tên khóa. Tên đúng là `ConnectionStrings:SmartCvDb` và `Gemini:ApiKey`. |
 | Gemini trả về `400` / `403` | API key sai, đã bị thu hồi, hoặc dự án Google chưa bật Gemini API. |
-| Gemini trả về `404` | Tên model không còn đúng. Kiểm tra trên AI Studio rồi sửa `Gemini:Model`. |
+| Gemini trả về `404` | Model không còn khả dụng (ví dụ `gemini-2.5-flash` bị gỡ với người dùng mới). Sửa `Scoring:ModelName`, nguồn model duy nhất. Lượt đã tạo vẫn dùng model đã chụp nên phải tạo lượt mới. `/api/health/gemini` báo OK không chứng minh `generateContent` dùng được. |
+| Gemini trả về `503` "high demand" | Google đang quá tải model, không phải lỗi API key, SQL Server hay worker. SCApp thử lại có giới hạn (`MaxRetries`, chờ 2 s, 4 s cộng jitter, tôn trọng `Retry-After`); hết lượt thì lưu `KeywordOnly` kèm lý do "Gemini đang quá tải". |
 | Lỗi chứng chỉ HTTPS | Chạy `dotnet dev-certs https --trust`. |
 | Tải CV trả `404` | Sai đường dẫn (đúng là `/api/cvs/upload`, có chữ `s`) hoặc thiếu `app.MapCvEndpoints()` trong `Program.cs`. |
 | Web báo *Thiếu cấu hình "ApiBaseUrl"* khi khởi động | Chạy Web ngoài Development mà chưa đặt `ApiBaseUrl` (biến môi trường), hoặc sửa nhầm `appsettings.Development.json` của Web. |

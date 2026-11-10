@@ -13,8 +13,12 @@ namespace SmartCv.Infrastructure.Ai;
 /// <summary>
 /// A10: gọi Gemini (REST generateContent), nhận JSON CÓ CẤU TRÚC, thử lại khi lỗi tạm thời.
 /// - Thử lại (tối đa MaxRetries lần): 429, 500/502/503/504, mất mạng, quá thời gian, JSON hỏng.
-///   Chờ theo retryDelay của Gemini nếu có, nếu không thì 2s, 4s...; không vượt MaxRetryDelaySeconds.
+///   Chờ theo retryDelay / Retry-After của Gemini nếu có (đúng giá trị server yêu cầu); nếu không thì lùi theo hàm mũ
+///   2s, 4s... cộng jitter 0–25% (tránh nhiều yêu cầu thử lại cùng lúc khi Gemini quá tải); không vượt MaxRetryDelaySeconds.
 /// - Không thử lại: 400/401/403/404, nội dung bị chặn. Người gọi hủy thì dừng ngay (ném OperationCanceledException).
+/// - Phân loại: 503 = Overloaded (quá tải), 500/502/504 và mất kết nối = Network, hết thời gian chờ = Timeout,
+///   404 = ModelUnavailable (model không tồn tại / đã bị gỡ), 429 = QuotaExceeded.
+/// - Model gọi luôn là request.Model do người gọi truyền vào (lượt chấm dùng model đã chụp); service KHÔNG tự đổi model.
 /// - Hết lượt thử: trả Failure, không bao giờ tạo điểm giả.
 /// Không ghi log API key, nội dung CV hay JSON của AI.
 /// </summary>
@@ -31,6 +35,14 @@ public sealed class GeminiEvaluationService(
 
     /// <summary>Cách chờ trước khi thử lại; test thay bằng hàm ghi lại thời gian để không phải chờ thật.</summary>
     public Func<TimeSpan, CancellationToken, Task> DelayAsync { get; init; } = static (delay, ct) => Task.Delay(delay, ct);
+
+    /// <summary>Số ngẫu nhiên 0–1 cho jitter; test thay bằng giá trị cố định.</summary>
+    public Func<double> NextJitter { get; init; } = static () => Random.Shared.NextDouble();
+
+    /// <summary>Đồng hồ để đổi Retry-After dạng ngày giờ thành thời gian chờ; test thay bằng giờ cố định.</summary>
+    public Func<DateTimeOffset> UtcNow { get; init; } = static () => DateTimeOffset.UtcNow;
+
+    private const double MaxJitterFraction = 0.25;
 
     public async Task<AiEvaluationResult> EvaluateAsync(AiEvaluationRequest request, CancellationToken ct = default)
     {
@@ -63,8 +75,12 @@ public sealed class GeminiEvaluationService(
                 }
                 else
                 {
-                    (last, serverDelay, var retryable) = ParseError(response.StatusCode, text, response.Headers.RetryAfter?.Delta, attempt);
-                    if (!retryable) return last;
+                    (last, serverDelay, var retryable) = ParseError(response.StatusCode, text, RetryAfter(response), attempt);
+                    if (!retryable)
+                    {
+                        logger.LogError("Gemini {Model} lỗi không thử lại ({Kind}): {Message}", request.Model, last.ErrorKind, last.ErrorMessage);
+                        return last;
+                    }
                 }
             }
             catch (HttpRequestException)
@@ -74,23 +90,43 @@ public sealed class GeminiEvaluationService(
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 // HttpClient hết thời gian chờ. Nếu người gọi hủy thì ct đã bật và ngoại lệ được ném tiếp.
-                last = AiEvaluationResult.Failure(AiErrorKind.Network, $"Gemini không phản hồi sau {_options.TimeoutSeconds} giây", attempt);
+                last = AiEvaluationResult.Failure(AiErrorKind.Timeout, $"Gemini không phản hồi sau {_options.TimeoutSeconds} giây", attempt);
             }
 
             if (attempt == maxAttempts) break;
 
-            var delay = serverDelay ?? TimeSpan.FromSeconds(Math.Pow(2, attempt));   // 2s, 4s...
+            var delay = serverDelay ?? Backoff(attempt);
             delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds, _options.MaxRetryDelaySeconds));
-            logger.LogWarning("Gemini lỗi lần {Attempt}/{Max} ({Kind}: {Message}). Thử lại sau {Delay:0.#} giây",
-                attempt, maxAttempts, last!.ErrorKind, last.ErrorMessage, delay.TotalSeconds);
+            logger.LogWarning("Gemini {Model} lỗi lần {Attempt}/{Max} ({Kind}: {Message}). Thử lại sau {Delay:0.#} giây",
+                request.Model, attempt, maxAttempts, last!.ErrorKind, last.ErrorMessage, delay.TotalSeconds);
             await DelayAsync(delay, ct);
         }
 
         var reason = last!.ErrorKind == AiErrorKind.QuotaExceeded
             ? $"Gemini vượt hạn mức sau {maxAttempts} lần thử lại"
             : $"Gemini lỗi sau {maxAttempts} lần thử ({last.ErrorMessage})";
-        logger.LogError("Bỏ cuộc gọi Gemini: {Reason}", reason);
+        logger.LogError("Bỏ cuộc gọi Gemini {Model} ({Kind}): {Reason}", request.Model, last.ErrorKind, reason);
         return last with { ErrorMessage = reason, Attempts = maxAttempts };
+    }
+
+    /// <summary>Lùi theo hàm mũ 2s, 4s, 8s... cộng jitter 0–25%.</summary>
+    private TimeSpan Backoff(int attempt)
+    {
+        var seconds = Math.Pow(2, attempt);
+        return TimeSpan.FromSeconds(seconds * (1 + MaxJitterFraction * Math.Clamp(NextJitter(), 0, 1)));
+    }
+
+    /// <summary>Header Retry-After: số giây hoặc ngày giờ (RFC 7231). Giá trị đã qua hoặc không hợp lệ thì bỏ qua.</summary>
+    private TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        if (header?.Delta is { } delta) return delta;
+        if (header?.Date is { } date)
+        {
+            var wait = date - UtcNow();
+            return wait > TimeSpan.Zero ? wait : null;
+        }
+        return null;
     }
 
     // ---------- Nội dung gửi đi ----------
@@ -265,11 +301,13 @@ public sealed class GeminiEvaluationService(
         return code switch
         {
             429 => (AiEvaluationResult.Failure(AiErrorKind.QuotaExceeded, $"Gemini vượt hạn mức ({detailText})", attempt), delay, true),
-            500 or 502 or 503 or 504 => (AiEvaluationResult.Failure(AiErrorKind.Network, $"Máy chủ Gemini lỗi tạm thời ({detailText})", attempt), delay, true),
+            503 => (AiEvaluationResult.Failure(AiErrorKind.Overloaded, $"Gemini đang quá tải ({detailText})", attempt), delay, true),
+            500 or 502 or 504 => (AiEvaluationResult.Failure(AiErrorKind.Network, $"Máy chủ Gemini lỗi tạm thời ({detailText})", attempt), delay, true),
             400 when invalidKey => (AiEvaluationResult.Failure(AiErrorKind.Configuration, "Gemini API key không hợp lệ", attempt), null, false),
             400 => (AiEvaluationResult.Failure(AiErrorKind.InvalidRequest, $"Gemini từ chối yêu cầu, kiểm tra schema hoặc tham số ({detailText})", attempt), null, false),
             401 or 403 => (AiEvaluationResult.Failure(AiErrorKind.Configuration, $"Không có quyền sử dụng Gemini, kiểm tra API key ({detailText})", attempt), null, false),
-            404 => (AiEvaluationResult.Failure(AiErrorKind.Configuration, $"Không tìm thấy model, kiểm tra Scoring:ModelName ({detailText})", attempt), null, false),
+            404 => (AiEvaluationResult.Failure(AiErrorKind.ModelUnavailable,
+                $"Không tìm thấy model hoặc model không còn khả dụng, kiểm tra Scoring:ModelName ({detailText})", attempt), null, false),
             _ => (AiEvaluationResult.Failure(AiErrorKind.Other, $"Gemini báo lỗi ({detailText})", attempt), null, false)
         };
     }

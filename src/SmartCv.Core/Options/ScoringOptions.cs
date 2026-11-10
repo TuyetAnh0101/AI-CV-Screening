@@ -10,7 +10,13 @@ public sealed class ScoringOptions
     public const string SectionName = "Scoring";
 
     // ----- Lưu theo từng lượt chấm -----
-    public string ModelName { get; set; } = "gemini-2.5-flash";
+    /// <summary>
+    /// Model Gemini dùng để chấm: NGUỒN DUY NHẤT (xem trước A10, lượt chấm A11 chụp lại giá trị này, kiểm tra /api/health/gemini).
+    /// Đổi bằng appsettings "Scoring:ModelName" hoặc biến môi trường Scoring__ModelName (ứng dụng KHÔNG đọc GEMINI_MODEL).
+    /// gemini-2.5-flash đã bị Google gỡ với người dùng mới (HTTP 404); gemini-3.8-flash từng trả 503 "high demand" liên tục.
+    /// Giá trị này chỉ dùng khi thiếu cấu hình; phải giống appsettings.json (test GeminiModelConfigurationTests).
+    /// </summary>
+    public string ModelName { get; set; } = "gemini-3.1-flash-lite";
     public decimal Temperature { get; set; } = 0.2m;
     public decimal KeywordWeight { get; set; } = 0.3m;   // điểm cuối = 30% keyword + 70% AI (A10)
     public decimal AiWeight { get; set; } = 0.7m;
