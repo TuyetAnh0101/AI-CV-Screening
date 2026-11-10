@@ -146,7 +146,43 @@
     gap: 28px;
 }
 
-.sc-notice { margin: 0; font-size: 14px; }
+.sc-notice { margin: 0; font-size: 14px; border: 1px solid var(--border); }
+
+/* B5: thông báo tổng kết – teal khi tất cả ổn, vàng khi có file lỗi (kèm biểu tượng, không chỉ dùng màu) */
+.sc-notice.is-ok { background: #f0fdfa; border-color: #99f6e4; color: var(--brand-hover); }
+.sc-notice.is-warn { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.sc-notice-text { display: flex; align-items: flex-start; gap: 8px; }
+.sc-notice-icon {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+}
+.sc-notice.is-ok .sc-notice-icon { background: var(--brand); color: #fff; }
+.sc-notice.is-warn .sc-notice-icon { background: #d97706; color: #fff; }
+
+.summary-error { color: #b91c1c; }
+
+/* B5: nút "Xóa N file lỗi khỏi danh sách" dưới bảng */
+.sc-btn-remove-errors {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 6px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 600;
+}
+.sc-btn-remove-errors:hover { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.sc-btn-remove-errors:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 @media (max-width: 767.98px) {
     .page-banner { padding: 16px; }

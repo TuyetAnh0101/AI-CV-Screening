@@ -2,7 +2,9 @@
 @*
     Trang "Tải lên & Phân tích CV" (Figma Project_GD, node 375:1982 "Gán CV vào Job").
     B3 (đã làm): ô kéo thả, tải lên ngay qua POST /api/cvs/upload (A4–A6), danh sách CV, ô tích, menu ⋯, nút Hủy.
-    B4: chọn công việc thật và hiển thị yêu cầu. B5 thông báo lỗi chi tiết, B6 nút Phân tích + thẻ tiến độ.
+    B4 (đã làm): chọn công việc thật và hiển thị yêu cầu.
+    B5: kiểm tra file trên giao diện (UploadValidator), hiện lỗi từng dòng, tổng kết, xóa file lỗi, báo mất kết nối API.
+    B6: nút Phân tích + thẻ tiến độ.
 *@
 @using Microsoft.Extensions.Options
 @using SmartCv.Core.Options
@@ -36,11 +38,19 @@
 <section class="page-card">
     @if (tab == Tab.Upload)
     {
+        @* B5: lỗi của cả lần tải (mất kết nối API, máy chủ lỗi) – khác lỗi từng file hiện trong bảng *@
+        <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" />
+
+        @* B5: thông báo tổng kết sau mỗi lần tải *@
         @if (notice is not null)
         {
-            <div class="alert alert-light border d-flex justify-content-between align-items-start sc-notice" role="status">
-                <span>@notice</span>
-                <button type="button" class="btn-close" aria-label="Đóng" @onclick="() => notice = null"></button>
+            <div class="alert d-flex justify-content-between align-items-start gap-2 sc-notice @(noticeHasErrors ? "is-warn" : "is-ok")"
+                 role="status" aria-live="polite">
+                <span class="sc-notice-text">
+                    <span class="sc-notice-icon" aria-hidden="true">@(noticeHasErrors ? "!" : "✓")</span>
+                    <span>@notice</span>
+                </span>
+                <button type="button" class="btn-close" aria-label="Đóng thông báo" @onclick="() => notice = null"></button>
             </div>
         }
 
@@ -100,11 +110,22 @@
                     <span class="list-summary" aria-live="polite">
                         Sẵn sàng <strong>@items.Count(i => i.CanAnalyze)</strong>
                         • Đã chọn <strong>@SelectedCount</strong>
+                        @if (ErrorCount > 0)
+                        {
+                            <span class="summary-error"> • Lỗi <strong>@ErrorCount</strong></span>
+                        }
                     </span>
                 }
             </div>
             <CvFileTable Items="items" ApiBaseUrl="@apiBaseUrl"
                          OnRemove="RemoveItem" OnToggle="ToggleItem" OnToggleAll="ToggleAll" />
+            @if (ErrorCount > 0)
+            {
+                @* B5: chỉ bỏ các dòng lỗi khỏi màn hình; không gọi API, không xóa gì trên máy chủ *@
+                <button type="button" class="btn btn-sm sc-btn-remove-errors" @onclick="RemoveErrors">
+                    <span aria-hidden="true">✕</span> Xóa @ErrorCount file lỗi khỏi danh sách
+                </button>
+            }
         </div>
 
         @* ---------- Nút (Figma: Hủy | Phân tích hồ sơ) ---------- *@
@@ -131,7 +152,9 @@
     private readonly List<UploadItem> items = [];
     private bool busy;              // đang tải lên: khóa ô kéo thả để IBrowserFile cũ không bị thay thế giữa chừng
     private string? notice;
-    private int generation;         // tăng khi bấm Hủy: kết quả của lần tải cũ không ghi đè thông báo mới
+    private bool noticeHasErrors;
+    private (string Title, string Message)? uploadError;   // B5: lỗi của cả request (kết nối, máy chủ)
+    private int generation;        // tăng khi bấm Hủy: kết quả của lần tải cũ không ghi đè thông báo mới
     private string? apiBaseUrl;
     private List<JobDto> jobs = [];
     private int? selectedJobId;
@@ -145,6 +168,7 @@
     private IEnumerable<string> Extensions => Limits.AllowedExtensions.Select(e => e.ToLowerInvariant()).Distinct();
     private string AcceptAttr => string.Join(",", Extensions);
     private int SelectedCount => items.Count(i => i.CanAnalyze && i.Selected);
+    private int ErrorCount => items.Count(i => i.IsError);
 
     // Figma: "PDF, JPG, PNG • Tối đa 25 CV/lần • Tối đa 2 MB/tệp". Số lấy từ cấu hình CvUpload, không viết cứng.
     private string Caption =>
@@ -179,38 +203,37 @@
     {
         if (busy) return;   // ô đã bị khóa; chặn thêm một lần cho chắc
         notice = null;
+        uploadError = null;
 
         // GetMultipleFiles mặc định chỉ cho 10 file và NÉM LỖI nếu nhiều hơn; lấy rộng rồi tự áp giới hạn.
         var picked = e.GetMultipleFiles(maximumFileCount: 1000);
-        var allowed = new HashSet<string>(Limits.AllowedExtensions, StringComparer.OrdinalIgnoreCase);
+        var validator = new UploadValidator(Limits, MaxFilesPerSelection);
         var toUpload = new List<(IBrowserFile File, UploadItem Item)>();
         var skipped = 0;
 
         foreach (var file in picked)
         {
             var item = new UploadItem { FileName = file.Name, SizeBytes = file.Size, Selected = true };
-            // Kiểm tra tối thiểu để gửi an toàn (B5 sẽ làm thông báo chi tiết); API A5 vẫn kiểm tra lại nội dung thật.
-            if (toUpload.Count >= MaxFilesPerSelection)
-                Invalidate(item, $"Vượt quá {MaxFilesPerSelection} CV mỗi lần chọn.");
-            else if (!allowed.Contains(Path.GetExtension(file.Name)))
-                Invalidate(item, "Định dạng không được hỗ trợ.");
-            else if (file.Size == 0)
-                Invalidate(item, "File rỗng.");
-            else if (file.Size > Limits.MaxFileSizeBytes)
-                Invalidate(item, $"Vượt quá {Limits.MaxFileSizeMB} MB.");
+            // B5 lớp 1: kiểm tra trên giao diện (không đọc nội dung). API A5 vẫn kiểm tra lại nội dung thật.
+            // items đã chứa các file hợp lệ vừa thêm ở vòng trước → bắt được cả file trùng trong cùng lần thả.
+            var error = validator.Validate(file.Name, file.Size, items, toUpload.Count);
+            if (error is not null)
+            {
+                Invalidate(item, error);
+                skipped++;
+            }
             else
             {
                 item.State = UploadItemState.Uploading;
                 toUpload.Add((file, item));
             }
 
-            if (item.State == UploadItemState.Invalid) skipped++;
             items.Add(item);
         }
 
         if (toUpload.Count == 0)
         {
-            if (skipped > 0) notice = $"Không có file nào được tải lên ({skipped} file không hợp lệ).";
+            if (skipped > 0) (notice, noticeHasErrors) = UploadFlow.Summarize([], skipped);
             return;
         }
 
@@ -227,17 +250,23 @@
             foreach (var batch in batches)
             {
                 ApiResult<CvUploadResponse> result;
+                (string Title, string Message)? batchError;
                 try
                 {
                     result = await CvApi.UploadAsync(batch.Select(b => b.File).ToList());
+                    batchError = UploadFlow.DescribeBatchFailure(result);
                 }
                 catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException)
                 {
                     // Ví dụ: file trên trình duyệt không đọc được nữa, mất kết nối giữa chừng
                     Logger.LogWarning(ex, "Không đọc/gửi được nhóm {Count} file", batch.Count);
                     result = ApiResult<CvUploadResponse>.Failure("Không đọc hoặc gửi được file. Vui lòng chọn lại file.");
+                    batchError = ("Không đọc hoặc gửi được file",
+                        "Trình duyệt không còn cho đọc file đã chọn hoặc kết nối bị gián đoạn. Vui lòng chọn lại file.");
                 }
 
+                // B5: chỉ giữ lỗi đầu tiên trên khung đầu thẻ; lý do từng file vẫn hiện trong bảng.
+                if (batchError is not null && uploadError is null && myGeneration == generation) uploadError = batchError;
                 UploadFlow.ApplyResult(batch.Select(b => b.Item).ToList(), result);
                 StateHasChanged();   // cập nhật từng nhóm, nhóm đã xong không bị mất khi nhóm sau lỗi
             }
@@ -249,13 +278,15 @@
 
         if (myGeneration == generation)
         {
-            var batchItems = toUpload.Select(x => x.Item).ToList();
-            var ok = batchItems.Count(i => i.CanAnalyze);
-            var failed = batchItems.Count - ok;
-            notice = $"Đã tải lên {ok} CV."
-                     + (failed > 0 ? $" {failed} file không thành công." : string.Empty)
-                     + (skipped > 0 ? $" {skipped} file không hợp lệ, chưa gửi." : string.Empty);
+            (notice, noticeHasErrors) = UploadFlow.Summarize(toUpload.Select(x => x.Item).ToList(), skipped);
         }
+    }
+
+    // B5 "Xóa N file lỗi khỏi danh sách": chỉ bỏ dòng Lỗi file / Bị từ chối trên giao diện, không gọi API.
+    private void RemoveErrors()
+    {
+        items.RemoveAll(i => i.IsError);
+        uploadError = null;
     }
 
     private static void Invalidate(UploadItem item, string message)
@@ -289,5 +320,6 @@
         generation++;
         items.Clear();
         notice = null;
+        uploadError = null;
     }
 }

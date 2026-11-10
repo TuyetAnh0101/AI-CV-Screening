@@ -62,7 +62,32 @@
     white-space: nowrap;
 }
 
-tr.is-error .file-sub { color: #b91c1c; white-space: normal; }
+/* B5: dòng lỗi – không chỉ dựa vào màu: viền trái, biểu tượng "!" và chữ lý do */
+tr.is-error .file-sub { color: #b91c1c; white-space: normal; overflow: visible; display: flex; align-items: flex-start; gap: 6px; }
+tr.is-error td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+tr.is-existing .file-sub { color: #92400e; white-space: normal; }
+
+.sub-icon {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.file-hint {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: normal;
+}
 
 /* Màn hình hẹp: cho cuộn ngang bảng */
 @media (max-width: 767.98px) {
