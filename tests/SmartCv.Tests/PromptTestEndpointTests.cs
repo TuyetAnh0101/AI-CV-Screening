@@ -186,8 +186,9 @@ public class PromptTestEndpointTests
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("items")[0].GetProperty("isMatch").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("items")[0].GetProperty("mismatchType").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompt-tests/999999")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompt-tests/compare")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/prompts/compare")).StatusCode);
+        // A17 now provides the compare endpoints; without parameters they reject the request instead of 404.
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/prompt-tests/compare")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/prompts/compare")).StatusCode);
     }
 
     [Theory]
