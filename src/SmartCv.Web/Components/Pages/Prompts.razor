@@ -81,6 +81,7 @@
 </div>
 
 <PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" />
+<AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" />
 @if (testHistoryWarning is not null)
 {
     <p role="status">@testHistoryWarning <button type="button" class="btn sc-btn-secondary" @onclick="RefreshTestVersionsAsync">Cập nhật lịch sử</button></p>
@@ -89,6 +90,7 @@
 @code {
     [SupplyParameterFromQuery(Name = "testRunId")] public string? TestRunId { get; set; }
     private string? testHistoryWarning;
+    private int accuracyRefresh;
     private void UpdateTestToken(string token)
     {
         if ((TestRunId ?? "") == token) return;
@@ -96,6 +98,7 @@
     }
     private async Task RefreshTestVersionsAsync()
     {
+        ++accuracyRefresh; // B15 reuses B14 completion; no additional polling or POST.
         var result = await PromptApi.GetVersionsAsync(lifetime.Token);
         if (disposed) return;
         if (result.IsSuccess && result.Data!.Count(v => v.IsActive) <= 1)

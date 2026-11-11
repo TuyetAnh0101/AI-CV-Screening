@@ -1,0 +1,120 @@
+@using System.Globalization
+@implements IDisposable
+@inject PromptApiClient Api
+
+<section class="accuracy-compare" aria-label="So sánh tỷ lệ đúng" aria-busy="@(loading ? "true" : "false")">
+    <header class="compare-head">
+        <div><h2>So sánh tỷ lệ đúng</h2><p>Lượt Completed hợp lệ gần nhất của mỗi phiên bản trong cùng bộ CV.</p></div>
+        @if (best is not null)
+        {
+            <aside class="best-card" aria-label="Phiên bản cao nhất"><span>CAO NHẤT · NHÓM ĐÃ XÁC MINH</span><strong>@Pct(best.AccuracyPercent)</strong><span class="mono">@best.PromptVersionName</span></aside>
+        }
+    </header>
+    <div class="compare-controls">
+        <label for="accuracy-set">Bộ CV so sánh</label>
+        <select id="accuracy-set" aria-label="Bộ CV so sánh" value="@setId" @onchange="ChangeSetAsync" disabled="@(sets.Count == 0)">
+            <option value="0">Chọn bộ CV</option>
+            @foreach (var set in sets) { <option value="@set.EvaluationSetId">@set.Name</option> }
+        </select>
+        <button type="button" class="btn sc-btn-secondary" @onclick="ReloadAsync" disabled="@loading">@(loading ? "Đang tải..." : "Làm mới so sánh")</button>
+    </div>
+    @if (error is not null) { <p class="compare-error" role="alert">@error</p> }
+    else if (loading) { <p role="status">Đang tải kết quả đánh giá...</p> }
+    else if (rows.Count == 0) { <p class="empty" role="status">Chưa có lần đánh giá nào hoàn thành. Hãy chạy đánh giá một phiên bản Prompt để xem kết quả.</p> }
+    else
+    {
+        <p class="compare-note" role="note">@verification</p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Bảng tỷ lệ đúng, có thể cuộn ngang">
+            <table>
+                <caption class="visually-hidden">Kết quả đối chiếu nhãn HR. Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
+                <thead><tr><th scope="col">Phiên bản</th><th scope="col">Tỷ lệ đúng</th><th scope="col" class="num">Đúng</th><th scope="col" class="num">Bỏ sót</th><th scope="col" class="num">Chọn nhầm</th><th scope="col">Lần chạy</th><th scope="col">Trạng thái</th></tr></thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        <tr class="@(r.RunId == best?.RunId ? "is-best" : "")" @key="r.RunId">
+                            <th scope="row"><span class="mono">@r.PromptVersionName</span>@if (r.RunId == best?.RunId) { <small>Cao nhất</small> }</th>
+                            <td><div class="accuracy-cell"><span class="accuracy-track" role="img" aria-label="@($"Tỷ lệ đúng {Pct(r.AccuracyPercent)}")"><span class="accuracy-fill @(r.RunId == best?.RunId ? "best-fill" : "")" style="width:@(r.AccuracyPercent!.Value.ToString(CultureInfo.InvariantCulture))%"></span></span><strong>@Pct(r.AccuracyPercent)</strong></div></td>
+                            <td class="num">@r.CorrectCount/@r.TotalLabeledCount</td><td class="num missed">@r.MissedCount</td><td class="num wrong">@r.WrongPickCount</td>
+                            <td class="run-time">#@r.RunId<br />@RankingView.VnTime(r.CompletedAt!.Value)<small>@r.ModelName</small></td>
+                            <td>@if (Versions.Any(v => v.PromptVersionId == r.PromptVersionId && v.IsActive)) { <span class="active-tag">Đang dùng</span> }
+                                @if (r.UnscoredCount > 0) { <small>@r.UnscoredCount chưa có dự đoán hợp lệ</small> }
+                                @if (r.KeywordOnlyCount > 0) { <small>@r.KeywordOnlyCount chỉ keyword</small> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="compare-note">Mẫu số là số CV còn nhãn HR của từng lượt (TotalLabeledCount), có thể khác tổng CV ban đầu. CV chưa chấm được vẫn ở mẫu số, được tính riêng và không gán thành Không đạt. Giờ hoàn thành: Việt Nam (UTC+7).</p>
+    }
+    @if (!loading && excluded > 0) { <p class="compare-note">@excluded lượt Completed không có thống kê hợp lệ đã được loại khỏi bảng. Không thay dữ liệu thiếu bằng 0%.</p> }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
+    [Parameter] public int RefreshVersion { get; set; }
+    private List<EvaluationSetDto> sets = [];
+    private List<PromptTestRunDto> rows = [];
+    private PromptTestRunDto? best;
+    private int setId, excluded, generation, lastRefresh = -1;
+    private bool loading, disposed;
+    private string? error;
+    private string verification = "";
+    private CancellationTokenSource? request;
+    private static string Pct(decimal? percent) => percent is null ? "—" : percent.Value.ToString("0.##", CultureInfo.GetCultureInfo("vi-VN")) + "%";
+    protected override async Task OnParametersSetAsync()
+    {
+        if (lastRefresh == RefreshVersion) return;
+        lastRefresh = RefreshVersion;
+        await ReloadAsync();
+    }
+    private async Task ChangeSetAsync(ChangeEventArgs e)
+    { setId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await LoadRowsAsync(); }
+    private async Task ReloadAsync()
+    {
+        var (version, ct) = Begin();
+        try
+        {
+            var result = await Api.GetEvaluationSetsAsync(ct);
+            if (Stale(version)) return;
+            if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            sets = result.Data!;
+            if (!sets.Any(s => s.EvaluationSetId == setId)) setId = sets.FirstOrDefault()?.EvaluationSetId ?? 0;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+        finally { if (!Stale(version)) loading = false; }
+        if (!Stale(version)) await LoadRowsAsync();
+    }
+    private (int, CancellationToken) Begin()
+    { request?.Cancel(); request?.Dispose(); request = new(); loading = true; error = null; rows = []; best = null; excluded = 0; return (++generation, request.Token); }
+    private bool Stale(int version) => disposed || version != generation;
+    private async Task LoadRowsAsync()
+    {
+        var (version, ct) = Begin();
+        try
+        {
+            if (setId <= 0) return;
+            var data = await Api.GetAccuracyRunsAsync(setId, ct);
+            if (Stale(version)) return;
+            if (!data.IsSuccess) { error = data.ErrorMessage; return; }
+            rows = AccuracyComparisonView.Latest(data.Data!, setId);
+            excluded = data.Data!.Count(r => r.EvaluationSetId == setId && r.Status == "Completed" && !AccuracyComparisonView.Valid(r));
+            verification = "Chưa đủ dữ liệu tương đương để xác định bản cao nhất. Các số liệu chỉ mô tả từng lượt.";
+            if (rows.Count < 2) return;
+            var anchor = rows[0];
+            foreach (var candidate in rows.Skip(1))
+            {
+                var comparison = await Api.CompareAccuracyRunsAsync(anchor.RunId, candidate.RunId, ct);
+                if (Stale(version)) return;
+                if (!comparison.IsSuccess || !comparison.Data!.IsFairComparison || comparison.Data.Verdict == "NotComparable"
+                    || !AccuracyComparisonView.Matches(anchor, comparison.Data.Base) || !AccuracyComparisonView.Matches(candidate, comparison.Data.Candidate))
+                { verification = "Chưa xác minh được cùng cấu hình, danh sách CV và nhãn HR cho toàn bộ bảng (hoặc dữ liệu vừa thay đổi). Không xếp hạng cao nhất. Hãy làm mới hoặc chọn bộ CV khác."; return; }
+            }
+            best = AccuracyComparisonView.Best(rows, true);
+            verification = best is null ? "Có CV chưa chấm được hoặc chỉ keyword; chưa kết luận bản cao nhất về AI." : "A17 đã xác minh cùng bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Đồng tỷ lệ: ưu tiên ít Bỏ sót, sau đó ID phiên bản tăng dần. Cao nhất chỉ trong các lượt hiển thị, không tự kích hoạt.";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        finally { if (!Stale(version)) loading = false; }
+    }
+    public void Dispose() { disposed = true; ++generation; request?.Cancel(); request?.Dispose(); }
+}

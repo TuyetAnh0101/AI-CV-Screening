@@ -5,6 +5,10 @@ namespace SmartCv.Web.Services;
 /// <summary>B12–B13: immutable versions and activation through the existing A14 API.</summary>
 public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> logger) : ApiClientBase(http, logger)
 {
+    public Task<ApiResult<List<PromptTestRunDto>>> GetAccuracyRunsAsync(int setId, CancellationToken ct = default) =>
+        GetAsync<List<PromptTestRunDto>>($"api/prompt-tests?evaluationSetId={setId}", ct);
+    public Task<ApiResult<PromptCompareDto>> CompareAccuracyRunsAsync(int baseId, int candidateId, CancellationToken ct = default) =>
+        GetAsync<PromptCompareDto>($"api/prompt-tests/compare?baseRunId={baseId}&candidateRunId={candidateId}", ct);
     public Task<ApiResult<List<EvaluationSetDto>>> GetEvaluationSetsAsync(CancellationToken ct = default) => GetAsync<List<EvaluationSetDto>>("api/evaluation-sets", ct);
     public Task<ApiResult<List<PromptTestSummaryDto>>> GetTestsAsync(CancellationToken ct = default) => GetAsync<List<PromptTestSummaryDto>>("api/prompt-tests", ct);
     public Task<ApiResult<PromptTestSummaryDto>> StartTestAsync(StartPromptTestRequest request, CancellationToken ct = default) => PostJsonAsync<PromptTestSummaryDto>("api/prompt-tests", request, ct);
