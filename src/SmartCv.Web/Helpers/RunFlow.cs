@@ -7,7 +7,7 @@ using SmartCv.Web.Services;
 namespace SmartCv.Web.Helpers;
 
 /// <summary>Kết quả tổng của một lượt phân tích, dùng để chọn màu, biểu tượng và câu thông báo.</summary>
-public enum RunOutcome { Queued, Running, Completed, PartialFailure, AllFailed, Failed }
+public enum RunOutcome { Queued, Running, Completed, AiFallback, PartialFailure, AllFailed, Failed }
 
 /// <summary>
 /// B6: phần logic thuần của nút "Phân tích hồ sơ" và thẻ tiến độ (không phụ thuộc giao diện, có unit test).
@@ -64,6 +64,12 @@ public static partial class RunFlow
 
     public static int Succeeded(RunProgressDto run) => Math.Max(0, run.ProcessedItems - run.FailedItems);
 
+    public static int AiSucceeded(RunProgressDto run) => run.Items.Count(i =>
+        i.Status == EvaluationStatuses.Completed && i.ScoreSource == ScoreSources.Combined && i.AiScore is not null);
+
+    public static int KeywordOnly(RunProgressDto run) => run.Items.Count(i =>
+        i.Status == EvaluationStatuses.Completed && i.ScoreSource == ScoreSources.KeywordOnly);
+
     public static int Pending(RunProgressDto run) => Math.Max(0, run.TotalItems - run.ProcessedItems);
 
     public static int Percent(RunProgressDto run) => (int)Math.Clamp(Math.Round(run.Percent), 0, 100);
@@ -75,6 +81,7 @@ public static partial class RunFlow
         RunStatuses.Failed => RunOutcome.Failed,
         RunStatuses.Completed when run.TotalItems > 0 && run.FailedItems >= run.TotalItems => RunOutcome.AllFailed,
         RunStatuses.Completed when run.FailedItems > 0 => RunOutcome.PartialFailure,
+        RunStatuses.Completed when KeywordOnly(run) > 0 => RunOutcome.AiFallback,
         RunStatuses.Completed => RunOutcome.Completed,
         _ => RunOutcome.Running   // trạng thái lạ: coi như chưa xong, vẫn hỏi tiếp
     };

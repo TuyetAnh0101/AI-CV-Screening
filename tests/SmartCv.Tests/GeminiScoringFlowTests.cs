@@ -72,7 +72,7 @@ public class GeminiScoringFlowTests
         }).WithWebHostBuilder(b => b.ConfigureTestServices(s =>
             s.AddHttpClient<GeminiEvaluationService>().ConfigurePrimaryHttpMessageHandler(() => gemini)));
 
-    private static async Task<int> SeedRunAsync(WebApplicationFactory<Program> factory, int cvCount, string model = "gemini-3.1-flash-lite")
+    private static async Task<int> SeedRunAsync(WebApplicationFactory<Program> factory, int cvCount, string model = "gemini-3.1-flash-lite", string cvText = FullCv)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
@@ -92,7 +92,7 @@ public class GeminiScoringFlowTests
             {
                 CvId = cvId, OriginalFileName = $"cv-{i}.pdf", StoredPath = $"Uploads/CV/{cvId}.pdf", ContentType = "application/pdf", FileSizeBytes = 1,
                 FileHash = cvId.ToString("N").PadRight(64, '0').ToUpperInvariant(), ExtractionStatus = ExtractionStatuses.Completed,
-                ExtractedText = FullCv, UploadedAt = DateTime.UtcNow
+                ExtractedText = cvText, UploadedAt = DateTime.UtcNow
             });
             var application = new Application { CvId = cvId, JobId = BackendJob, CreatedAt = DateTime.UtcNow };
             db.Applications.Add(application);
@@ -113,6 +113,103 @@ public class GeminiScoringFlowTests
             if (DateTime.UtcNow > deadline) throw new TimeoutException($"{run.Status} {run.ProcessedItems}/{run.TotalItems}");
             await Task.Delay(50);
         }
+    }
+
+    [Fact]
+    public async Task Http_200_with_invalid_structured_payload_persists_keyword_only_and_exposes_parse_failure()
+    {
+        // The HTTP request succeeds, but the required score is absent. Completed must not imply AI success.
+        const string payload = """{"matchedSkills":[],"missingSkills":[],"reasoning":"Thiếu điểm AI."}""";
+        var gemini = new ScriptedGemini(_ => Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+        {
+            candidates = new[] { new { finishReason = "STOP", content = new { parts = new[] { new { text = payload } } } } }
+        })));
+        using var factory = Host(gemini);
+        using var client = factory.CreateClient();
+        var runId = await SeedRunAsync(factory, 1);
+
+        var run = await WaitCompletedAsync(client, runId);
+        var item = Assert.Single(run.Items!);
+        Assert.Equal(EvaluationStatuses.Completed, item.Status);
+        Assert.Equal(ScoreSources.KeywordOnly, item.ScoreSource);
+        Assert.Null(item.AiScore);
+        Assert.Equal(item.KeywordScore, item.FinalScore);
+        Assert.Contains("JSON thiếu trường score", item.ErrorMessage);
+        Assert.Equal(3, gemini.Calls); // MaxRetries = 2 bounds retries of invalid structured output.
+
+        using var freshScope = factory.Services.CreateScope();
+        var db = freshScope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+        var saved = await db.Evaluations.AsNoTracking().SingleAsync(e => e.EvaluationId == item.EvaluationId);
+        Assert.Equal(ScoreSources.KeywordOnly, saved.ScoreSource);
+        Assert.Null(saved.AiScore);
+        Assert.Equal(saved.KeywordScore, saved.FinalScore);
+        Assert.Equal(payload, saved.AiRawResponse);
+        Assert.Contains("JSON thiếu trường score", saved.ErrorMessage);
+        Assert.Contains("điểm chỉ tính theo từ khóa", saved.Reasoning);
+
+        var detail = (await client.GetFromJsonAsync<EvaluationDetailDto>($"/api/evaluations/{saved.EvaluationId}"))!;
+        Assert.Equal((saved.AiScore, saved.FinalScore, saved.ScoreSource, saved.ErrorMessage, saved.Reasoning, saved.AiRawResponse),
+            (detail.AiScore, detail.FinalScore, detail.ScoreSource, detail.ErrorMessage, detail.Reasoning, detail.AiRawResponse));
+    }
+
+    [Fact]
+    public async Task Http_200_multipart_json_persists_ai_result_skills_and_returns_same_result_from_api()
+    {
+        const string reasoning = "CV có kinh nghiệm thực hành ASP.NET Core và SQL Server; chưa có bằng chứng về Docker.";
+        var payload = JsonSerializer.Serialize(new
+        {
+            score = 82, matchedSkills = new[] { "CSHARP", "aspnetcore", "sqlserver", "efcore", "git" },
+            missingSkills = new[] { "docker" }, yearsExperience = 1.5m, gpa = 3.2m, reasoning
+        });
+        var split = payload.Length / 2;
+        var gemini = new ScriptedGemini(_ => Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    finishReason = "STOP",
+                    content = new { parts = new[] { new { text = payload[..split] }, new { text = payload[split..] } } }
+                }
+            }
+        })));
+        using var factory = Host(gemini);
+        using var client = factory.CreateClient();
+        var runId = await SeedRunAsync(factory, 1, cvText: FullCv.Replace(", Docker", string.Empty));
+
+        var run = await WaitCompletedAsync(client, runId);
+        var item = Assert.Single(run.Items!);
+        Assert.Equal(ScoreSources.Combined, item.ScoreSource);
+        Assert.Equal(82m, item.AiScore);
+        Assert.Equal(Math.Round(0.3m * item.KeywordScore!.Value + 0.7m * 82m, 2, MidpointRounding.AwayFromZero), item.FinalScore);
+        Assert.Equal(1, gemini.Calls);
+
+        using var freshScope = factory.Services.CreateScope();
+        var db = freshScope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+        var saved = await db.Evaluations.AsNoTracking().Include(e => e.Skills).Include(e => e.Run)
+            .SingleAsync(e => e.EvaluationId == item.EvaluationId);
+        Assert.Equal(EvaluationStatuses.Completed, saved.Status);
+        Assert.Equal((82m, item.FinalScore, ScoreSources.Combined), (saved.AiScore, saved.FinalScore, saved.ScoreSource));
+        Assert.Null(saved.ErrorMessage);
+        Assert.Equal(reasoning, saved.Reasoning);
+        Assert.Equal(payload, saved.AiRawResponse);
+        using var raw = JsonDocument.Parse(saved.AiRawResponse!);
+        Assert.Equal(82, raw.RootElement.GetProperty("score").GetInt32());
+        Assert.Equal(6, saved.Skills.Count);
+        Assert.True(Assert.Single(saved.Skills, s => s.SkillCode == "csharp").IsMatched);
+        Assert.False(Assert.Single(saved.Skills, s => s.SkillCode == "docker").IsMatched);
+        Assert.All(saved.Skills.Where(s => s.IsMatched), s => Assert.False(string.IsNullOrWhiteSpace(s.Evidence)));
+
+        var detail = (await client.GetFromJsonAsync<EvaluationDetailDto>($"/api/evaluations/{saved.EvaluationId}"))!;
+        Assert.Equal((saved.AiScore, saved.FinalScore, saved.ScoreSource, saved.Reasoning, saved.AiRawResponse),
+            (detail.AiScore, detail.FinalScore, detail.ScoreSource, detail.Reasoning, detail.AiRawResponse));
+        Assert.Equal(saved.Run.PromptVersionId, detail.PromptVersionId);
+        Assert.Equal(saved.Skills.OrderBy(s => s.SkillCode).Select(s => (s.SkillCode, s.IsMatched, s.Evidence)),
+            detail.Skills.OrderBy(s => s.SkillCode).Select(s => (s.SkillCode, s.IsMatched, s.Evidence)));
+        var ranking = (await client.GetFromJsonAsync<RankingResponse>($"/api/runs/{runId}/ranking?jobId={BackendJob}"))!;
+        var ranked = Assert.Single(ranking.Items);
+        Assert.Equal((saved.EvaluationId, saved.AiScore, saved.FinalScore, saved.ScoreSource),
+            (ranked.EvaluationId, ranked.AiScore, ranked.FinalScore, ranked.ScoreSource));
     }
 
     [Fact]

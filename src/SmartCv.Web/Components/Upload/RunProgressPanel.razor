@@ -99,7 +99,8 @@ else
     <dl class="run-stats">
         <div class="stat"><dt>Tổng CV</dt><dd>@run.TotalItems</dd></div>
         <div class="stat"><dt>Đã xử lý</dt><dd>@run.ProcessedItems</dd></div>
-        <div class="stat is-ok"><dt>Thành công</dt><dd>@RunFlow.Succeeded(run)</dd></div>
+        <div class="stat is-ok"><dt>AI thành công</dt><dd>@RunFlow.AiSucceeded(run)</dd></div>
+        <div class="stat"><dt>Chỉ Keyword</dt><dd>@RunFlow.KeywordOnly(run)</dd></div>
         <div class="stat is-err"><dt>Thất bại</dt><dd>@run.FailedItems</dd></div>
         <div class="stat"><dt>Đang chờ</dt><dd>@RunFlow.Pending(run)</dd></div>
     </dl>
@@ -222,7 +223,7 @@ else
     private static string OutcomeIcon(RunOutcome o) => o switch
     {
         RunOutcome.Completed => "✓",
-        RunOutcome.PartialFailure => "!",
+        RunOutcome.PartialFailure or RunOutcome.AiFallback => "!",
         RunOutcome.AllFailed or RunOutcome.Failed => "✕",
         _ => "…"
     };
@@ -231,7 +232,7 @@ else
     {
         RunOutcome.Running => "is-active",
         RunOutcome.Queued => "is-queued",
-        RunOutcome.PartialFailure => "is-warn",
+        RunOutcome.PartialFailure or RunOutcome.AiFallback => "is-warn",
         RunOutcome.AllFailed or RunOutcome.Failed => "is-err",
         _ => null
     };
@@ -241,7 +242,8 @@ else
         RunOutcome.Queued => "Lượt phân tích đã được tạo và đang chờ máy chủ bắt đầu chấm.",
         RunOutcome.Running => "Hệ thống đang chấm điểm từng hồ sơ bằng từ khóa và AI.",
         RunOutcome.Completed => $"Đã phân tích xong {run.TotalItems} hồ sơ.",
-        RunOutcome.PartialFailure => $"Đã xong: {RunFlow.Succeeded(run)} hồ sơ chấm thành công, {run.FailedItems} hồ sơ lỗi. Xem lý do ở từng dòng bên dưới.",
+        RunOutcome.AiFallback => $"Đã xử lý {run.ProcessedItems} hồ sơ: {RunFlow.AiSucceeded(run)} hồ sơ có điểm AI, {RunFlow.KeywordOnly(run)} hồ sơ chỉ chấm Keyword vì AI chưa thành công.",
+        RunOutcome.PartialFailure => $"Đã xong: {RunFlow.Succeeded(run)} hồ sơ có điểm ({RunFlow.AiSucceeded(run)} có AI, {RunFlow.KeywordOnly(run)} chỉ Keyword), {run.FailedItems} hồ sơ lỗi. Xem lý do ở từng dòng bên dưới.",
         RunOutcome.AllFailed => "Không chấm được hồ sơ nào. Xem lý do ở từng dòng bên dưới.",
         RunOutcome.Failed => "Lượt phân tích bị dừng do lỗi phía máy chủ. Hãy tạo lượt phân tích mới hoặc báo cho quản trị hệ thống.",
         _ => string.Empty

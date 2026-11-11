@@ -3,6 +3,7 @@ extern alias web;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
@@ -46,6 +47,28 @@ public class GeminiModelConfigurationTests
         using var factory = TestSupport.ApiFactory();
         using var client = factory.CreateClient();
         Assert.Equal("gemini-3.1-flash-lite", factory.Services.GetRequiredService<IOptions<ScoringOptions>>().Value.ModelName);
+    }
+
+    [Fact]
+    public void Launch_profile_enables_real_scoring_while_base_configuration_stays_opt_in()
+    {
+        var baseFile = TestSupport.RepoFile(Path.Combine("src", "SmartCv.Api", "appsettings.json"));
+        var developmentFile = TestSupport.RepoFile(Path.Combine("src", "SmartCv.Api", "appsettings.Development.json"));
+        using var launch = JsonDocument.Parse(File.ReadAllText(TestSupport.RepoFile(
+            Path.Combine("src", "SmartCv.Api", "Properties", "launchSettings.json"))));
+        var environment = launch.RootElement.GetProperty("profiles").GetProperty("http")
+            .GetProperty("environmentVariables").EnumerateObject()
+            .Select(p => new KeyValuePair<string, string?>(p.Name.Replace("__", ":"), p.Value.GetString()));
+        var baseConfig = new ConfigurationBuilder().AddJsonFile(baseFile).Build();
+        var development = new ConfigurationBuilder().AddJsonFile(baseFile).AddJsonFile(developmentFile)
+            .AddInMemoryCollection(environment).Build();
+
+        Assert.False(baseConfig.GetValue<bool>("Scoring:WorkerEnabled"));
+        Assert.True(development.GetValue<bool>("Scoring:WorkerEnabled"));
+        Assert.False(development.GetValue<bool>("Gemini:UseFake"));
+        Assert.Equal(baseConfig["Scoring:ModelName"], development["Scoring:ModelName"]);
+        Assert.Equal(0.3m, development.GetValue<decimal>("Scoring:KeywordWeight"));
+        Assert.Equal(0.7m, development.GetValue<decimal>("Scoring:AiWeight"));
     }
 
     /// <summary>

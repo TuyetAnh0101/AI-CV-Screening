@@ -112,6 +112,22 @@ public class RunProgressUiTests
         Assert.Equal(expected, RunFlow.Outcome(Run(status, processed: processed, failed: failed)));
 
     [Fact]
+    public void Ai_success_requires_a_completed_combined_result_with_an_ai_score()
+    {
+        var run = Run(RunStatuses.Completed, processed: 4, items:
+        [
+            new() { Status = EvaluationStatuses.Completed, ScoreSource = ScoreSources.Combined, AiScore = 80 },
+            new() { Status = EvaluationStatuses.Completed, ScoreSource = ScoreSources.Combined },
+            new() { Status = EvaluationStatuses.Pending, ScoreSource = ScoreSources.Combined, AiScore = 90 },
+            new() { Status = EvaluationStatuses.Completed, ScoreSource = ScoreSources.KeywordOnly }
+        ]);
+
+        Assert.Equal(1, RunFlow.AiSucceeded(run));
+        Assert.Equal(1, RunFlow.KeywordOnly(run));
+        Assert.Equal(RunOutcome.AiFallback, RunFlow.Outcome(run));
+    }
+
+    [Fact]
     public void Item_errors_hide_technical_details()
     {
         RunItemDto Failed(string message) => new() { Status = EvaluationStatuses.Failed, ErrorMessage = message };
@@ -397,7 +413,7 @@ public class RunProgressUiTests
         Assert.Contains("[14,15]", api.LastStartRunBody);
         Assert.Equal("https://app.test/upload?runId=31", nav.Uri);
 
-        await WaitUntil(() => r.Text.Contains("Đã xong: 1 hồ sơ chấm thành công, 1 hồ sơ lỗi"), "lượt chuyển sang Completed có lỗi");
+        await WaitUntil(() => r.Text.Contains("Đã xong: 1 hồ sơ có điểm (1 có AI, 0 chỉ Keyword), 1 hồ sơ lỗi"), "lượt chuyển sang Completed có lỗi");
         var text = r.Text;
         Assert.Contains("Lượt phân tích #31", text);
         Assert.Contains("Prompt v2", text);
@@ -418,6 +434,34 @@ public class RunProgressUiTests
         await Task.Delay(200);
         Assert.Equal(after, polls);
         Assert.Equal(3, polls);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task Completed_run_with_keyword_fallback_warns_and_shows_real_ai_counts(int aiCount)
+    {
+        var items = Enumerable.Range(0, 2).Select(i => new RunItemDto
+        {
+            EvaluationId = i + 1, Status = EvaluationStatuses.Completed,
+            ScoreSource = i < aiCount ? ScoreSources.Combined : ScoreSources.KeywordOnly,
+            AiScore = i < aiCount ? 80 : null, KeywordScore = 70, FinalScore = 70,
+            FileName = $"synthetic-{i}.pdf"
+        }).ToArray();
+        var api = new FakeApi
+        {
+            GetRun = id => Task.FromResult(Json(Run(RunStatuses.Completed, processed: 2, percent: 100, id: id, items: items)))
+        };
+        using var services = Services(api, new TestNavigationManager("https://app.test/upload?runId=7"));
+        await using var r = await OpenAsync(services);
+
+        await WaitUntil(() => r.Text.Contains("vì AI chưa thành công"), "hiển thị fallback AI");
+        Assert.Contains($"{aiCount} hồ sơ có điểm AI, {2 - aiCount} hồ sơ chỉ chấm Keyword", r.Text);
+        Assert.Contains($"AI thành công {aiCount}", r.Text);
+        Assert.Contains($"Chỉ Keyword {2 - aiCount}", r.Text);
+        Assert.Contains(r.AttributeValues("class"), c => c == "run-outcome is-aifallback");
+        Assert.DoesNotContain(r.AttributeValues("class"), c => c == "run-outcome is-completed");
+        Assert.DoesNotContain("Đã phân tích xong", r.Text);
     }
 
     [Fact]
