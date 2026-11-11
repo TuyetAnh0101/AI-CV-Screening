@@ -1,0 +1,107 @@
+@using System.Globalization
+@implements IAsyncDisposable
+@inject PromptApiClient Api
+
+<section class="prompt-test" aria-label="Chạy đánh giá">
+    <header><h2>Chạy đánh giá</h2><p>Đánh giá phiên bản đã lưu trên bộ CV có nhãn HR. Kết quả Screening và phiên bản đang dùng được giữ nguyên.</p></header>
+    <div class="test-form">
+        <label>Phiên bản prompt<select aria-label="Phiên bản prompt đánh giá" @bind="promptId" disabled="@(flow.Locked || confirm)"><option value="0">Chọn phiên bản</option>@foreach (var v in Versions) { <option value="@v.PromptVersionId">@v.VersionName @(v.IsActive ? "(đang dùng)" : "")</option> }</select></label>
+        <label>Bộ CV đánh giá<select aria-label="Bộ CV đánh giá" @bind="setId" disabled="@(flow.Locked || confirm)"><option value="0">Chọn bộ CV</option>@foreach (var s in flow.Sets) { <option value="@s.EvaluationSetId">@s.Name (@s.LabelCount CV)</option> }</select></label>
+        <button class="btn sc-btn-primary" type="button" disabled="@(flow.Locked || confirm || !Valid)" @onclick="() => confirm = true">@(flow.Starting ? "Đang tạo..." : flow.Running ? "Đang chạy..." : "Chạy đánh giá")</button>
+    </div>
+    @if (SelectedSet is { } set)
+    {
+        <p class="set-info">@set.Description · Tổng @set.LabelCount CV có nhãn HR · @set.PassCount Đạt · @(set.LabelCount - set.PassCount) Không đạt</p>
+        @if (!PromptTestFlow.ValidSet(set)) { <p class="test-error">Bộ CV phải có nhãn của cả hai loại Đạt và Không đạt, với số lượng hợp lệ.</p> }
+    }
+    else if (!flow.Checking) { <p class="set-info">Chọn bộ CV có nhãn HR để bắt đầu. Bộ trống không thể chạy.</p> }
+    @if (confirm)
+    {
+        <div class="confirm-run" role="alert"><p>Chạy phiên bản <strong>@Versions.FirstOrDefault(v => v.PromptVersionId == promptId)?.VersionName</strong> trên @SelectedSet?.LabelCount CV của <strong>@SelectedSet?.Name</strong>? Lượt chạy có thể gọi Gemini và tiêu tốn quota. Nội dung nháp chưa lưu không được sử dụng.</p><button class="btn sc-btn-secondary" @onclick="() => confirm = false">Hủy</button> <button class="btn sc-btn-primary" @onclick="StartAsync">Xác nhận chạy đánh giá</button></div>
+    }
+    @if (flow.Error is not null)
+    { <div class="test-error" role="alert">@flow.Error <button type="button" class="btn sc-btn-secondary" disabled="@(flow.Checking || flow.Starting)" @onclick="RetryAsync">Kiểm tra lại trạng thái</button></div> }
+    @if (flow.Current is { } run)
+    {
+        <div class="run-progress @(run.Status.ToLowerInvariant())" role="status" aria-live="polite">
+            <div class="run-heading"><strong>Lượt #@run.RunId · @run.PromptVersionName</strong><span>@run.EvaluationSetName</span></div>
+            <p>@State(run.Status) · @run.ProcessedItems/@run.TotalItems CV · @run.FailedItems CV lỗi</p>
+            <div class="progress-track" role="progressbar" aria-label="Tiến độ đánh giá prompt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@PromptTestFlow.Percent(run).ToString(CultureInfo.InvariantCulture)"><span style="width: @(PromptTestFlow.Percent(run).ToString(CultureInfo.InvariantCulture))%"></span></div>
+            <div class="run-heading"><span>@PromptTestFlow.Percent(run).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))%</span><span>Mô hình: @run.ModelName</span></div>
+            @if (run.Status == "Completed") { <p class="accuracy">Tỷ lệ đúng: <strong>@(run.AccuracyPercent is null ? "—" : RankingView.Score(run.AccuracyPercent) + "%")</strong></p> }
+            @if (run.Status == "Failed") { <p>Lượt đánh giá thất bại. Không tự chạy lại AI.</p> }
+            @if (run.FailedItems > 0) { <p>Một số CV lỗi; có thể do đọc file, AI hoặc quota. Kết quả lỗi được giữ riêng.</p> }
+            @if (run is PromptTestDetailDto detail)
+            {
+                var keywordOnly = detail.Items.Count(i => i.ScoreSource == "KeywordOnly");
+                @if (keywordOnly > 0) { <p>@keywordOnly CV chỉ có kết quả keyword. AI chưa chấm được đầy đủ; không dùng tỷ lệ này để kết luận chất lượng Gemini.</p> }
+                @foreach (var reason in detail.Items.Where(i => i.Status == "Failed").Select(i => i.Reasoning).Where(e => !string.IsNullOrWhiteSpace(e)).Distinct().Take(3)) { <p>@reason</p> }
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
+    [Parameter] public int? DefaultVersionId { get; set; }
+    [Parameter] public string? RunToken { get; set; }
+    [Parameter] public EventCallback<string> OnTokenChanged { get; set; }
+    [Parameter] public EventCallback OnCompleted { get; set; }
+    private PromptTestFlow flow = default!;
+    private readonly CancellationTokenSource lifetime = new();
+    private CancellationTokenSource? polling;
+    private Task? pollTask;
+    private int promptId, setId, notified;
+    private bool initialized, confirm, disposed;
+    private EvaluationSetDto? SelectedSet => flow.Sets.FirstOrDefault(s => s.EvaluationSetId == setId);
+    private bool Valid => Versions.Any(v => v.PromptVersionId == promptId) && PromptTestFlow.ValidSet(SelectedSet);
+    private static string State(string s) => s switch { "Queued" => "Đang chờ xử lý", "Running" => "Đang phân tích", "Completed" => "Đánh giá hoàn thành", "Failed" => "Đánh giá thất bại", _ => s };
+    protected override void OnInitialized() { flow = new(Api); flow.Changed = ChangedAsync; }
+    protected override async Task OnParametersSetAsync()
+    {
+        if (promptId == 0) promptId = DefaultVersionId ?? Versions.FirstOrDefault()?.PromptVersionId ?? 0;
+        if (initialized && (RunToken ?? "") == flow.Token) return;
+        initialized = true; polling?.Cancel();
+        if (pollTask is not null) await pollTask;
+        try
+        {
+            await flow.RestoreAsync(RunToken, lifetime.Token);
+            if (flow.Current is { } restored) { promptId = restored.PromptVersionId; setId = restored.EvaluationSetId; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (RendererInfo.IsInteractive && flow.Running && flow.Error is null && (pollTask is null || pollTask.IsCompleted))
+        { polling?.Dispose(); polling = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pollTask = PollAsync(polling.Token); }
+        return Task.CompletedTask;
+    }
+    private async Task ChangedAsync()
+    {
+        if (disposed) return;
+        await InvokeAsync(async () =>
+        {
+            await OnTokenChanged.InvokeAsync(flow.Token);
+            if (flow.Current is { Status: "Completed" } r && notified != r.RunId) { notified = r.RunId; await OnCompleted.InvokeAsync(); }
+            StateHasChanged();
+        });
+    }
+    private async Task StartAsync() { if (!confirm || !Valid || flow.Locked) return; confirm = false; try { await flow.StartAsync(promptId, setId, lifetime.Token); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { } }
+    private async Task RetryAsync()
+    {
+        try { if (flow.Current is not null || flow.Uncertain) await flow.RefreshAsync(lifetime.Token); else await flow.RestoreAsync(flow.Token, lifetime.Token); }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+    private async Task PollAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try { while (await timer.WaitForNextTickAsync(ct)) { await InvokeAsync(() => flow.RefreshAsync(ct)); if (!flow.Running || flow.Error is not null) return; } }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true; lifetime.Cancel(); polling?.Cancel();
+        if (pollTask is not null) await pollTask;
+        polling?.Dispose(); lifetime.Dispose();
+    }
+}

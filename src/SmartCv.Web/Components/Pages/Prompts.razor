@@ -80,7 +80,28 @@
     }
 </div>
 
+<PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" />
+@if (testHistoryWarning is not null)
+{
+    <p role="status">@testHistoryWarning <button type="button" class="btn sc-btn-secondary" @onclick="RefreshTestVersionsAsync">Cập nhật lịch sử</button></p>
+}
+
 @code {
+    [SupplyParameterFromQuery(Name = "testRunId")] public string? TestRunId { get; set; }
+    private string? testHistoryWarning;
+    private void UpdateTestToken(string token)
+    {
+        if ((TestRunId ?? "") == token) return;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("testRunId", string.IsNullOrEmpty(token) ? null : token), replace: true);
+    }
+    private async Task RefreshTestVersionsAsync()
+    {
+        var result = await PromptApi.GetVersionsAsync(lifetime.Token);
+        if (disposed) return;
+        if (result.IsSuccess && result.Data!.Count(v => v.IsActive) <= 1)
+        { ApplyVersionsPreservingDraft(result.Data!); testHistoryWarning = null; }
+        else testHistoryWarning = "Kết quả đã hoàn thành nhưng chưa đồng bộ được lịch sử phiên bản. Hãy thử cập nhật lại.";
+    }
     private readonly PromptDraft draft = new();
     private readonly CancellationTokenSource lifetime = new();
     private List<PromptVersionDto> versions = [];
@@ -248,6 +269,7 @@
     private void DraftChanged(bool _) { error = message = null; }
     private Task BeforeInternalNavigation(LocationChangingContext context)
     {
+        if (new Uri(context.TargetLocation).AbsolutePath == new Uri(Nav.Uri).AbsolutePath) return Task.CompletedTask;
         if (Busy) { context.PreventNavigation(); return Task.CompletedTask; }
         if (draft.IsDirty)
         {
