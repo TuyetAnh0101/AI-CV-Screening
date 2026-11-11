@@ -9,7 +9,13 @@
 
    Thứ tự:  dotnet ef database update  ->  (tùy chọn) seed_demo.sql
 
-   Trọng số chấm điểm: 30% Keyword + 70% AI
+   SNAPSHOT DEMO LỊCH SỬ: các điểm dưới đây được tạo trước quy tắc cap MustHave = 69.
+   Không dùng 70%/80% làm kết quả kỳ vọng khi chấm mới bằng thuật toán hiện tại.
+   Replay có thể tái tạo (đóng băng điểm/skill flags cũ, không gọi Gemini):
+     dotnet test tests/SmartCv.Tests --filter FullyQualifiedName~HistoricalDemoReplayTests
+   Xem docs/scoring-data-consistency.md để phân biệt replay với chấm lại CV/Gemini.
+
+   Trọng số của snapshot lịch sử: 30% Keyword + 70% AI, CHƯA áp dụng cap
               FinalScore = ROUND(0.30 * KeywordScore + 0.70 * AiScore, 2)
               FitLabel: >= 85 Rất phù hợp, >= 70 Phù hợp, >= 55 Tiềm năng, < 55 Chưa phù hợp
               PredictedPass = FinalScore >= PassThreshold (70)
@@ -117,10 +123,10 @@ SET IDENTITY_INSERT PromptVersions OFF;
 /* ---------- 8. EvaluationSets ---------- */
 SET IDENTITY_INSERT EvaluationSets ON;
 INSERT INTO EvaluationSets (EvaluationSetId, Name, Description) VALUES
-(1, N'Bộ CV đánh giá đợt 1', N'10 CV thuộc 5 job, đã được HR gán nhãn Đạt/Không đạt để so sánh các phiên bản prompt.');
+(1, N'Bộ CV đánh giá đợt 1', N'Demo lịch sử trước quy tắc giới hạn MustHave 69: 10 CV thuộc 5 job; 70%/80% là snapshot, không phải kết quả kỳ vọng khi chấm mới.');
 SET IDENTITY_INSERT EvaluationSets OFF;
 
-/* ---------- 9. HrLabels (5 Đạt, 5 Không đạt) ---------- */
+/* ---------- 9. HrLabels (6 Đạt, 4 Không đạt) ---------- */
 INSERT INTO HrLabels (EvaluationSetId, ApplicationId, IsPass, Note, LabeledBy, LabeledAt) VALUES
 (1, 1, 1, N'Đủ kỹ năng, mời phỏng vấn.', N'HR - Trần Thu Hà', '2026-11-04 10:00:00'),
 (1, 2, 1, N'Còn ít kinh nghiệm nhưng nền tảng tốt, nên phỏng vấn.', N'HR - Trần Thu Hà', '2026-11-04 10:00:00'),
@@ -134,7 +140,8 @@ INSERT INTO HrLabels (EvaluationSetId, ApplicationId, IsPass, Note, LabeledBy, L
 (1, 10, 1, N'Rất phù hợp.', N'HR - Trần Thu Hà', '2026-11-04 10:00:00');
 
 /* ---------- 10. EvaluationRuns ----------
-   Run 1, 2: so sánh prompt v1 (70%) và v2 (80%) trên cùng bộ CV, cùng model và cài đặt
+   Run 1, 2: snapshot lịch sử v1 (70%) và v2 (80%); cùng bộ CV/model/trọng số/ngưỡng được lưu.
+             Không có snapshot cap/thuật toán, không chứng minh tái lập với cấu hình hiện tại.
    Run 3   : sàng lọc toàn bộ CV bằng prompt đang dùng (v2)
    Run 4   : đợt sàng lọc đang chạy, dùng để hiển thị thanh tiến độ
    Cả 4 lượt: KeywordWeight = 0.30, AiWeight = 0.70, PassThreshold = 70 */

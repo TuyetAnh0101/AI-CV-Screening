@@ -24,6 +24,9 @@ public class ScoreCombinerTests
         ScoreCombiner.Combine(keyword, ai, 0.3m, 0.7m, 70m, cap);
 
     [Theory]
+    [InlineData(80, 60, 66)]
+    [InlineData(100, 60, 72)]
+    [InlineData(70, 70, 70)]
     [InlineData(80, 90, 87)]
     [InlineData(100, 100, 100)]
     [InlineData(0, 0, 0)]

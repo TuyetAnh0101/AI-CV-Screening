@@ -9,7 +9,15 @@ public sealed record AiPreviewDto(
     string ScoreSource, string FitLabel, bool PredictedPass, decimal? YearsExperience, string Reasoning,
     bool AiSucceeded, string AiErrorKind, string? AiErrorMessage, int AiAttempts, bool AiSimulated, bool AiCvTruncated,
     List<string> AiMatchedSkills, List<string> AiMissingSkills, List<string> AiInvalidSkillCodes,
-    List<AiPreviewSkillDto> Skills);
+    List<AiPreviewSkillDto> Skills)
+{
+    // Preview is not persisted: return the settings used by this request rather than
+    // making clients assume that the default 30/70 was used.
+    public decimal KeywordWeight { get; init; }
+    public decimal AiWeight { get; init; }
+    public decimal PassThreshold { get; init; }
+    public decimal? MissingMustHaveCap { get; init; }
+}
 
 /// <summary>MatchedBy: Keyword (Evidence là trích dẫn từ CV), AI (chỉ Gemini xác nhận), null (không tìm thấy).</summary>
 public sealed record AiPreviewSkillDto(string SkillCode, string DisplayName, string SkillType, bool IsMatched, string? MatchedBy, string? Evidence);

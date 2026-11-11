@@ -78,6 +78,12 @@ public static class AiPreviewEndpoints
             aiResult.IsSuccess, aiResult.ErrorKind.ToString(), combined.ErrorMessage, aiResult.Attempts, aiResult.IsSimulated, aiResult.CvTruncated,
             aiResult.MatchedSkillCodes.ToList(), aiResult.MissingSkillCodes.ToList(), aiResult.InvalidSkillCodes.ToList(),
             combined.Skills.Select(s => new AiPreviewSkillDto(
-                s.SkillCode, s.DisplayName, s.IsMustHave ? SkillTypes.MustHave : SkillTypes.NiceToHave, s.IsMatched, s.MatchedBy, s.Evidence)).ToList()));
+                s.SkillCode, s.DisplayName, s.IsMustHave ? SkillTypes.MustHave : SkillTypes.NiceToHave, s.IsMatched, s.MatchedBy, s.Evidence)).ToList())
+        {
+            KeywordWeight = opt.KeywordWeight,
+            AiWeight = opt.AiWeight,
+            PassThreshold = opt.PassThreshold,
+            MissingMustHaveCap = opt.MissingMustHaveCap
+        });
     }
 }

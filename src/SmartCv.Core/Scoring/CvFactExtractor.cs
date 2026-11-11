@@ -5,7 +5,7 @@ namespace SmartCv.Core.Scoring;
 
 /// <summary>
 /// A9: đọc GPA và số năm kinh nghiệm từ chữ CV (đã qua <see cref="TextNormalizer"/>: thường, không dấu).
-/// Không đọc được thì trả NULL ("không biết"), KHÔNG trả 0: bước chấm sẽ bỏ qua tiêu chí đó thay vì phạt.
+/// Không đọc được thì trả NULL ("không biết"); kinh nghiệm 0 chỉ dùng khi CV xác nhận rõ không có kinh nghiệm.
 /// </summary>
 public static partial class CvFactExtractor
 {
@@ -46,11 +46,11 @@ public static partial class CvFactExtractor
     ///   (a) thời lượng ghi thẳng: "1.5 năm", "6 tháng", "2+ years", "1 năm 6 tháng"
     ///   (b) tổng các khoảng thời gian làm việc, phần chồng lấn chỉ tính một lần: "06/2024 - nay", "2020 - 2022"
     /// Bỏ qua mục Học vấn, câu về học tập / khóa học, mục tiêu tương lai và địa chỉ.
-    /// Trả null nếu không thấy gì.
+    /// Trả 0 nếu CV ghi rõ 0 năm hoặc chưa có kinh nghiệm; trả null nếu không thấy thông tin.
     /// </summary>
     public static decimal? ExtractYearsOfExperience(string normalizedText, DateOnly today)
     {
-        var explicitYears = 0m;
+        decimal? explicitYears = null;
         var ranges = new List<(int Start, int End)>();
         var todayIndex = MonthIndex(today.Year, today.Month);
 
@@ -69,11 +69,15 @@ public static partial class CvFactExtractor
             // Tách theo CÂU: CV hay viết "GPA 3.20. 1.5 năm làm Backend" trên cùng một dòng
             foreach (var sentence in SentenceSplit().Split(lines[i]))
             {
+                // Câu xác nhận rõ vẫn có giá trị khi đi cùng giới thiệu sinh viên / mới tốt nghiệp.
+                // Không suy ra 0 từ việc thiếu thông tin hoặc từ việc chưa biết một kỹ năng cụ thể.
+                if (ZeroExperienceStatement().IsMatch(sentence)) explicitYears ??= 0m;
                 if (NotWorkSentence().IsMatch(sentence)) continue;
 
                 // Mục khác (tóm tắt, kỹ năng, dự án...): chỉ tin câu nói rõ về kinh nghiệm, ví dụ "Hơn 2 năm kinh nghiệm"
-                if (section != Section.Other || ExperienceWord().IsMatch(sentence))
-                    explicitYears = Math.Max(explicitYears, LargestDuration(sentence));
+                if ((section != Section.Other || ExperienceWord().IsMatch(sentence))
+                    && LargestDuration(sentence) is { } duration)
+                    explicitYears = Math.Max(explicitYears ?? 0m, duration);
 
                 // Khoảng thời gian trong mục khác thường là dự án học tập, hoạt động: không phải thời gian đi làm
                 if (section == Section.Other || IsSchoolDateLine(lines, i, sentence)) continue;
@@ -83,13 +87,13 @@ public static partial class CvFactExtractor
             }
         }
 
-        var best = Math.Max(explicitYears, Math.Min(CountDistinctMonths(ranges) / 12m, MaxYears));
-        return best > 0 ? Math.Round(best, 1, MidpointRounding.AwayFromZero) : null;
+        var best = Math.Max(explicitYears ?? 0m, Math.Min(CountDistinctMonths(ranges) / 12m, MaxYears));
+        return best > 0m || explicitYears is not null ? Math.Round(best, 1, MidpointRounding.AwayFromZero) : null;
     }
 
-    private static decimal LargestDuration(string sentence)
+    private static decimal? LargestDuration(string sentence)
     {
-        var largest = 0m;
+        decimal? largest = null;
         foreach (Match m in DurationRegex().Matches(sentence))
         {
             if (!TryParse(m.Groups["n"].Value, out var n)) continue;
@@ -99,7 +103,9 @@ public static partial class CvFactExtractor
             var years = isMonths ? n / 12m : n;
             if (!isMonths && TryParse(m.Groups["mo"].Value, out var extraMonths)) years += extraMonths / 12m;   // "1 năm 6 tháng"
 
-            if (years is > 0 and <= MaxYears) largest = Math.Max(largest, years);
+            // Giá trị 0 cần câu xác nhận kinh nghiệm tổng ở ZeroExperienceStatement;
+            // "0 năm kinh nghiệm với Docker" chỉ nói về một kỹ năng, không phải tổng kinh nghiệm.
+            if (years is > 0 and <= MaxYears) largest = Math.Max(largest ?? 0m, years);
         }
         return largest;
     }
@@ -211,4 +217,9 @@ public static partial class CvFactExtractor
 
     [GeneratedRegex(@"\b(?:kinh\s+nghiem|experience|lam\s+viec|working)\b")]
     private static partial Regex ExperienceWord();
+
+    // Chỉ nhận mệnh đề xác nhận kinh nghiệm tổng: độc lập, nhãn kinh nghiệm hoặc giới thiệu sinh viên.
+    // Prefix kỹ năng ("Docker: ...") và suffix kỹ năng ("... với Docker") không xác nhận 0 năm tổng.
+    [GeneratedRegex(@"^\s*[-*]?\s*(?:(?:sinh\s+vien(?:\s+moi\s+tot\s+nghiep)?|moi\s+tot\s+nghiep)\s*,\s*)?(?:(?:kinh\s+nghiem(?:\s+lam\s+viec)?|(?:work\s+|professional\s+)?experience)\s*:\s*)?(?:(?:toi|i)\s+)?(?:(?:chua|khong)\s+co\s+kinh\s+nghiem(?:\s+lam\s+viec)?|(?:have\s+)?no\s+(?:(?:prior|work|professional)\s+)?experience|(?:(?:co|have)\s+)?0(?:[.,]0+)?\s*(?:nam|years?|yrs?|thang|months?)(?:\s*(?:kinh\s+nghiem(?:\s+lam\s+viec)?|(?:of\s+)?(?:work\s+)?experience))?)\s*(?:[.!?]?\s*$|,(?!\s*(?:voi|with)\b))")]
+    private static partial Regex ZeroExperienceStatement();
 }

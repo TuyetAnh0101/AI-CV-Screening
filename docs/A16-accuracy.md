@@ -21,6 +21,14 @@ HR thêm hồ sơ sau khi tạo run không làm phát sinh Evaluation cho run c�
 không đưa hồ sơ mới vào mẫu số run cũ. API cảnh báo cần chạy lại. HR bỏ nhãn
 thì hồ sơ đó ra khỏi mẫu số nhưng kết quả chấm cũ vẫn được trả với nhãn null.
 
+## Dữ liệu demo lịch sử
+
+70%/80% của `seed_demo.sql` là snapshot trước cap69. A16 tiếp tục đối chiếu
+dự đoán đã lưu; không áp thuật toán hiện tại vào điểm cũ. Replay đóng băng
+điểm/skill flags rồi gọi combiner hiện tại có cap cho 90%/90%; đây không phải
+chấm lại CV hoặc gọi Gemini mới. Quy trình tái tạo và số đếm đầy đủ nằm trong
+[Tính nhất quán sau A18](scoring-data-consistency.md).
+
 ## Lưu, phục hồi và đồng thời
 
 RunScoringProcessor giữ nguyên scoring/snapshot và lưu từng CV. Với PromptTest,
