@@ -1,96 +1,140 @@
-/* Figma: khối logo nền #115E59 viền dưới #D6E2E1; chữ "SC" trắng + "App" #14B8A6, 28px */
+/* Menu trái v2 (Figma "SC v2", Teal Lab). Nền do .sidebar (MainLayout.razor.css) tô bằng --sc-grad-sidebar.
+   Thứ bậc: tên ứng dụng > mục menu > nhãn nhóm (nhãn nhóm chỉ là chú thích nhỏ, không nặng hơn mục menu).
+   Mép trái thẳng một hàng: khối logo và icon menu cùng cách mép 24px. */
+
+/* ---------- Khối logo: cao bằng thanh trên cùng, kẻ dưới mảnh ---------- */
 .brand {
     display: flex;
     align-items: center;
-    justify-content: center;
-    height: 5.5rem;
-    padding: 0 1rem;
-    background: var(--brand-hover);
-    border-bottom: 1px solid var(--border);
-    position: relative;
+    gap: 12px;
+    height: var(--sc-shell-header-h);
+    padding: 0 16px 0 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
 }
 
 .brand-link {
     display: flex;
     align-items: center;
-    gap: .6rem;
+    gap: 10px;
+    min-width: 0;
     color: #fff;
     text-decoration: none;
+    border-radius: 8px;
 }
+.brand-link:focus-visible { outline: 2px solid var(--sc-sidebar-accent); outline-offset: 4px; }
 
+/* Asset gốc từ Figma node 170:917, giữ tỷ lệ và nền sáng để đọc rõ trên sidebar tối. */
 .brand-logo {
-    display: grid;
-    place-items: center;
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: .65rem;
-    background: rgba(255, 255, 255, .14);
-    font-weight: 700;
-    font-size: .95rem;
+    display: block;
+    flex: 0 0 68px;
+    width: 68px;
+    height: auto;
+    border-radius: 8px;
+    background: var(--sc-surface-0);
 }
 
-.brand-name { font-size: 28px; font-weight: 600; line-height: 1; }
-.brand-name span { color: var(--brand-accent); }
+.brand-name {
+    font-family: var(--sc-font-display);
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.01em;
+    white-space: nowrap;
+}
+.brand-name span { color: var(--sc-brand-500); }
 
 .menu-toggle {
     display: none;
-    position: absolute;
-    right: 1rem;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 8px;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, .35);
     color: #fff;
-    border-radius: .375rem;
-    padding: .15rem .55rem;
-    font-size: 1.1rem;
+    font-size: 18px;
+    line-height: 1;
 }
+.menu-toggle:hover { background: rgba(255, 255, 255, .06); }
+.menu-toggle:focus-visible { outline: 2px solid var(--sc-sidebar-accent); outline-offset: 2px; }
 
+/* ---------- Danh sách menu ---------- */
 .nav-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 14px 14px 24px;
+    gap: 2px;
+    padding: 8px 12px 24px;
 }
 
-/* Tiêu đề nhóm: chữ trắng đậm 20px */
+/* Nhãn nhóm (Label 11): chữ nhỏ in hoa, trắng 50% */
 .nav-group {
-    margin: 12px 0 4px;
-    font-size: 20px;
-    font-weight: 700;
-    color: #fff;
+    padding: 16px 12px 6px;
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, .62);
 }
-.nav-group:first-child { margin-top: 4px; }
+.nav-group:first-child { padding-top: 12px; }
 
-/* Mục menu: đệm 16px 12px, bo 8px, chữ 15px đậm */
+/* Mục menu: 14px, cao 44px, trắng 78%; không viền, không khối màu khi chưa chọn */
 .nav-list ::deep a.nav-item {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 14px 12px;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 12px;
     border-radius: 8px;
-    color: #fff;
+    color: rgba(255, 255, 255, .78);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
     text-decoration: none;
-    font-size: 15px;
-    font-weight: 600;
+    transition: background-color .15s ease, color .15s ease;
 }
 
-.nav-list ::deep a.nav-item:hover { background: rgba(255, 255, 255, .12); }
+.nav-list ::deep a.nav-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 
-/* Mục đang mở (Figma: nền #0F766E) */
+.nav-list ::deep a.nav-item:focus-visible { outline: 2px solid var(--sc-sidebar-accent); outline-offset: -2px; }
+
+/* Mục đang mở: nền trắng 10%, chữ trắng đậm, vạch sáng 3px bên trái (điểm nhấn duy nhất của menu) */
 .nav-list ::deep a.nav-item.active {
-    background: var(--brand);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+    font-weight: 600;
+}
+.nav-list ::deep a.nav-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 20px;
+    margin-top: -10px;
+    border-radius: 0 3px 3px 0;
+    background: var(--sc-sidebar-accent);
 }
 
 .nav-list ::deep .nav-icon {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
+    fill: currentColor;
+    opacity: .9;
+}
+.nav-list ::deep a.nav-item.active .nav-icon { color: var(--sc-sidebar-accent); opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-list ::deep a.nav-item { transition: none; }
 }
 
+/* Màn hình hẹp: menu thành thanh trên cùng, bấm ☰ để mở danh sách */
 @media (max-width: 767.98px) {
-    .brand { height: 4rem; justify-content: flex-start; }
-    .brand-name { font-size: 22px; }
-    .menu-toggle { display: block; }
+    .brand { height: 64px; padding: 0 16px; }
+    .brand-name { font-size: 18px; }
+    .menu-toggle { display: grid; place-items: center; }
+    .nav-list { padding: 4px 12px 12px; }
     .nav-list.collapsed { display: none; }
 }

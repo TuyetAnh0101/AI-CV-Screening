@@ -1,4 +1,4 @@
-/* Figma: nền #F4F8F8, viền 2px #115E59, bo 12px, đệm 24px, chữ 28px #115E59 */
+/* Giữ nguyên bố cục ô tải lên, đồng bộ viền và bề mặt với khung ứng dụng. */
 .dropzone {
     position: relative;
     display: flex;
@@ -8,8 +8,8 @@
     gap: 8px;
     padding: 24px;
     background: var(--surface-soft);
-    border: 2px solid var(--brand-hover);
-    border-radius: 12px;
+    border: 1px dashed var(--sc-line-300);
+    border-radius: var(--sc-radius-card);
     text-align: center;
     transition: background-color .15s, border-color .15s, box-shadow .15s;
 }
@@ -28,7 +28,7 @@
 
 .dz-title {
     margin: 0;
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 600;
     color: var(--brand-hover);
 }
@@ -72,4 +72,8 @@
 .dropzone:focus-within {
     border-color: var(--brand-accent);
     box-shadow: 0 0 0 4px rgba(20, 184, 166, .25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dropzone { transition: none; }
 }

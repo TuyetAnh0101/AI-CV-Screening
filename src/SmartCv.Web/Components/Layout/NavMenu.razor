@@ -1,14 +1,15 @@
-@* Menu bên trái theo Figma: logo "SCApp", tiêu đề nhóm chữ trắng đậm, mục đang chọn nền #0F766E. *@
+@* Menu bên trái (Figma "SC v2"): khối logo "SCApp", nhãn nhóm chữ nhỏ in hoa, mục đang chọn nền trắng 10% + vạch sáng. Kiểu ở NavMenu.razor.css. *@
 
 <div class="brand">
-    <a href="" class="brand-link">
-        <span class="brand-logo" aria-hidden="true">SC</span>
-        <span class="brand-name">SC<span>App</span></span>
+    <a href="" class="brand-link" aria-label="SCApp — Trang chủ">
+        <img class="brand-logo" src="images/brand/scapp-logo.png" width="68" height="54" alt="SCApp" />
+        <span class="brand-name" aria-hidden="true">SC<span>App</span></span>
     </a>
-    <button type="button" class="menu-toggle" @onclick="Toggle" aria-label="Mở/đóng menu">☰</button>
+    <button type="button" class="menu-toggle" @onclick="Toggle" aria-label="Mở/đóng menu"
+            aria-expanded="@(!collapsed ? "true" : "false")" aria-controls="main-navigation">☰</button>
 </div>
 
-<nav class="nav-list @(collapsed ? "collapsed" : null)">
+<nav id="main-navigation" aria-label="Điều hướng chính" class="nav-list @(collapsed ? "collapsed" : null)">
     @foreach (var group in groups)
     {
         <div class="nav-group">@group.Title</div>
