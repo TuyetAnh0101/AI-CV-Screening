@@ -1,0 +1,101 @@
+<section class="prompt-editor" aria-label="Soạn system prompt" aria-busy="@Saving.ToString().ToLowerInvariant()">
+    <header class="editor-head">
+        <div class="editor-title">
+            <h2>@(Draft.Source is null ? "Soạn system prompt đầu tiên" : "Soạn từ") <span class="mono">@Draft.Source?.VersionName</span></h2>
+            @if (Draft.Source is { } source)
+            {
+                <span class="source-status @(source.IsActive ? "is-active" : "")">@(source.IsActive ? "Đang dùng" : source.LatestAccuracyPercent is null ? "Chưa đánh giá" : "Đã đánh giá")</span>
+            }
+        </div>
+        <div class="editor-stats" aria-live="polite" aria-atomic="true">
+            <span>@Draft.LineCount dòng · @Draft.Content.Length ký tự</span>
+            @if (Draft.ContentChanged)
+            {
+                var changes = Draft.Changes;
+                <span class="editor-diff"><span class="diff-add">+@changes.Added</span> <span class="diff-remove">−@changes.Removed</span> dòng so với @(Draft.Source?.VersionName ?? "bản trống")</span>
+            }
+        </div>
+    </header>
+
+    <label for="system-prompt" class="editor-label">Nội dung system prompt</label>
+    <div class="code-editor">
+        <div class="line-numbers" aria-hidden="true" style="height: @(EditorHeight)px">
+            @for (var i = 1; i <= Draft.LineCount; i++)
+            {
+                <span>@i</span>
+            }
+        </div>
+        <textarea id="system-prompt" aria-label="Nội dung system prompt" aria-describedby="prompt-hint"
+                  spellcheck="false" wrap="off" rows="@Math.Max(16, Draft.LineCount)" style="height: @(EditorHeight)px" disabled="@Locked"
+                  value="@Draft.Content" @oninput="ContentInput"></textarea>
+    </div>
+    <p id="prompt-hint" class="editor-hint">Chỉ viết vai trò và quy tắc đánh giá. Hệ thống tự bổ sung thông tin Job, tiêu chí tuyển dụng, nội dung CV và yêu cầu JSON.</p>
+
+    <div class="version-fields">
+        <label class="version-field" for="prompt-version-name">
+            <span>Tên phiên bản mới <span class="required" aria-hidden="true">*</span></span>
+            <input id="prompt-version-name" aria-label="Tên phiên bản mới" aria-required="true" class="mono"
+                   maxlength="@PromptDraft.MaxNameLength" placeholder="v3-du-an-thuc-tap" autocomplete="off"
+                   value="@Draft.VersionName" @oninput="NameInput" disabled="@Locked" />
+            <small>Tối đa @PromptDraft.MaxNameLength ký tự · tên duy nhất</small>
+        </label>
+        <label class="version-field" for="prompt-change-note">
+            <span>Ghi chú thay đổi <small>(không bắt buộc)</small></span>
+            <input id="prompt-change-note" aria-label="Ghi chú thay đổi" maxlength="@PromptDraft.MaxNoteLength"
+                   placeholder="Ví dụ: Bổ sung quy tắc đánh giá kinh nghiệm thực tập"
+                   value="@Draft.ChangeNote" @oninput="NoteInput" disabled="@Locked" />
+            <small>@Draft.ChangeNote.Length/@PromptDraft.MaxNoteLength ký tự</small>
+        </label>
+    </div>
+    @if (validation is not null || Error is not null)
+    {
+        <p id="prompt-feedback" class="editor-error" role="alert">@(validation ?? Error)</p>
+    }
+    <footer class="editor-actions">
+        <span class="immutable-note">Mỗi lần lưu tạo một phiên bản riêng.</span>
+        <div class="editor-buttons">
+            <button type="button" class="btn sc-btn-secondary" @onclick="ResetAsync" disabled="@(Locked || !Draft.IsDirty)">Hoàn tác</button>
+            <button type="button" class="btn sc-btn-primary" @onclick="SaveAsync" disabled="@Locked">
+                @if (Saving) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                @(Saving ? "Đang lưu..." : "Lưu thành phiên bản mới")
+            </button>
+        </div>
+    </footer>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PromptDraft Draft { get; set; } = default!;
+    [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback<CreatePromptVersionRequest> OnSave { get; set; }
+    [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
+    private string? validation;
+    private int? loadedId;
+    private bool submitting;
+    private bool Locked => Saving || Disabled || submitting;
+    // Fixed line metrics keep the textarea and gutter in the same outer scroll area.
+    private int EditorHeight => Math.Max(16, Draft.LineCount) * 22 + 32;
+
+    protected override void OnParametersSet()
+    {
+        if (loadedId == Draft.Source?.PromptVersionId) return;
+        loadedId = Draft.Source?.PromptVersionId;
+        validation = null;
+    }
+    private Task ContentInput(ChangeEventArgs e) { Draft.Content = e.Value?.ToString() ?? ""; return ChangedAsync(); }
+    private Task NameInput(ChangeEventArgs e) { Draft.VersionName = e.Value?.ToString() ?? ""; return ChangedAsync(); }
+    private Task NoteInput(ChangeEventArgs e) { Draft.ChangeNote = e.Value?.ToString() ?? ""; return ChangedAsync(); }
+    private Task ChangedAsync() { validation = null; return OnDirtyChanged.InvokeAsync(Draft.IsDirty); }
+    private Task ResetAsync() { Draft.Reset(); return ChangedAsync(); }
+    private async Task SaveAsync()
+    {
+        if (Locked) return;
+        validation = Draft.Validate(Versions);
+        if (validation is not null) return;
+        submitting = true;
+        try { await OnSave.InvokeAsync(Draft.ToRequest()); }
+        finally { submitting = false; }
+    }
+}

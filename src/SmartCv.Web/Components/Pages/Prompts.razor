@@ -1,14 +1,153 @@
 @page "/prompts"
+@using SmartCv.Web.Components.Prompts
+@implements IDisposable
+@inject PromptApiClient PromptApi
+@inject NavigationManager Nav
 
-<PageHeader Title="System prompt" Subtitle="Quản lý phiên bản prompt và đo tỷ lệ đúng so với nhãn của HR." />
+<PageTitle>Prompt &amp; độ chính xác · SCApp</PageTitle>
+<NavigationLock ConfirmExternalNavigation="draft.IsDirty" OnBeforeInternalNavigation="BeforeInternalNavigation" />
 
-<div class="card-panel placeholder-panel">
-    <p class="mb-2">Trang đang được xây dựng. Các phần sẽ làm:</p>
-    <ul class="mb-0">
-        <li><strong>B12</strong>: ô sửa prompt, lưu phiên bản mới, lịch sử</li>
-        <li><strong>B13</strong>: nút kích hoạt, đánh dấu bản đang dùng</li>
-        <li><strong>B14</strong>: nút chạy đánh giá và tiến độ</li>
-        <li><strong>B15</strong>: bảng so sánh tỷ lệ đúng</li>
-        <li><strong>B16</strong>: bảng CV mà AI đánh giá khác HR</li>
-    </ul>
+<div class="prompts-page">
+    <header class="prompts-heading">
+        <div>
+            <p class="eyebrow">Thiết lập đánh giá AI</p>
+            <h1>Prompt &amp; độ chính xác</h1>
+            <p>Soạn quy tắc đánh giá, lưu thành phiên bản mới và theo dõi lịch sử system prompt.</p>
+        </div>
+        @if (active is not null)
+        {
+            <div class="active-version"><span class="active-dot" aria-hidden="true"></span><span>Đang dùng: <strong>@active.VersionName</strong></span></div>
+        }
+    </header>
+    @if (message is not null)
+    {
+        <div class="save-success" role="status">@message</div>
+    }
+    @if (loading)
+    {
+        <div class="load-state"><LoadingIndicator Text="Đang tải phiên bản prompt..." /></div>
+    }
+    else if (!loaded)
+    {
+        <section class="load-state" role="alert">
+            <h2>Không tải được phiên bản prompt</h2><p>@error</p>
+            <button type="button" class="btn sc-btn-primary" @onclick="LoadAsync">Thử lại</button>
+        </section>
+    }
+    else
+    {
+        @if (pendingId is not null || pendingLocation is not null)
+        {
+            <section class="discard-notice" role="alert" aria-label="Xác nhận bỏ bản nháp" tabindex="-1" @ref="discardNotice">
+                <div><strong>Bạn có bản nháp chưa lưu</strong><p>Chuyển sang nội dung khác sẽ bỏ các thay đổi, tên phiên bản và ghi chú đang soạn.</p></div>
+                <div class="discard-actions">
+                    <button type="button" class="btn sc-btn-secondary" @onclick="KeepDraft">Giữ bản nháp</button>
+                    <button type="button" class="btn sc-btn-primary" @onclick="DiscardAndContinue">Bỏ bản nháp và chuyển</button>
+                </div>
+            </section>
+        }
+        @if (versions.Count == 0)
+        {
+            <p class="empty-notice" role="status">Chưa có phiên bản system prompt nào. Bạn có thể soạn và lưu phiên bản đầu tiên bên dưới.</p>
+        }
+        <div class="prompt-workspace">
+            <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(pendingId is not null || pendingLocation is not null)"
+                          Error="@error" OnSave="SaveAsync" OnDirtyChanged="DraftChanged" />
+            <PromptHistory Versions="versions" SelectedId="draft.Source?.PromptVersionId" CreatedId="createdId" Disabled="saving" OnSelect="SelectVersion" />
+        </div>
+    }
 </div>
+
+@code {
+    private readonly PromptDraft draft = new();
+    private readonly CancellationTokenSource lifetime = new();
+    private List<PromptVersionDto> versions = [];
+    private PromptVersionDto? active;
+    private bool loading = true, loaded, saving, disposed;
+    private string? error, message, pendingLocation;
+    private int? pendingId, createdId;
+    private ElementReference discardNotice;
+    private bool focusNotice;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusNotice) return;
+        focusNotice = false;
+        await discardNotice.FocusAsync();
+    }
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        try
+        {
+            var result = await PromptApi.GetVersionsAsync(lifetime.Token);
+            if (disposed) return;
+            if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            versions = result.Data!.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId).ToList();
+            active = versions.FirstOrDefault(v => v.IsActive);
+            draft.Load(active ?? versions.FirstOrDefault());
+            loaded = true;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) loading = false; }
+    }
+    private async Task SaveAsync(CreatePromptVersionRequest request)
+    {
+        if (saving || disposed) return;
+        error = draft.Validate(versions);
+        if (error is not null) return;
+        saving = true;
+        error = message = null;
+        try
+        {
+            var result = await PromptApi.CreateVersionAsync(request, lifetime.Token);
+            if (disposed) return;
+            if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            var saved = result.Data!;
+            versions = versions.Where(v => v.PromptVersionId != saved.PromptVersionId).Append(saved)
+                .OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId).ToList();
+            createdId = saved.PromptVersionId;
+            draft.Load(saved);
+            message = $"Đã lưu phiên bản {saved.VersionName}. Phiên bản mới chưa được kích hoạt.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) saving = false; }
+    }
+    private void SelectVersion(int id)
+    {
+        if (saving || id == draft.Source?.PromptVersionId || !versions.Any(v => v.PromptVersionId == id)) return;
+        if (draft.IsDirty) { pendingId = id; pendingLocation = null; focusNotice = true; return; }
+        ApplySelection(id);
+    }
+    private void ApplySelection(int id)
+    {
+        draft.Load(versions.First(v => v.PromptVersionId == id));
+        error = message = null;
+        KeepDraft();
+    }
+    private void KeepDraft() { pendingId = null; pendingLocation = null; }
+    private void DiscardAndContinue()
+    {
+        if (pendingId is { } id) ApplySelection(id);
+        else if (pendingLocation is { } location)
+        {
+            draft.Reset(); KeepDraft(); Nav.NavigateTo(location);
+        }
+    }
+    private void DraftChanged(bool _) { error = message = null; }
+    private Task BeforeInternalNavigation(LocationChangingContext context)
+    {
+        if (saving) { context.PreventNavigation(); return Task.CompletedTask; }
+        if (draft.IsDirty)
+        {
+            context.PreventNavigation(); pendingId = null; pendingLocation = context.TargetLocation; focusNotice = true; StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
+    public void Dispose()
+    {
+        disposed = true; lifetime.Cancel(); lifetime.Dispose();
+    }
+}

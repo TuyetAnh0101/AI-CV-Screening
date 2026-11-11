@@ -1,0 +1,70 @@
+@using System.Globalization
+
+<section class="prompt-history" aria-label="Lịch sử phiên bản">
+    <div class="history-heading">
+        <h2>Lịch sử phiên bản</h2>
+        <span class="version-count">@Versions.Count phiên bản</span>
+    </div>
+    <p class="history-intro">Chọn một phiên bản để xem nội dung và soạn bản mới.</p>
+
+    @if (Versions.Count == 0)
+    {
+        <p class="history-empty">Chưa có phiên bản nào.</p>
+    }
+    else
+    {
+        <ol class="history-timeline">
+            @foreach (var version in Versions.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId))
+            {
+                var selected = version.PromptVersionId == SelectedId;
+                <li @key="version.PromptVersionId" class="history-item @(selected ? "is-selected" : null)">
+                    <span class="history-node @(version.IsActive ? "is-active" : null)" aria-hidden="true"></span>
+                    <button type="button" class="history-pick" disabled="@Disabled"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => SelectAsync(version.PromptVersionId)">
+                        <span class="version-name">@version.VersionName</span>
+                        <span class="version-badges">
+                            @if (version.IsActive)
+                            {
+                                <span class="history-tag tag-active">Đang dùng</span>
+                            }
+                            @if (version.PromptVersionId == CreatedId)
+                            {
+                                <span class="history-tag tag-new">Mới</span>
+                            }
+                            @if (version.LatestAccuracyPercent is null)
+                            {
+                                <span class="history-tag tag-unrated">Chưa đánh giá</span>
+                            }
+                        </span>
+                        <time class="version-created" datetime="@version.CreatedAt.ToString("O", CultureInfo.InvariantCulture)">@RankingView.VnTime(version.CreatedAt)</time>
+                        @if (!string.IsNullOrWhiteSpace(version.ChangeNote))
+                        {
+                            <span class="version-note">@version.ChangeNote</span>
+                        }
+                        <span class="version-accuracy">
+                            <span>Tỷ lệ đúng gần nhất</span>
+                            <strong>@Accuracy(version.LatestAccuracyPercent)</strong>
+                        </span>
+                    </button>
+                </li>
+            }
+        </ol>
+    }
+
+    <p class="history-foot">Thời gian hiển thị theo giờ Việt Nam (UTC+7). Tỷ lệ đúng lấy từ lần đánh giá gần nhất; <span aria-label="chưa có tỷ lệ đúng">—</span> là chưa có kết quả.</p>
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
+    [Parameter] public int? SelectedId { get; set; }
+    [Parameter] public int? CreatedId { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<int> OnSelect { get; set; }
+
+    private static string Accuracy(decimal? percent) => percent is null
+        ? "—"
+        : percent.Value.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) + "%";
+
+    private Task SelectAsync(int id) => Disabled ? Task.CompletedTask : OnSelect.InvokeAsync(id);
+}
