@@ -63,6 +63,15 @@ public sealed class EvaluationDetailUiTests
             var handler = Flat(root).First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onclick");
             return DispatchEventAsync(handler.AttributeEventHandlerId, null, new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         });
+        public Task Refresh() => Dispatcher.InvokeAsync(() =>
+        {
+            var frames = Flat(root);
+            var text = frames.FindIndex(f => f.FrameType == RenderTreeFrameType.Text && f.TextContent == "Làm mới kết quả"
+                || f.FrameType == RenderTreeFrameType.Markup && f.MarkupContent.Contains("Làm mới kết quả"));
+            Assert.True(text >= 0, "Không thấy nút Làm mới kết quả");
+            var handler = frames.Take(text).Last(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onclick");
+            return DispatchEventAsync(handler.AttributeEventHandlerId, null, new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        });
     }
     private static EvaluationDetailDto Detail(int id = 22, string source = "Combined", string status = "Completed", string? reason = "Có kinh nghiệm C#.") => new()
     {
@@ -102,6 +111,28 @@ public sealed class EvaluationDetailUiTests
         Assert.Equal(Display.VnTime(utc), Display.VnTime(utc.ToLocalTime()));
         Assert.Equal(Display.VnTime(utc), Display.VnTime(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified)));
         Assert.Equal("—", Display.VnTime(default));
+    }
+
+    [Fact]
+    public async Task Refresh_reloads_pending_evaluation_with_the_same_id_and_shows_saved_ai_result()
+    {
+        var completed = false;
+        var api = new Api { Reply = (_, _) => Task.FromResult(Json(completed
+            ? Detail(reason: "Nhận xét AI mới đã lưu.")
+            : Detail(status: "Pending", reason: "Chưa được phép hiển thị"))) };
+        using var services = Services(api);
+        await using var renderer = new TestRenderer(services);
+        await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
+        Assert.Contains("Chưa có kết quả hoàn tất", await renderer.Text());
+        Assert.DoesNotContain("Chưa được phép hiển thị", await renderer.Text());
+
+        completed = true;
+        await renderer.Refresh();
+
+        Assert.Equal(new[] { "/api/evaluations/22", "/api/evaluations/22" }, api.Requests);
+        Assert.Contains("Nhận xét AI mới đã lưu.", await renderer.Text());
+        Assert.Contains("60 × 70% = 42", await renderer.Text());
+        Assert.DoesNotContain("Chưa có kết quả hoàn tất", await renderer.Text());
     }
 
     [Fact]
@@ -274,6 +305,7 @@ public sealed class EvaluationDetailUiTests
         Assert.True(Display.HasRecordedCap(capped));
         Assert.DoesNotContain("secret", Display.SafeError("https://provider/?key=secret"));
         Assert.Equal("Gemini báo HTTP 503. AI chưa chấm thành công.", Display.SafeError("Gemini lỗi sau 3 lần thử (HTTP 503: https://private/?key=secret)"));
+        Assert.Equal("Gemini báo HTTP 404. AI chưa chấm thành công.", Display.SafeError("Không tìm thấy model (HTTP 404: https://private/?key=secret)"));
     }
 
     [Theory]

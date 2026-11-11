@@ -51,7 +51,7 @@ public static class Display
     {
         if (message is "Không gọi được AI" or "CV chưa trích xuất được nội dung.") return message;
         if (message == "CV chưa trích xuất được nội dung (ExtractionStatus = Failed).") return "Trích xuất nội dung CV thất bại.";
-        var status = System.Text.RegularExpressions.Regex.Match(message ?? "", @"\bHTTP (400|401|403|429|500|502|503|504)\b");
+        var status = System.Text.RegularExpressions.Regex.Match(message ?? "", @"\bHTTP (400|401|403|404|429|500|502|503|504)\b");
         if (status.Success) return $"Gemini báo {status.Value}. AI chưa chấm thành công.";
         return "Không thể hoàn tất xử lý. Vui lòng liên hệ quản trị viên để kiểm tra lỗi đã ghi nhận.";
     }

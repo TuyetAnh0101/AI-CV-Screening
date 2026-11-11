@@ -111,8 +111,10 @@
 .run-outcome.is-running .outcome-icon { background: #0369a1; }
 .run-outcome.is-completed { background: #f0fdfa; border-color: #99f6e4; }
 .run-outcome.is-completed .outcome-icon { background: var(--brand); }
-.run-outcome.is-partialfailure { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
-.run-outcome.is-partialfailure .outcome-icon { background: #d97706; }
+.run-outcome.is-partialfailure,
+.run-outcome.is-aifallback { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
+.run-outcome.is-partialfailure .outcome-icon,
+.run-outcome.is-aifallback .outcome-icon { background: #d97706; }
 .run-outcome.is-allfailed,
 .run-outcome.is-failed { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
 .run-outcome.is-allfailed .outcome-icon,
@@ -157,7 +159,7 @@
 /* ---------- Thống kê ---------- */
 .run-stats {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 12px;
     margin: 0;
 }

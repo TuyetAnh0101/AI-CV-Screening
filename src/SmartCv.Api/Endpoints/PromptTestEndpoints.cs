@@ -10,7 +10,12 @@ using SmartCv.Infrastructure.Prompts;
 
 namespace SmartCv.Api.Endpoints;
 
-/// <summary>A15 queue/progress and A16 accuracy. Scoring uses the existing A11 worker.</summary>
+/// <summary>
+/// A15 queue/progress and A16 accuracy. Scoring uses the existing A11 worker.
+/// A17 (read-only, never calls Gemini):
+///   GET /api/prompt-tests/compare?baseRunId=&amp;candidateRunId=                         two specific Completed runs
+///   GET /api/prompts/compare?baseVersionId=&amp;candidateVersionId=&amp;evaluationSetId=      latest Completed run of each version
+/// </summary>
 public static class PromptTestEndpoints
 {
     public static WebApplication MapPromptTestEndpoints(this WebApplication app)
@@ -21,7 +26,11 @@ public static class PromptTestEndpoints
         group.MapPost("/", StartAsync).WithName("StartPromptTest")
             .RequireRateLimiting(CvUploadRateLimiting.PolicyName);
         group.MapGet("/", ListAsync).WithName("ListPromptTests");
+        group.MapGet("/compare", CompareRunsAsync).WithName("ComparePromptTests")
+            .WithSummary("So sánh hai lượt đánh giá prompt đã hoàn thành");
         group.MapGet("/{runId:int}", GetAsync).WithName("GetPromptTest");
+        app.MapGet("/api/prompts/compare", CompareVersionsAsync).WithTags("Prompts").WithName("ComparePromptVersions")
+            .WithSummary("So sánh hai phiên bản prompt trên một bộ CV đánh giá");
         return app;
     }
 
@@ -92,6 +101,73 @@ public static class PromptTestEndpoints
     {
         var dto = await db.LoadProgressAsync(runId, ct);
         return dto is null ? Problem(404, "Không tìm thấy lượt chạy", "Không có lượt đánh giá prompt đã chọn.") : Results.Ok(dto);
+    }
+
+    // ---------- A17: GET /api/prompt-tests/compare?baseRunId=&candidateRunId= ----------
+    private static async Task<IResult> CompareRunsAsync(SmartCvDbContext db, CancellationToken ct,
+        int? baseRunId = null, int? candidateRunId = null)
+    {
+        if (baseRunId is null || candidateRunId is null)
+            return Problem(400, "Thiếu tham số", "Cần cả baseRunId và candidateRunId.");
+        if (baseRunId <= 0 || candidateRunId <= 0)
+            return Problem(400, "Tham số không hợp lệ", "baseRunId và candidateRunId phải là số nguyên dương.");
+        if (baseRunId == candidateRunId)
+            return Problem(400, "Cùng một lượt chạy", "Hãy chọn hai lượt chạy khác nhau để so sánh.");
+
+        var runs = await db.LoadCompareRunsAsync([baseRunId.Value, candidateRunId.Value], ct);
+        var baseRun = runs.SingleOrDefault(r => r.RunId == baseRunId);
+        var candidateRun = runs.SingleOrDefault(r => r.RunId == candidateRunId);
+        foreach (var (id, run) in new[] { (baseRunId.Value, baseRun), (candidateRunId.Value, candidateRun) })
+        {
+            if (run is null)
+                return Problem(404, "Không tìm thấy lượt chạy", $"Không có lượt chạy #{id}.");
+            if (run.RunType != RunTypes.PromptTest || run.EvaluationSetId is null)
+                return Problem(400, "Không phải lượt đánh giá prompt",
+                    $"Lượt #{id} là lượt {run.RunType}, chỉ so sánh được các lượt PromptTest chạy trên bộ CV có nhãn HR.");
+            if (run.Status != RunStatuses.Completed)
+                return Results.Problem(statusCode: 409, title: "Lượt chạy chưa hoàn thành",
+                    detail: $"Lượt #{id} ({run.PromptVersionName}) đang ở trạng thái {run.Status}. Chỉ so sánh được lượt đã hoàn thành (Completed).",
+                    extensions: new Dictionary<string, object?> { ["runId"] = id, ["runStatus"] = run.Status });
+        }
+
+        return Results.Ok(await db.BuildPromptCompareAsync(baseRun!, candidateRun!, ct));
+    }
+
+    // ---------- A17: GET /api/prompts/compare?baseVersionId=&candidateVersionId=&evaluationSetId= ----------
+    private static async Task<IResult> CompareVersionsAsync(SmartCvDbContext db, CancellationToken ct,
+        int? baseVersionId = null, int? candidateVersionId = null, int? evaluationSetId = null)
+    {
+        if (baseVersionId is null || candidateVersionId is null || evaluationSetId is null)
+            return Problem(400, "Thiếu tham số", "Cần đủ baseVersionId, candidateVersionId và evaluationSetId.");
+        if (baseVersionId <= 0 || candidateVersionId <= 0 || evaluationSetId <= 0)
+            return Problem(400, "Tham số không hợp lệ", "baseVersionId, candidateVersionId và evaluationSetId phải là số nguyên dương.");
+        if (baseVersionId == candidateVersionId)
+            return Problem(400, "Cùng một phiên bản", "Hãy chọn hai phiên bản prompt khác nhau để so sánh.");
+
+        var versions = await db.PromptVersions.AsNoTracking()
+            .Where(p => p.PromptVersionId == baseVersionId || p.PromptVersionId == candidateVersionId)
+            .Select(p => new { p.PromptVersionId, p.VersionName })
+            .ToDictionaryAsync(p => p.PromptVersionId, p => p.VersionName, ct);
+        foreach (var id in new[] { baseVersionId.Value, candidateVersionId.Value })
+            if (!versions.ContainsKey(id))
+                return Problem(404, "Không tìm thấy prompt", $"Không có phiên bản prompt #{id}.");
+        if (!await db.EvaluationSets.AnyAsync(s => s.EvaluationSetId == evaluationSetId, ct))
+            return Problem(404, "Không tìm thấy bộ CV", $"Không có bộ CV đánh giá #{evaluationSetId}.");
+
+        var setId = evaluationSetId.Value;
+        var baseRun = await db.LatestCompletedPromptTestAsync(baseVersionId.Value, setId, ct);
+        var candidateRun = await db.LatestCompletedPromptTestAsync(candidateVersionId.Value, setId, ct);
+        foreach (var (id, run) in new[] { (baseVersionId.Value, baseRun), (candidateVersionId.Value, candidateRun) })
+        {
+            if (run is not null) continue;
+            var active = await db.LatestActivePromptTestAsync(id, setId, ct);
+            var detail = $"Phiên bản {versions[id]} (#{id}) chưa có lượt đánh giá nào hoàn thành trên bộ CV #{setId}. " +
+                         (active is null ? "Hãy chạy đánh giá trước." : $"Lượt #{active.RunId} đang {active.Status}; hãy đợi lượt này hoàn thành.");
+            return Results.Problem(statusCode: 404, title: "Chưa có kết quả", detail: detail,
+                extensions: new Dictionary<string, object?> { ["promptVersionId"] = id, ["activeRunId"] = active?.RunId });
+        }
+
+        return Results.Ok(await db.BuildPromptCompareAsync(baseRun!, candidateRun!, ct));
     }
 
     private static IResult Problem(int status, string title, string detail) =>
