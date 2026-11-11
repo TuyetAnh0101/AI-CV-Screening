@@ -300,7 +300,8 @@ public class PromptVersioningUiTests
         await reload.ClickAsync("v3-thuc-tap");
         Assert.Equal(ChangedContent, reload.Value("Nội dung system prompt"));
         Assert.All(api.Calls.Where(call => call.StartsWith("POST")), call => Assert.Contains("/api/prompts", call));
-        Assert.DoesNotContain(api.Calls, call => call.Contains("activate") || call.Contains("prompt-tests"));
+        // B16 reads run history on page load; saving must still never activate or start a test.
+        Assert.DoesNotContain(api.Calls, call => call.Contains("activate") || call.StartsWith("POST /api/prompt-tests"));
     }
 
     [Fact]

@@ -1,0 +1,183 @@
+@implements IDisposable
+@inject PromptApiClient Api
+
+<section class="mismatch-analysis" aria-labelledby="mismatch-title" aria-busy="@(loading ? "true" : "false")">
+    <header class="mismatch-head">
+        <div>
+            <p class="eyebrow">Đối chiếu từng hồ sơ</p>
+            <h2 id="mismatch-title">CV mà AI đánh giá khác HR</h2>
+            @if (detail is not null)
+            {
+                <p>Lần chạy <strong>#@detail.RunId</strong> · prompt <span class="mono">@detail.PromptVersionName</span> · @detail.EvaluationSetName</p>
+            }
+            else { <p>Chọn “Xem CV lệch” ở bảng so sánh để xem một lượt cụ thể.</p> }
+        </div>
+        <button type="button" class="btn sc-btn-secondary" disabled="@loading" @onclick="LoadAsync">@(loading ? "Đang tải..." : "Làm mới CV lệch")</button>
+    </header>
+    @if (loading)
+    {
+        <div class="mismatch-state" role="status"><LoadingIndicator Text="Đang tải và kiểm tra kết quả từng CV..." /></div>
+    }
+    else if (error is not null)
+    {
+        <p class="mismatch-error" role="alert">@error Hãy thử làm mới CV lệch.</p>
+    }
+    else if (detail is null)
+    {
+        <p class="mismatch-state" role="status">Chưa có lượt đánh giá hoàn thành để phân tích. Không tạo lượt đánh giá mới khi mở khu vực này.</p>
+    }
+    else if (detail.Status != "Completed")
+    {
+        <p class="mismatch-notice" role="status">Lượt #@detail.RunId: @StatusLabel(detail.Status). Chưa có kết quả hoàn chỉnh để kết luận AI khớp HR. Hãy theo dõi tiến độ ở khu vực Chạy đánh giá.</p>
+    }
+    else if (view is not null)
+    {
+        <div class="analysis-overview">
+            <table class="matrix">
+                <caption>Ma trận AI × HR <span>@view.Compared/@detail.TotalItems hồ sơ có đủ nhãn và dự đoán hợp lệ</span></caption>
+                <thead><tr><td></td><th scope="col">HR: Đạt</th><th scope="col">HR: Không đạt</th></tr></thead>
+                <tbody>
+                    <tr><th scope="row">AI: Đạt</th><td class="matrix-ok"><strong>@view.TruePositive</strong><span>TP · Đúng</span></td><td class="matrix-wrong"><strong>@view.FalsePositive</strong><span>FP · Chọn nhầm</span></td></tr>
+                    <tr><th scope="row">AI: Không đạt</th><td class="matrix-missed"><strong>@view.FalseNegative</strong><span>FN · Bỏ sót</span></td><td class="matrix-ok"><strong>@view.TrueNegative</strong><span>TN · Đúng</span></td></tr>
+                </tbody>
+            </table>
+            <div class="analysis-explainer">
+                <strong>Đọc kết quả đối chiếu</strong>
+                <p><span class="legend-dot missed"></span><b>Bỏ sót</b>: HR Đạt, AI Không đạt.</p>
+                <p><span class="legend-dot wrong"></span><b>Chọn nhầm</b>: HR Không đạt, AI Đạt.</p>
+                <p class="muted">Ma trận giữ nguyên khi lọc. Nhãn HR được lấy theo dữ liệu API hiện tại.</p>
+            </div>
+        </div>
+        @if (!view.Complete)
+        {
+            <div class="mismatch-notice" role="status">
+                <strong>Chưa đủ dữ liệu nhất quán để kết luận cho toàn bộ lượt.</strong>
+                <p>@view.Excluded dòng không đủ điều kiện (thiếu nhãn, chưa chấm, lỗi hoặc trùng hồ sơ). API trả @detail.Items.Count/@detail.TotalItems dòng. Ma trận chỉ tính các hồ sơ hợp lệ, duy nhất.</p>
+                @if (view.DuplicateApplications > 0) { <p>@view.DuplicateApplications hồ sơ bị trùng: đã loại tất cả bản trùng, không tự chọn một bản.</p> }
+                @if (view.InconsistentFlags > 0) { <p>@view.InconsistentFlags dòng có IsMatch/MismatchType không khớp nhãn HR và dự đoán. Ma trận dựa trên nhãn; danh sách lệch loại các dòng mâu thuẫn. Cần kiểm tra dữ liệu API.</p> }
+            </div>
+        }
+        @if (view.KeywordOnly > 0) { <p class="mismatch-notice" role="note">Có @view.KeywordOnly hồ sơ chỉ keyword trong ma trận. Đây là đối chiếu dự đoán cuối, không phải toàn bộ kết quả từ AI.</p> }
+        @if (unavailableDetails > 0) { <p class="muted" role="status">@unavailableDetails hồ sơ lệch chưa có chi tiết được xác minh. Liên kết chỉ xuất hiện khi API B9 xác nhận đúng lượt và hồ sơ.</p> }
+        <div class="mismatch-toolbar">
+            <h3>Hồ sơ cần xem lại <span>@view.Mismatches.Count</span></h3>
+            <div class="mismatch-filters" role="group" aria-label="Lọc CV lệch">
+                @foreach (var option in filters)
+                {
+                    <button type="button" class="filter-button @(filter == option.Key ? "is-selected" : "")"
+                            aria-pressed="@(filter == option.Key ? "true" : "false")" @onclick="() => filter = option.Key">
+                        @option.Label <span>@view.Count(option.Key)</span>
+                    </button>
+                }
+            </div>
+        </div>
+        @if (!view.Filter(filter).Any())
+        {
+            <p class="mismatch-state" role="status">@(view.AllMatch ? "AI khớp HR ở tất cả hồ sơ đã đánh giá trong lượt này." : view.Mismatches.Count > 0 ? "Không có CV lệch thuộc bộ lọc này." : "Chưa có CV lệch hợp lệ để hiển thị; hãy xem mức độ đầy đủ của dữ liệu phía trên.")</p>
+        }
+        else
+        {
+            <div class="mismatch-scroll" tabindex="0" role="region" aria-label="Danh sách CV lệch, có thể cuộn ngang">
+                <table class="mismatch-list">
+                    <caption class="visually-hidden">Chỉ hiển thị hồ sơ có đủ nhãn, dự đoán hợp lệ và cờ phân loại nhất quán.</caption>
+                    <thead><tr><th scope="col">Ứng viên</th><th scope="col">Nhãn HR</th><th scope="col">AI dự đoán</th><th scope="col">Loại lệch</th><th scope="col">Nhận xét AI · Ghi chú HR</th><th scope="col">Chi tiết</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in view.Filter(filter))
+                        {
+                            <tr @key="item.ApplicationId">
+                                <th scope="row"><strong>@Text(item.CandidateName, "Chưa có tên ứng viên")</strong><span class="sub">@Text(item.FileName, "Chưa có tên file")</span><span class="sub">@Text(item.JobTitle, "Chưa có vị trí tuyển dụng")</span></th>
+                                <td><span class="label-pill @(item.HrIsPass == true ? "pass" : "fail")">@PassLabel(item.HrIsPass)</span></td>
+                                <td><span class="label-pill prediction @(item.PredictedPass == true ? "pass" : "fail")">@PassLabel(item.PredictedPass)</span><span class="sub">@RankingView.Score(item.FinalScore) điểm</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.FitLabel)) { <span class="sub">@item.FitLabel</span> }
+                                    @if (item.ScoreSource == "KeywordOnly") { <span class="keyword-tag">Chỉ keyword</span> }
+                                </td>
+                                <td><span class="label-pill @(item.MismatchType == "Missed" ? "missed" : "wrong")">@(item.MismatchType == "Missed" ? "Bỏ sót" : "Chọn nhầm")</span></td>
+                                <td class="notes"><div><b>AI</b><p>@Text(item.Reasoning, "Chưa có nhận xét AI.")</p></div><div class="hr-note"><b>HR</b><p>@Text(item.HrNote, "Chưa có ghi chú HR.")</p></div></td>
+                                <td>@if (verifiedDetails.Contains(item.ApplicationId)) { <a class="detail-link" href="@($"/results/evaluations/{item.EvaluationId}")" aria-label="@($"Chi tiết kết quả của {Text(item.CandidateName, item.FileName)}")">Chi tiết <span aria-hidden="true">↗</span></a> }
+                                    else { <span class="sub">Chưa có chi tiết được xác minh</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
+    [Parameter] public int? RunId { get; set; }
+    [Parameter] public int RefreshVersion { get; set; }
+    private PromptTestProgressDto? detail;
+    private MismatchView? view;
+    private MismatchFilter filter;
+    private static readonly (MismatchFilter Key, string Label)[] filters = [(MismatchFilter.All, "Tất cả CV lệch"), (MismatchFilter.Missed, "Bỏ sót"), (MismatchFilter.WrongPick, "Chọn nhầm")];
+    private HashSet<int> verifiedDetails = [];
+    private int unavailableDetails, generation, lastRefresh = -1;
+    private int? lastRunId, lastActive;
+    private bool initialized, loading, disposed;
+    private string? error;
+    private CancellationTokenSource? request;
+    private int? ActiveId => Versions.FirstOrDefault(v => v.IsActive)?.PromptVersionId;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (initialized && lastRefresh == RefreshVersion && lastRunId == RunId && (RunId is not null || lastActive == ActiveId)) return;
+        initialized = true; lastRefresh = RefreshVersion; lastRunId = RunId; lastActive = ActiveId;
+        await LoadAsync();
+    }
+    private async Task LoadAsync()
+    {
+        request?.Cancel(); request?.Dispose(); request = new();
+        var ct = request.Token; var current = ++generation;
+        loading = true; detail = null; view = null; error = null; verifiedDetails = []; unavailableDetails = 0; filter = MismatchFilter.All;
+        try
+        {
+            var id = RunId;
+            if (id is null)
+            {
+                var runs = await Api.GetMismatchRunsAsync(ct);
+                if (Stale(current)) return;
+                if (!runs.IsSuccess) { error = runs.ErrorMessage; return; }
+                id = MismatchView.DefaultRun(runs.Data!, ActiveId)?.RunId;
+            }
+            if (id is null) return;
+            if (id <= 0) { error = "Mã lượt đánh giá không hợp lệ."; return; }
+            var result = await Api.GetMismatchRunAsync(id.Value, ct);
+            if (Stale(current)) return;
+            if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            if (result.Data!.RunId != id) { error = "API trả về sai lượt đánh giá. Không hiển thị dữ liệu này."; return; }
+            var data = result.Data!;
+            var analysis = MismatchView.Create(data);
+            // B9 supports PromptTest evaluations. Verify existence and ownership before exposing links.
+            var links = new HashSet<int>();
+            if (data.Status == "Completed")
+            {
+                using var limit = new SemaphoreSlim(4);
+                var checks = await Task.WhenAll(analysis.Mismatches.Select(async item =>
+                {
+                    if (item.EvaluationId <= 0) return (Id: item.ApplicationId, Valid: false);
+                    await limit.WaitAsync(ct);
+                    try
+                    {
+                        var evaluation = await Api.GetMismatchEvaluationAsync(item.EvaluationId, ct);
+                        return (Id: item.ApplicationId, Valid: evaluation.IsSuccess && MismatchView.SupportsDetail(data.RunId, item, evaluation.Data!));
+                    }
+                    finally { limit.Release(); }
+                }));
+                if (Stale(current)) return;
+                links = checks.Where(c => c.Valid).Select(c => c.Id).ToHashSet();
+            }
+            if (Stale(current)) return;
+            detail = data; view = analysis; verifiedDetails = links;
+            unavailableDetails = analysis.Mismatches.Count(i => !links.Contains(i.ApplicationId));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        finally { if (!Stale(current)) loading = false; }
+    }
+    private bool Stale(int current) => disposed || current != generation;
+    private static string Text(string? text, string fallback) => string.IsNullOrWhiteSpace(text) ? fallback : text;
+    private static string PassLabel(bool? pass) => pass is null ? "Chưa có dự đoán" : pass.Value ? "Đạt" : "Không đạt";
+    private static string StatusLabel(string status) => status switch { "Queued" => "Đang chờ", "Running" => "Đang xử lý", "Failed" => "Xử lý thất bại", _ => "Chưa hoàn thành" };
+    public void Dispose() { disposed = true; ++generation; request?.Cancel(); request?.Dispose(); }
+}

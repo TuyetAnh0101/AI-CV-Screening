@@ -25,6 +25,8 @@ small { display:block; font-size:11px; color:var(--text-muted); margin-top:6px; 
 .is-best th small { color:var(--brand); font-weight:600; }
 .active-tag { display:inline-block; border-radius:6px; padding:4px 8px; color:var(--fit-excellent); background:var(--fit-excellent-bg); font-size:11px; white-space:nowrap; }
 .run-time { white-space:nowrap; font-size:12px; }
+.mismatch-action { font-size:12px; white-space:nowrap; }
+.mismatch-action[aria-pressed="true"] { color:var(--brand); background:var(--fit-good-bg); border-color:var(--brand); }
 .compare-error { color:var(--sc-error); background:#fff1f2; border-radius:8px; padding:12px; }
 select:focus-visible,button:focus-visible,.table-scroll:focus-visible { outline:3px solid var(--brand-accent); outline-offset:2px; }
 @media(max-width:600px) { .accuracy-compare { padding:18px 14px; } .compare-controls select { width:100%; } }
