@@ -14,14 +14,34 @@
             <h1>Prompt &amp; độ chính xác</h1>
             <p>Soạn quy tắc đánh giá, lưu thành phiên bản mới và theo dõi lịch sử system prompt.</p>
         </div>
-        @if (active is not null)
+        @if (activationNeedsRefresh)
         {
-            <div class="active-version"><span class="active-dot" aria-hidden="true"></span><span>Đang dùng: <strong>@active.VersionName</strong></span></div>
+            <div class="active-version is-stale" role="status">Trạng thái đang dùng chưa được đồng bộ</div>
+        }
+        else if (active is not null)
+        {
+            <div class="active-version" role="status" aria-live="polite"><span class="active-dot" aria-hidden="true"></span><span>Đang dùng: <strong>@active.VersionName</strong> · @Accuracy(active.LatestAccuracyPercent)</span></div>
+        }
+        else if (loaded)
+        {
+            <div class="active-version is-empty" role="status">Chưa có phiên bản đang dùng</div>
         }
     </header>
     @if (message is not null)
     {
         <div class="save-success" role="status">@message</div>
+    }
+    @if (activationError is not null)
+    {
+        <section class="activation-notice" role="alert" aria-label="Thông báo kích hoạt">
+            <p>@activationError</p>
+            @if (activationNeedsRefresh)
+            {
+                <button type="button" class="btn sc-btn-secondary" disabled="@Busy" @onclick="SynchronizeActivationAsync">
+                    @(synchronizingActivation ? "Đang đồng bộ..." : "Đồng bộ trạng thái")
+                </button>
+            }
+        </section>
     }
     @if (loading)
     {
@@ -51,9 +71,11 @@
             <p class="empty-notice" role="status">Chưa có phiên bản system prompt nào. Bạn có thể soạn và lưu phiên bản đầu tiên bên dưới.</p>
         }
         <div class="prompt-workspace">
-            <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(pendingId is not null || pendingLocation is not null)"
+            <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(activatingId is not null || synchronizingActivation || pendingId is not null || pendingLocation is not null)"
                           Error="@error" OnSave="SaveAsync" OnDirtyChanged="DraftChanged" />
-            <PromptHistory Versions="versions" SelectedId="draft.Source?.PromptVersionId" CreatedId="createdId" Disabled="saving" OnSelect="SelectVersion" />
+            <PromptHistory Versions="versions" SelectedId="draft.Source?.PromptVersionId" CreatedId="createdId" Disabled="Busy"
+                           ActivatingId="activatingId" ActivationBlocked="@(activationNeedsRefresh || pendingId is not null || pendingLocation is not null)"
+                           OnSelect="SelectVersion" OnActivate="ActivateAsync" />
         </div>
     }
 </div>
@@ -64,10 +86,15 @@
     private List<PromptVersionDto> versions = [];
     private PromptVersionDto? active;
     private bool loading = true, loaded, saving, disposed;
+    private bool activationNeedsRefresh, synchronizingActivation;
+    private int? activatingId;
+    private string? activationError;
     private string? error, message, pendingLocation;
     private int? pendingId, createdId;
     private ElementReference discardNotice;
     private bool focusNotice;
+    private bool Busy => saving || activatingId is not null || synchronizingActivation;
+    private static string Accuracy(decimal? percent) => percent is null ? "—" : RankingView.Score(percent) + "%";
 
     protected override Task OnInitializedAsync() => LoadAsync();
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -85,6 +112,11 @@
             var result = await PromptApi.GetVersionsAsync(lifetime.Token);
             if (disposed) return;
             if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            if (result.Data!.Count(v => v.IsActive) > 1)
+            {
+                error = "API trả về nhiều phiên bản đang dùng. Hãy tải lại hoặc kiểm tra dữ liệu A14.";
+                return;
+            }
             versions = result.Data!.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId).ToList();
             active = versions.FirstOrDefault(v => v.IsActive);
             draft.Load(active ?? versions.FirstOrDefault());
@@ -95,7 +127,7 @@
     }
     private async Task SaveAsync(CreatePromptVersionRequest request)
     {
-        if (saving || disposed) return;
+        if (Busy || disposed) return;
         error = draft.Validate(versions);
         if (error is not null) return;
         saving = true;
@@ -115,9 +147,86 @@
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         finally { if (!disposed) saving = false; }
     }
+    private async Task ActivateAsync(int id)
+    {
+        if (Busy || disposed || activationNeedsRefresh || pendingId is not null || pendingLocation is not null) return;
+        var target = versions.FirstOrDefault(v => v.PromptVersionId == id);
+        if (target is null || target.IsActive) return;
+        activatingId = id;
+        activationError = message = null;
+        try
+        {
+            var result = await PromptApi.ActivateAsync(id, lifetime.Token);
+            if (disposed) return;
+            // Even an error/timeout may follow a committed transaction. Always read server state.
+            var current = await PromptApi.GetVersionsAsync(lifetime.Token);
+            if (disposed) return;
+            if (!current.IsSuccess || current.Data!.Count(v => v.IsActive) > 1)
+            {
+                activationNeedsRefresh = true;
+                activationError = "Chưa xác minh được trạng thái sau yêu cầu kích hoạt. Lịch sử đang hiển thị dữ liệu trước đó; hãy đồng bộ trạng thái trước khi thử lại. "
+                    + (current.IsSuccess ? "API trả về nhiều phiên bản đang dùng." : current.ErrorMessage);
+                return;
+            }
+            ApplyVersionsPreservingDraft(current.Data!);
+            if (!result.IsSuccess)
+            {
+                activationError = $"Chưa nhận được xác nhận kích hoạt: {result.ErrorMessage} "
+                    + (active is null ? "Máy chủ hiện chưa có phiên bản đang dùng." : $"Máy chủ hiện đang dùng {active.VersionName}.");
+            }
+            else if (active?.PromptVersionId != id)
+            {
+                activationError = "Trạng thái trên máy chủ đã thay đổi sau yêu cầu kích hoạt. "
+                    + (active is null ? "Hiện chưa có phiên bản đang dùng." : $"Hiện đang dùng {active.VersionName}. Hãy kiểm tra trước khi thử lại.");
+            }
+            else
+            {
+                message = $"Đã kích hoạt {active.VersionName}. Các lượt phân tích CV mới sẽ sử dụng phiên bản này.";
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) activatingId = null; }
+    }
+    private void ApplyVersionsPreservingDraft(List<PromptVersionDto> list)
+    {
+        versions = list.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId).ToList();
+        active = versions.SingleOrDefault(v => v.IsActive);
+        activationNeedsRefresh = false;
+        if (draft.Source is { } source && versions.FirstOrDefault(v => v.PromptVersionId == source.PromptVersionId) is { } fresh)
+        {
+            // Refresh source metadata without changing the selected version or any draft field.
+            var content = draft.Content;
+            var name = draft.VersionName;
+            var note = draft.ChangeNote;
+            draft.Load(fresh);
+            draft.Content = content;
+            draft.VersionName = name;
+            draft.ChangeNote = note;
+        }
+    }
+    private async Task SynchronizeActivationAsync()
+    {
+        if (Busy || disposed) return;
+        synchronizingActivation = true;
+        message = null;
+        try
+        {
+            var current = await PromptApi.GetVersionsAsync(lifetime.Token);
+            if (disposed) return;
+            if (!current.IsSuccess || current.Data!.Count(v => v.IsActive) > 1)
+            {
+                activationError = "Chưa đồng bộ được trạng thái. " + (current.IsSuccess ? "API trả về nhiều phiên bản đang dùng." : current.ErrorMessage);
+                return;
+            }
+            ApplyVersionsPreservingDraft(current.Data!);
+            activationError = null;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) synchronizingActivation = false; }
+    }
     private void SelectVersion(int id)
     {
-        if (saving || id == draft.Source?.PromptVersionId || !versions.Any(v => v.PromptVersionId == id)) return;
+        if (Busy || id == draft.Source?.PromptVersionId || !versions.Any(v => v.PromptVersionId == id)) return;
         if (draft.IsDirty) { pendingId = id; pendingLocation = null; focusNotice = true; return; }
         ApplySelection(id);
     }
@@ -139,7 +248,7 @@
     private void DraftChanged(bool _) { error = message = null; }
     private Task BeforeInternalNavigation(LocationChangingContext context)
     {
-        if (saving) { context.PreventNavigation(); return Task.CompletedTask; }
+        if (Busy) { context.PreventNavigation(); return Task.CompletedTask; }
         if (draft.IsDirty)
         {
             context.PreventNavigation(); pendingId = null; pendingLocation = context.TargetLocation; focusNotice = true; StateHasChanged();

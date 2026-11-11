@@ -212,7 +212,7 @@ public class PromptVersioningUiTests
         Assert.Contains("—", r.Text);
         Assert.Contains("Chưa đánh giá", r.Text);
         Assert.Contains("10/11/2026 09:00", r.Text);
-        Assert.DoesNotContain("Kích hoạt", r.Text);
+        Assert.Contains("Kích hoạt", r.Text); // B13 adds activation alongside the B12 editor.
         Assert.DoesNotContain("Chạy đánh giá", r.Text);
         Assert.Equal(new[] { "GET /api/prompts" }, api.Calls);
     }

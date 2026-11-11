@@ -17,13 +17,17 @@
             @foreach (var version in Versions.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.PromptVersionId))
             {
                 var selected = version.PromptVersionId == SelectedId;
-                <li @key="version.PromptVersionId" class="history-item @(selected ? "is-selected" : null)">
+                <li @key="version.PromptVersionId" class="history-item @(selected ? "is-selected" : null) @(version.IsActive ? "is-current" : null)">
                     <span class="history-node @(version.IsActive ? "is-active" : null)" aria-hidden="true"></span>
                     <button type="button" class="history-pick" disabled="@Disabled"
                             aria-pressed="@(selected ? "true" : "false")"
                             @onclick="() => SelectAsync(version.PromptVersionId)">
                         <span class="version-name">@version.VersionName</span>
                         <span class="version-badges">
+                            @if (selected)
+                            {
+                                <span class="history-tag tag-selected">Đang xem</span>
+                            }
                             @if (version.IsActive)
                             {
                                 <span class="history-tag tag-active">Đang dùng</span>
@@ -47,6 +51,21 @@
                             <strong>@Accuracy(version.LatestAccuracyPercent)</strong>
                         </span>
                     </button>
+                    @if (!version.IsActive)
+                    {
+                        <div class="activation-row">
+                            <button type="button" class="history-activate" aria-label="@($"Kích hoạt {version.VersionName}")"
+                                    aria-busy="@(ActivatingId == version.PromptVersionId ? "true" : "false")"
+                                    disabled="@(Disabled || ActivationBlocked || ActivatingId is not null)"
+                                    @onclick="() => ActivateAsync(version.PromptVersionId)">
+                                @if (ActivatingId == version.PromptVersionId)
+                                {
+                                    <span class="activation-spinner" aria-hidden="true"></span>
+                                }
+                                <span>@(ActivatingId == version.PromptVersionId ? "Đang kích hoạt..." : "Kích hoạt")</span>
+                            </button>
+                        </div>
+                    }
                 </li>
             }
         </ol>
@@ -60,11 +79,18 @@
     [Parameter] public int? SelectedId { get; set; }
     [Parameter] public int? CreatedId { get; set; }
     [Parameter] public bool Disabled { get; set; }
+    [Parameter] public int? ActivatingId { get; set; }
+    [Parameter] public bool ActivationBlocked { get; set; }
     [Parameter] public EventCallback<int> OnSelect { get; set; }
+    [Parameter] public EventCallback<int> OnActivate { get; set; }
 
     private static string Accuracy(decimal? percent) => percent is null
         ? "—"
         : percent.Value.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) + "%";
 
     private Task SelectAsync(int id) => Disabled ? Task.CompletedTask : OnSelect.InvokeAsync(id);
+
+    private Task ActivateAsync(int id) => Disabled || ActivationBlocked || ActivatingId is not null
+        || !Versions.Any(v => v.PromptVersionId == id && !v.IsActive)
+            ? Task.CompletedTask : OnActivate.InvokeAsync(id);
 }

@@ -7,6 +7,11 @@
 .active-version { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 9px 13px; border: 1px solid #99f6e4; border-radius: 24px; color: var(--brand-hover); background: #f0fdfa; font-size: 12px; overflow-wrap: anywhere; }
 .active-version strong { font-family: var(--sc-font-mono); font-size: 11px; }
 .active-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--brand); }
+.active-version.is-empty { background: var(--surface-soft); border-color: var(--border); color: var(--text-muted); }
+.active-version.is-stale { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.activation-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border: 1px solid #fecaca; background: #fff7f7; color: var(--sc-error); border-radius: 10px; font-size: 13px; }
+.activation-notice p { margin: 0; flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.activation-notice .btn { font-size: 12px; min-width: 170px; }
 .prompt-workspace { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 22px; align-items: start; }
 .save-success { padding: 14px 18px; border-radius: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 13px; overflow-wrap: anywhere; }
 .load-state { padding: 28px; background: #fff; border: 1px solid var(--border); border-radius: 16px; font-size: 14px; }
