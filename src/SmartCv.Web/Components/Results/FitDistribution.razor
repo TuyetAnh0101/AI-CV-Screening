@@ -1,0 +1,48 @@
+@using System.Globalization
+
+<section class="fit-dist" aria-label="Phân bố mức độ phù hợp">
+    <div class="dist-head">
+        <h2>Phân bố mức độ phù hợp</h2>
+        <span class="dist-pass">Ngưỡng Đạt @RankingView.Score(Ranking.PassThreshold) → <strong>@Ranking.PassCount/@view.Total CV dự đoán Đạt</strong></span>
+    </div>
+    @if (view.Total == 0)
+    {
+        <p class="dist-empty" role="status">Chưa có CV nào trong vị trí đang chọn.</p>
+    }
+    else
+    {
+        <div class="dist-bar" role="img" aria-label="@Description">
+            @foreach (var segment in view.Segments.Where(s => s.Count > 0))
+            {
+                <span class="dist-segment @segment.Css" style="@Width(segment.Count)" title="@Describe(segment)"></span>
+            }
+        </div>
+    }
+    <ul class="dist-legend">
+        @foreach (var segment in view.Segments)
+        {
+            <li>
+                <span class="dist-swatch @segment.Css" aria-hidden="true"></span>
+                <span>@segment.Label <span class="dist-range">@segment.Range</span></span>
+                <strong>@segment.Count <span class="dist-unit">CV</span></strong>
+                <span class="dist-percent">@Percent(segment.Count)</span>
+            </li>
+        }
+    </ul>
+    @if (view.Reconciled && view.Total > 0)
+    {
+        <p class="dist-note">Phân bố đối chiếu theo điểm cuối và trạng thái từng CV vì số liệu tổng hợp chưa khớp.</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public RankingResponse Ranking { get; set; } = default!;
+    [Parameter] public IReadOnlyList<RunItemDto> ProgressItems { get; set; } = [];
+    private FitDistributionView view = new(0, [], false);
+    protected override void OnParametersSet() => view = FitDistributionView.From(Ranking, ProgressItems);
+    private string Percent(int count) => (view.Total == 0 ? 0 : count * 100m / view.Total)
+        .ToString("0.##", CultureInfo.GetCultureInfo("vi-VN")) + "%";
+    private string Width(int count) => $"flex: {count.ToString(CultureInfo.InvariantCulture)} 1 0";
+    private string Describe(FitDistributionSegment s) => $"{s.Label}: {s.Count} CV ({Percent(s.Count)})";
+    private string Description => $"Tổng {view.Total} CV. " + string.Join("; ", view.Segments.Select(Describe));
+}

@@ -7,7 +7,7 @@
     API thật A13: GET /api/runs?type=Screening · GET /api/runs/latest · GET /api/runs/{id}/ranking?jobId= · GET /api/runs/{id}
     Đổi ô chọn chỉ đổi địa chỉ (Nav.NavigateTo) → Blazor gọi lại OnParametersSetAsync → tải lại.
     Mỗi lần tải có số thứ tự + CancellationToken: phản hồi của lựa chọn cũ về muộn sẽ bị bỏ qua.
-    B10: tự cập nhật khi đang chấm; biểu đồ B11 nằm ngoài phạm vi.
+    B10: tự cập nhật khi đang chấm; B11 dùng cùng dữ liệu xếp hạng và tiến độ.
 *@
 @implements IAsyncDisposable
 @using SmartCv.Core.Constants
@@ -65,6 +65,10 @@
             <RunJobFilter Runs="runs" RunsLoading="runsLoading" RunsError="@runsError" SelectedRunId="selectedRunId"
                           Jobs="FilterJobs" JobsLoading="state == ViewState.Loading" SelectedJobId="FilterJobId"
                           OnRunChanged="GoToRun" OnJobChanged="GoToJob" />
+        }
+        @if (ShowCurrent)
+        {
+            <FitDistribution Ranking="ranking!" ProgressItems="progressItems" />
         }
     </section>
 
