@@ -27,7 +27,7 @@
         <div class="table-scroll" tabindex="0" role="region" aria-label="Bảng tỷ lệ đúng, có thể cuộn ngang">
             <table>
                 <caption class="visually-hidden">Kết quả đối chiếu nhãn HR. Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
-                <thead><tr><th scope="col">Phiên bản</th><th scope="col">Tỷ lệ đúng</th><th scope="col" class="num">Đúng</th><th scope="col" class="num">Bỏ sót</th><th scope="col" class="num">Chọn nhầm</th><th scope="col">Lần chạy</th><th scope="col">Trạng thái</th></tr></thead>
+                <thead><tr><th scope="col">Phiên bản</th><th scope="col">Tỷ lệ đúng</th><th scope="col" class="num">Đúng</th><th scope="col" class="num">Bỏ sót</th><th scope="col" class="num">Chọn nhầm</th><th scope="col">Lần chạy</th><th scope="col">Trạng thái</th><th scope="col">Phân tích</th></tr></thead>
                 <tbody>
                     @foreach (var r in rows)
                     {
@@ -40,6 +40,7 @@
                                 @if (r.UnscoredCount > 0) { <small>@r.UnscoredCount chưa có dự đoán hợp lệ</small> }
                                 @if (r.KeywordOnlyCount > 0) { <small>@r.KeywordOnlyCount chỉ keyword</small> }
                             </td>
+                            <td><button type="button" class="btn sc-btn-secondary mismatch-action" aria-label="@($"Xem CV lệch lượt #{r.RunId} · {r.PromptVersionName}")" aria-pressed="@(SelectedRunId == r.RunId ? "true" : "false")" @onclick="() => OnPick.InvokeAsync(r.RunId)">Xem CV lệch</button></td>
                         </tr>
                     }
                 </tbody>
@@ -53,6 +54,8 @@
 @code {
     [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
     [Parameter] public int RefreshVersion { get; set; }
+    [Parameter] public EventCallback<int> OnPick { get; set; }
+    [Parameter] public int? SelectedRunId { get; set; }
     private List<EvaluationSetDto> sets = [];
     private List<PromptTestRunDto> rows = [];
     private PromptTestRunDto? best;

@@ -280,7 +280,8 @@ public class PromptActivationUiTests
         Assert.Equal(1, r.ClassCount("tag-active"));
         Assert.Single(api.Versions, v => v.IsActive);
         foreach (var v in api.Versions) Assert.Equal(before[v.PromptVersionId], (v.SystemPrompt, v.ChangeNote, v.HasRuns, v.CreatedAt));
-        Assert.DoesNotContain(api.Calls, c => c.Contains("prompt-tests", StringComparison.Ordinal) || c.Contains("/api/runs", StringComparison.Ordinal));
+        // B16 may read run history; activation must never create a PromptTest or Screening run.
+        Assert.DoesNotContain(api.Calls, c => c.StartsWith("POST /api/prompt-tests", StringComparison.Ordinal) || c.Contains("/api/runs", StringComparison.Ordinal));
     }
 
     [Fact]

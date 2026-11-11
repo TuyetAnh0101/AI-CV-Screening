@@ -81,7 +81,8 @@
 </div>
 
 <PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" />
-<AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" />
+<AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" SelectedRunId="mismatchRunId" OnPick="SelectMismatchRun" />
+<MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" />
 @if (testHistoryWarning is not null)
 {
     <p role="status">@testHistoryWarning <button type="button" class="btn sc-btn-secondary" @onclick="RefreshTestVersionsAsync">Cập nhật lịch sử</button></p>
@@ -91,6 +92,8 @@
     [SupplyParameterFromQuery(Name = "testRunId")] public string? TestRunId { get; set; }
     private string? testHistoryWarning;
     private int accuracyRefresh;
+    private int? mismatchRunId;
+    private void SelectMismatchRun(int runId) => mismatchRunId = runId;
     private void UpdateTestToken(string token)
     {
         if ((TestRunId ?? "") == token) return;

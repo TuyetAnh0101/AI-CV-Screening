@@ -80,11 +80,11 @@ public class AccuracyComparisonTests
         return await renderer.Dispatcher.InvokeAsync(async()=>WebUtility.HtmlDecode((await renderer.RenderComponentAsync<AccuracyCompare>(ParameterView.FromDictionary(new Dictionary<string,object?>{{"Versions",Versions}}))).ToHtmlString()));
     }
     [Fact]
-    public async Task Component_shows_verified_best_real_counters_active_badge_and_no_B16()
+    public async Task Component_shows_verified_best_real_counters_active_badge_and_B16_action()
     {
         var s=new Server();var html=await Render(s);
         Assert.Contains("80%",html);Assert.Contains("7/10",html);Assert.Contains("8/10",html);Assert.Contains("Đang dùng",html);
-        Assert.Contains("CAO NHẤT",html);Assert.Contains("best-fill",html);Assert.DoesNotContain("Xem CV lệch",html);
+        Assert.Contains("CAO NHẤT",html);Assert.Contains("best-fill",html);Assert.Contains("Xem CV lệch",html);
         Assert.Contains(s.Paths,p=>p.Contains("evaluationSetId=1"));
         Assert.Contains("10/11/2026 09:00",html);
     }
@@ -102,6 +102,22 @@ public class AccuracyComparisonTests
         protected override void HandleException(Exception e)=>System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(e);
         private int root = -1;
         public Task ShowAsync(int refresh)=>Dispatcher.InvokeAsync(async()=>{if(root<0) root=AssignRootComponentId(InstantiateComponent(typeof(AccuracyCompare)));await RenderRootComponentAsync(root,ParameterView.FromDictionary(new Dictionary<string,object?>{{"Versions",Versions},{"RefreshVersion",refresh}}));});
+        public Task PickAsync(int runId, Action<int> selected) => Dispatcher.InvokeAsync(async () =>
+        {
+            if (root < 0) root = AssignRootComponentId(InstantiateComponent(typeof(AccuracyCompare)));
+            await RenderRootComponentAsync(root, ParameterView.FromDictionary(new Dictionary<string, object?>
+            { ["Versions"] = Versions, ["OnPick"] = EventCallback.Factory.Create<int>(this, selected) }));
+            var frames = GetCurrentRenderTreeFrames(root);
+            for (var i = 0; i < frames.Count; i++)
+            {
+                if (frames.Array[i].FrameType != RenderTreeFrameType.Element || frames.Array[i].ElementName != "button") continue;
+                var attrs = frames.Array.Skip(i + 1).TakeWhile(f => f.FrameType == RenderTreeFrameType.Attribute).ToList();
+                if (!attrs.Any(f => f.AttributeName == "aria-label" && f.AttributeValue?.ToString()?.StartsWith($"Xem CV lệch lượt #{runId} ·") == true)) continue;
+                await DispatchEventAsync(attrs.Single(f => f.AttributeName == "onclick").AttributeEventHandlerId, null, new MouseEventArgs());
+                return;
+            }
+            throw new InvalidOperationException("Missing B16 action");
+        });
     }
     [Fact]
     public async Task Completion_signal_refreshes_without_polling_or_post()
@@ -110,6 +126,14 @@ public class AccuracyComparisonTests
         await r.ShowAsync(0);Assert.Equal(1,s.Gets);
         s.Runs.Add(Run(3,3,9,0,1,accuracy:90));await r.ShowAsync(1);Assert.Equal(2,s.Gets);
         await r.ShowAsync(1);Assert.Equal(2,s.Gets);
+    }
+    [Fact]
+    public async Task Mismatch_action_emits_run_id_instead_of_prompt_version_id()
+    {
+        var server = new Server { Runs = [Run(41, 1)] };
+        using var services = Services(server); await using var renderer = new TestRenderer(services);
+        var selected = 0; await renderer.PickAsync(41, id => selected = id);
+        Assert.Equal(41, selected);
     }
 }
 #pragma warning restore BL0006
