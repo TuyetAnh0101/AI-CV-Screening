@@ -14,8 +14,9 @@
     gap: 20px;
     padding: 24px 28px;
     border: 1px solid var(--border);
-    border-radius: 16px;
-    background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 55%, #f0f9ff 100%);
+    border-radius: var(--sc-radius-card);
+    background: var(--sc-surface-0);
+    box-shadow: var(--sc-shadow-card);
 }
 
 .hero-top {
@@ -124,8 +125,9 @@
     gap: 4px;
     padding: 18px 20px;
     border: 1px solid var(--border);
-    border-radius: 14px;
-    background: #fff;
+    border-radius: var(--sc-radius-card);
+    background: var(--sc-surface-0);
+    box-shadow: var(--sc-shadow-card);
     min-width: 0;
 }
 .kpi-label { color: var(--text-muted); font-size: 13px; font-weight: 600; }
@@ -161,8 +163,8 @@
     gap: 8px;
     padding: 48px 24px;
     border: 1px dashed var(--border);
-    border-radius: 16px;
-    background: #fff;
+    border-radius: var(--sc-radius-card);
+    background: var(--sc-surface-0);
     text-align: center;
 }
 .state-card h2 { margin: 4px 0 0; font-size: 20px; font-weight: 700; color: var(--text-main); }
@@ -209,7 +211,7 @@
 
 @media (max-width: 767.98px) {
     .results-page { gap: 16px; }
-    .hero { padding: 18px 16px; border-radius: 14px; }
+    .hero { padding: 18px 16px; }
     .hero h1 { font-size: 24px; }
     .hero-actions, .hero-actions .btn { width: 100%; }
     .kpis, .skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

@@ -1,10 +1,10 @@
 /* B7: bảng xếp hạng. B8: thanh điểm, nhãn mức, cột kỹ năng bắt buộc — màu lấy từ biến --fit-* / --sc-* trong app.css. */
 
 .ranking {
-    background: #fff;
+    background: var(--sc-surface-0);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(22, 51, 51, .04);
+    border-radius: var(--sc-radius-card);
+    box-shadow: var(--sc-shadow-card);
     overflow: hidden;
 }
 
@@ -161,7 +161,7 @@
 .search-clear:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 /* ---------- Bảng ---------- */
-.table-wrap { position: relative; }
+.table-wrap { position: relative; overflow-x: auto; overflow-y: hidden; }
 
 .rank-table {
     width: 100%;

@@ -2,8 +2,9 @@
 .page-banner {
     padding: 22px 31px 24px;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    background: linear-gradient(180deg, #e6fffb, #e0f2fe);
+    border-radius: var(--sc-radius-card);
+    background: var(--sc-surface-0);
+    box-shadow: var(--sc-shadow-card);
 }
 
 .page-banner h1 {
@@ -82,8 +83,9 @@
     gap: 28px;
     margin-top: 22px;
     padding: 25px 28px;
-    background: #fff;
-    border-radius: 12px;
+    background: var(--sc-surface-0);
+    border-radius: var(--sc-radius-card);
+    box-shadow: var(--sc-shadow-card);
 }
 
 .field-label {
@@ -91,7 +93,7 @@
     margin-bottom: 6px;
     font-size: 15px;
     font-weight: 600;
-    color: #000;
+    color: var(--text-main);
 }
 
 .field-error { margin-top: 6px; font-size: 13px; color: #b91c1c; }
@@ -103,7 +105,7 @@
     padding: 0 40px 0 11px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #fff url("../images/icons/arrow-down.svg") no-repeat right 12px center / 16px 16px;
+    background: var(--sc-surface-0) url("images/icons/arrow-down.svg") no-repeat right 12px center / 16px 16px;
     font-size: 13px;
     color: var(--text-main);
     appearance: none;
@@ -191,7 +193,7 @@
     .tab { min-width: 0; flex: 1; }
     .page-card { padding: 16px; gap: 20px; }
     .page-actions { gap: 12px; }
-    .page-actions .btn { flex: 1; }
+    .page-actions .btn { flex: 1; min-width: 0; height: auto; min-height: 40px; padding-inline: 8px; }
 }
 
 /* B6: nút "Phân tích hồ sơ" kèm số CV đã chọn */

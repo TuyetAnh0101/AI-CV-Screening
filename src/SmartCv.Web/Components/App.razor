@@ -6,20 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="preload" href="fonts/inter/Inter-Variable.ttf" as="font" type="font/ttf" crossorigin />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["SmartCv.Web.styles.css"]" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/png" href="images/brand/scapp-logo.png" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
 <body>
     <Routes @rendermode="InteractiveServer" />
     <ReconnectModal />
+    <script src="@Assets["js/row-menus.js"]" defer></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
