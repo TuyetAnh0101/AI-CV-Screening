@@ -16,9 +16,14 @@ public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> lo
     public Task<ApiResult<PromptCompareDto>> CompareAccuracyRunsAsync(int baseId, int candidateId, CancellationToken ct = default) =>
         GetAsync<PromptCompareDto>($"api/prompt-tests/compare?baseRunId={baseId}&candidateRunId={candidateId}", ct);
     public Task<ApiResult<List<EvaluationSetDto>>> GetEvaluationSetsAsync(CancellationToken ct = default) => GetAsync<List<EvaluationSetDto>>("api/evaluation-sets", ct);
-    public Task<ApiResult<List<PromptTestSummaryDto>>> GetTestsAsync(CancellationToken ct = default) => GetAsync<List<PromptTestSummaryDto>>("api/prompt-tests", ct);
-    public Task<ApiResult<PromptTestSummaryDto>> StartTestAsync(StartPromptTestRequest request, CancellationToken ct = default) => PostJsonAsync<PromptTestSummaryDto>("api/prompt-tests", request, ct);
-    public Task<ApiResult<PromptTestDetailDto>> GetTestAsync(int id, CancellationToken ct = default) => GetAsync<PromptTestDetailDto>($"api/prompt-tests/{id}", ct);
+    public Task<ApiResult<List<PromptTestRunDto>>> GetTestsAsync(CancellationToken ct = default) => GetAsync<List<PromptTestRunDto>>("api/prompt-tests", ct);
+    public Task<ApiResult<PromptTestRunDto>> StartTestAsync(StartPromptTestRequest request, CancellationToken ct = default) => PostJsonAsync<PromptTestRunDto>("api/prompt-tests", request, ct);
+    public Task<ApiResult<PromptTestProgressDto>> GetTestAsync(int id, CancellationToken ct = default) => GetAsync<PromptTestProgressDto>($"api/prompt-tests/{id}", ct);
+    public Task<ApiResult<EvaluationSetDto>> CreateEvaluationSetAsync(CreateEvaluationSetRequest request, CancellationToken ct = default) => PostJsonAsync<EvaluationSetDto>("api/evaluation-sets", request, ct);
+    public Task<ApiResult<EvaluationSetDetailDto>> GetEvaluationSetAsync(int id, CancellationToken ct = default) => GetAsync<EvaluationSetDetailDto>($"api/evaluation-sets/{id}", ct);
+    public Task<ApiResult<List<LabelCandidateDto>>> GetLabelCandidatesAsync(int id, CancellationToken ct = default) => GetAsync<List<LabelCandidateDto>>($"api/evaluation-sets/{id}/applications", ct);
+    public Task<ApiResult<SaveHrLabelsResult>> SaveLabelsAsync(int id, SaveHrLabelsRequest request, CancellationToken ct = default) => PutJsonAsync<SaveHrLabelsResult>($"api/evaluation-sets/{id}/labels", request, ct);
+    public string EvaluationCvUrl(Guid cvId) => new Uri(Http.BaseAddress!, $"api/cvs/{cvId}/file").AbsoluteUri;
     public Task<ApiResult<List<PromptVersionDto>>> GetVersionsAsync(CancellationToken ct = default) =>
         GetAsync<List<PromptVersionDto>>("api/prompts", ct);
 

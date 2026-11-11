@@ -17,6 +17,7 @@ public sealed class MismatchView
     public int InconsistentFlags { get; private init; }
     public int KeywordOnly { get; private init; }
     public bool Complete { get; private init; }
+    public bool SummaryMismatch { get; private init; }
     public bool AllMatch => Complete && FalsePositive + FalseNegative == 0;
     public IReadOnlyList<PromptTestEvaluationDto> Mismatches { get; private init; } = [];
     public IEnumerable<PromptTestEvaluationDto> Filter(MismatchFilter filter) => Mismatches.Where(i =>
@@ -30,6 +31,14 @@ public sealed class MismatchView
         var unique = groups.Where(g => g.Key > 0 && g.Count() == 1).Select(g => g.Single()).ToList();
         var valid = unique.Where(HasPrediction).ToList();
         var inconsistent = unique.Count(i => !FlagsAgree(i));
+        var correct = valid.Count(i => i.HrIsPass == i.PredictedPass);
+        var missed = valid.Count(i => i.HrIsPass == true && i.PredictedPass == false);
+        var wrong = valid.Count(i => i.HrIsPass == false && i.PredictedPass == true);
+        var labeled = unique.Count(i => i.HrIsPass.HasValue);
+        var summaryMismatch = run.TotalLabeledCount is { } total && (total != labeled
+            || run.CorrectCount != correct || run.MissedCount != missed || run.WrongPickCount != wrong
+            || run.UnscoredCount != labeled - valid.Count
+            || run.AccuracyPercent != (labeled == 0 ? (decimal?)null : decimal.Round(correct * 100m / labeled, 2, MidpointRounding.AwayFromZero)));
         return new()
         {
             TruePositive = valid.Count(i => i.HrIsPass == true && i.PredictedPass == true),
@@ -39,9 +48,10 @@ public sealed class MismatchView
             Excluded = run.Items.Count - valid.Count,
             DuplicateApplications = groups.Count(g => g.Count() > 1),
             InconsistentFlags = inconsistent,
+            SummaryMismatch = summaryMismatch,
             KeywordOnly = valid.Count(i => i.ScoreSource == "KeywordOnly"),
             Complete = run.Status == "Completed" && run.TotalItems > 0 && valid.Count == run.TotalItems
-                && run.Items.Count == run.TotalItems && inconsistent == 0,
+                && run.Items.Count == run.TotalItems && inconsistent == 0 && !summaryMismatch,
             Mismatches = valid.Where(i => i.IsMatch == false && FlagsAgree(i))
                 .OrderBy(i => i.ApplicationId).ToList()
         };

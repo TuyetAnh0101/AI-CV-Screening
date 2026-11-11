@@ -20,6 +20,9 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<T>> PostJsonAsync<T>(string url, object body, CancellationToken ct = default) =>
         SendAsync<T>(() => Http.PostAsJsonAsync(url, body, ct), url, ct);
 
+    protected Task<ApiResult<T>> PutJsonAsync<T>(string url, object body, CancellationToken ct = default) =>
+        SendAsync<T>(() => Http.PutAsJsonAsync(url, body, ct), url, ct);
+
     private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct)
     {
         try

@@ -5,7 +5,7 @@
 @inject NavigationManager Nav
 
 <PageTitle>Prompt &amp; độ chính xác · SCApp</PageTitle>
-<NavigationLock ConfirmExternalNavigation="draft.IsDirty" OnBeforeInternalNavigation="BeforeInternalNavigation" />
+<NavigationLock ConfirmExternalNavigation="@(draft.IsDirty || labelsDirty)" OnBeforeInternalNavigation="BeforeInternalNavigation" />
 
 <div class="prompts-page">
     <header class="prompts-heading">
@@ -59,7 +59,7 @@
         @if (pendingId is not null || pendingLocation is not null)
         {
             <section class="discard-notice" role="alert" aria-label="Xác nhận bỏ bản nháp" tabindex="-1" @ref="discardNotice">
-                <div><strong>Bạn có bản nháp chưa lưu</strong><p>Chuyển sang nội dung khác sẽ bỏ các thay đổi, tên phiên bản và ghi chú đang soạn.</p></div>
+                <div><strong>Bạn có bản nháp chưa lưu</strong><p>Chuyển sang nội dung khác sẽ bỏ các thay đổi prompt hoặc nhãn/ghi chú HR đang soạn.</p></div>
                 <div class="discard-actions">
                     <button type="button" class="btn sc-btn-secondary" @onclick="KeepDraft">Giữ bản nháp</button>
                     <button type="button" class="btn sc-btn-primary" @onclick="DiscardAndContinue">Bỏ bản nháp và chuyển</button>
@@ -80,9 +80,10 @@
     }
 </div>
 
-<PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" />
-<AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" SelectedRunId="mismatchRunId" OnPick="SelectMismatchRun" />
-<MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" />
+<EvaluationSetManager OnSaved="EvaluationSetSaved" OnDirtyChanged="value => labelsDirty = value" />
+<PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" EvaluationSetId="evaluationSetId" SetsRefresh="setsRefresh" OnSetChanged="SelectEvaluationSet" />
+<AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" SelectedRunId="mismatchRunId" OnPick="SelectMismatchRun" EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" />
+<MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" EvaluationSetId="evaluationSetId" />
 @if (testHistoryWarning is not null)
 {
     <p role="status">@testHistoryWarning <button type="button" class="btn sc-btn-secondary" @onclick="RefreshTestVersionsAsync">Cập nhật lịch sử</button></p>
@@ -93,6 +94,11 @@
     private string? testHistoryWarning;
     private int accuracyRefresh;
     private int? mismatchRunId;
+    private int? evaluationSetId;
+    private int setsRefresh;
+    private bool labelsDirty;
+    private void SelectEvaluationSet(int id) { evaluationSetId = id > 0 ? id : null; mismatchRunId = null; }
+    private void EvaluationSetSaved(int id) { SelectEvaluationSet(id); ++setsRefresh; ++accuracyRefresh; }
     private void SelectMismatchRun(int runId) => mismatchRunId = runId;
     private void UpdateTestToken(string token)
     {
@@ -277,7 +283,7 @@
     {
         if (new Uri(context.TargetLocation).AbsolutePath == new Uri(Nav.Uri).AbsolutePath) return Task.CompletedTask;
         if (Busy) { context.PreventNavigation(); return Task.CompletedTask; }
-        if (draft.IsDirty)
+        if (draft.IsDirty || labelsDirty)
         {
             context.PreventNavigation(); pendingId = null; pendingLocation = context.TargetLocation; focusNotice = true; StateHasChanged();
         }
