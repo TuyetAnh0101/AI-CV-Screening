@@ -462,6 +462,7 @@ public class ResultsUiTests
         await WaitUntil(() => r.Text.Contains("Nguyễn Văn An"), "bảng lượt #3");
         var text = r.Text;
         Assert.Contains("Lượt chấm #3", text);
+        Assert.Contains("1/4 CV dự đoán Đạt", text); // B11 follows run selection.
         Assert.Contains("Backend Developer (.NET) (4 CV)", text);
         Assert.Contains("Business Analyst (2 CV)", text);
         Assert.DoesNotContain("Võ Thành Nam", text);
@@ -473,6 +474,7 @@ public class ResultsUiTests
         Assert.Contains("/api/runs/3/ranking?jobId=2", api.Calls);
         Assert.DoesNotContain("Nguyễn Văn An", r.Text);
         Assert.Contains("Hiển thị 2/2 CV", r.TableText);
+        Assert.Contains("1/2 CV dự đoán Đạt", r.Text); // B11 follows job selection, including KeywordOnly.
     }
 
     [Fact]
@@ -680,12 +682,21 @@ public class ResultsUiTests
         var (r, sp) = await OpenAsync(api, nav);
         await using var _ = r; using var __ = sp;
         Assert.Contains("Đang chấm 1/3 CV", r.Text);
+        Assert.Contains("1/2 CV dự đoán Đạt", r.Text);
         var initial = api.Calls.Count;
         await Task.Delay(500);
         Assert.Equal(initial, api.Calls.Count); // No render loop or early duplicate timer.
+        api.Rankings[(4, 3)] = new RankingResponse
+        {
+            RunId = 4, JobId = 3, RunStatus = terminal, PassThreshold = 82, PassCount = 0,
+            Items = RunningRanking().Items
+        }; // A new ranking snapshot delivered by B10 polling.
         api.Runs[0] = Summary(4, terminal, 3, 3, [], 6);
         await WaitUntil(() => !r.Text.Contains("trang tự cập nhật mỗi 3 giây"), "terminal state from polling");
         Assert.Equal("https://app.test/results?runId=4&jobId=3", nav.Uri);
+        Assert.Contains("0/2 CV dự đoán Đạt", r.Text);
+        Assert.Contains("Ngưỡng Đạt 82", r.Text);
+        Assert.Contains("Phân bố mức độ phù hợp", r.Text);
         var after = api.Calls.Count;
         await Task.Delay(3200);
         Assert.Equal(after, api.Calls.Count);
