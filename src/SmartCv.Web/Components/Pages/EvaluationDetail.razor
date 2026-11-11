@@ -40,6 +40,7 @@
                     <small>File đã sẵn sàng · mở ở tab mới</small>
                 }
                 @if (cvError is not null) { <p class="error-text" role="alert">@cvError</p> }
+                <button type="button" class="btn sc-btn-secondary" @onclick="LoadAsync">Làm mới kết quả</button>
             </div>
         </header>
         @if (!ready || keywordOnly)
@@ -47,6 +48,10 @@
             <aside class="notice" role="status">
                 <strong>@(detail.Status == EvaluationStatuses.Failed ? "Không chấm được CV này" : !ready ? "Chưa có kết quả hoàn tất" : "AI chưa chấm thành công · Chỉ Keyword")</strong>
                 <p>@(!ready ? "Điểm và kỹ năng chưa thể dùng để kết luận về ứng viên." : "Điểm cuối dựa trên Keyword và quy tắc nghiệp vụ; không có điểm AI thay thế bằng 0.")</p>
+                @if (!ready && detail.Status != EvaluationStatuses.Failed)
+                {
+                    <p>Bấm Làm mới kết quả để kiểm tra khi lượt chấm hoàn tất.</p>
+                }
                 @if (!string.IsNullOrWhiteSpace(detail.ErrorMessage)) { <p>@Display.SafeError(detail.ErrorMessage)</p> }
             </aside>
         }

@@ -116,6 +116,86 @@ public class GeminiEvaluationServiceTests
     }
 
     [Fact]
+    public async Task Thought_text_is_excluded_from_the_structured_answer()
+    {
+        var body = new JsonObject
+        {
+            ["candidates"] = new JsonArray(new JsonObject
+            {
+                ["finishReason"] = "STOP",
+                ["content"] = new JsonObject
+                {
+                    ["parts"] = new JsonArray(
+                        new JsonObject { ["thought"] = true, ["text"] = "Thought summary, not answer JSON." },
+                        new JsonObject { ["text"] = ValidJson })
+                }
+            })
+        }.ToJsonString();
+        var env = Always(HttpStatusCode.OK, body);
+
+        var result = await env.Service.EvaluateAsync(Request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(82m, result.Score);
+        Assert.Equal(ValidJson, result.RawResponse);
+        Assert.Equal(1, result.Attempts);
+        Assert.Single(env.Handler.Calls);
+    }
+
+    [Fact]
+    public async Task Answer_json_split_across_text_parts_is_joined()
+    {
+        var split = ValidJson.Length / 2;
+        var body = new JsonObject
+        {
+            ["candidates"] = new JsonArray(new JsonObject
+            {
+                ["finishReason"] = "STOP",
+                ["content"] = new JsonObject
+                {
+                    ["parts"] = new JsonArray(
+                        new JsonObject { ["text"] = ValidJson[..split] },
+                        new JsonObject { ["thought"] = false, ["text"] = ValidJson[split..] })
+                }
+            })
+        }.ToJsonString();
+        var env = Always(HttpStatusCode.OK, body);
+
+        var result = await env.Service.EvaluateAsync(Request);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(82m, result.Score);
+        Assert.Equal(ValidJson, result.RawResponse);
+        Assert.Single(env.Handler.Calls);
+    }
+
+    [Fact]
+    public async Task Thought_only_response_does_not_become_an_ai_score()
+    {
+        // A thought may resemble valid output; only final answer parts can supply a score.
+        var body = new JsonObject
+        {
+            ["candidates"] = new JsonArray(new JsonObject
+            {
+                ["finishReason"] = "STOP",
+                ["content"] = new JsonObject
+                {
+                    ["parts"] = new JsonArray(new JsonObject { ["thought"] = true, ["text"] = ValidJson })
+                }
+            })
+        }.ToJsonString();
+        var env = Always(HttpStatusCode.OK, body);
+
+        var result = await env.Service.EvaluateAsync(Request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Score);
+        Assert.Equal(AiErrorKind.InvalidResponse, result.ErrorKind);
+        Assert.Equal(3, result.Attempts);
+        Assert.Equal(3, env.Handler.Calls.Count);
+    }
+
+    [Fact]
     public async Task Request_uses_header_key_url_model_and_response_schema()
     {
         var env = Always(HttpStatusCode.OK, Envelope(ValidJson));
@@ -135,6 +215,13 @@ public class GeminiEvaluationServiceTests
         Assert.Equal("application/json", config["responseMimeType"]!.GetValue<string>());
         var enumCodes = config["responseSchema"]!["properties"]!["matchedSkills"]!["items"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>());
         Assert.Equal(["csharp", "docker"], enumCodes);
+        var properties = config["responseSchema"]!["properties"]!;
+        Assert.Equal(0m, properties["score"]!["minimum"]!.GetValue<decimal>());
+        Assert.Equal(100m, properties["score"]!["maximum"]!.GetValue<decimal>());
+        Assert.Equal(0m, properties["yearsExperience"]!["minimum"]!.GetValue<decimal>());
+        Assert.Equal(60m, properties["yearsExperience"]!["maximum"]!.GetValue<decimal>());
+        Assert.Equal(0m, properties["gpa"]!["minimum"]!.GetValue<decimal>());
+        Assert.Equal(4m, properties["gpa"]!["maximum"]!.GetValue<decimal>());
     }
 
     [Fact]

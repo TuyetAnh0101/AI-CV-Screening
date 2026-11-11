@@ -159,11 +159,11 @@ public sealed class GeminiEvaluationService(
                     type = "OBJECT",
                     properties = new Dictionary<string, object>
                     {
-                        ["score"] = new { type = "INTEGER", description = "Mức phù hợp 0-100" },
+                        ["score"] = new { type = "INTEGER", minimum = 0, maximum = 100, description = "Mức phù hợp 0-100" },
                         ["matchedSkills"] = SkillArray("Mã các kỹ năng CV có"),
                         ["missingSkills"] = SkillArray("Mã các kỹ năng CV không có"),
-                        ["yearsExperience"] = new { type = "NUMBER", nullable = true, description = "Số năm kinh nghiệm; null nếu CV không ghi" },
-                        ["gpa"] = new { type = "NUMBER", nullable = true, description = "GPA thang 4; null nếu CV không ghi" },
+                        ["yearsExperience"] = new { type = "NUMBER", nullable = true, minimum = 0, maximum = MaxYears, description = "Số năm kinh nghiệm; null nếu CV không ghi" },
+                        ["gpa"] = new { type = "NUMBER", nullable = true, minimum = 0, maximum = MaxGpa, description = "GPA thang 4; null nếu CV không ghi" },
                         ["reasoning"] = new { type = "STRING", description = "Tiếng Việt, tối đa 3 câu" }
                     },
                     required = new[] { "score", "matchedSkills", "missingSkills", "reasoning" },
@@ -189,7 +189,9 @@ public sealed class GeminiEvaluationService(
             if (finish is "SAFETY" or "RECITATION" or "PROHIBITED_CONTENT" or "BLOCKLIST" or "SPII")
                 return AiEvaluationResult.Failure(AiErrorKind.Blocked, $"Gemini dừng trả lời ({finish})", attempt);
 
+            // Thought summaries are not the structured answer, even if they happen to contain JSON.
             var json = string.Concat(candidate?["content"]?["parts"]?.AsArray()
+                .Where(p => p?["thought"]?.GetValue<bool>() != true)
                 .Select(p => p?["text"]?.GetValue<string>() ?? string.Empty) ?? []);
             if (string.IsNullOrWhiteSpace(json))
                 return Invalid($"Gemini trả về rỗng (finishReason = {finish})", attempt, responseText);
