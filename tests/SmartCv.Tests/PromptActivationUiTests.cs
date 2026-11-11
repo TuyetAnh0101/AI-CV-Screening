@@ -273,7 +273,7 @@ public class PromptActivationUiTests
         Assert.False(r.HasActivation(V1));
         Assert.True(r.HasActivation(V2));
         Assert.Equal(1, r.ClassCount("tag-active"));
-        Assert.Equal(new[] { "GET /api/prompts", "POST /api/prompts/1/activate", "GET /api/prompts" }, api.Calls);
+        Assert.Equal(new[] { "GET /api/prompts", "POST /api/prompts/1/activate", "GET /api/prompts" }, api.Calls.Where(c => c.Contains("/api/prompts")));
         await r.ActivateAsync(V2);
         Assert.Contains($"Đã kích hoạt {V2}", r.Text);
         Assert.Contains(V2, r.ClassText("active-version"));

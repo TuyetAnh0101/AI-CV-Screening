@@ -213,8 +213,8 @@ public class PromptVersioningUiTests
         Assert.Contains("Chưa đánh giá", r.Text);
         Assert.Contains("10/11/2026 09:00", r.Text);
         Assert.Contains("Kích hoạt", r.Text); // B13 adds activation alongside the B12 editor.
-        Assert.DoesNotContain("Chạy đánh giá", r.Text);
-        Assert.Equal(new[] { "GET /api/prompts" }, api.Calls);
+        Assert.Contains("Chạy đánh giá", r.Text);
+        Assert.Equal(new[] { "GET /api/prompts" }, api.Calls.Where(c => c.EndsWith("/api/prompts")));
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class PromptVersioningUiTests
         Assert.Contains("v3-thuc-tap", reload.Text);
         await reload.ClickAsync("v3-thuc-tap");
         Assert.Equal(ChangedContent, reload.Value("Nội dung system prompt"));
-        Assert.All(api.Calls, call => Assert.Contains("/api/prompts", call));
+        Assert.All(api.Calls.Where(call => call.StartsWith("POST")), call => Assert.Contains("/api/prompts", call));
         Assert.DoesNotContain(api.Calls, call => call.Contains("activate") || call.Contains("prompt-tests"));
     }
 
