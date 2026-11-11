@@ -60,6 +60,12 @@ public static class PromptTestEndpoints
             if (labels.All(h => h.IsPass) || labels.All(h => !h.IsPass))
                 return Problem(400, "Nhãn chưa đủ hai loại", "Bộ đánh giá phải có cả hồ sơ Đạt và Không đạt.");
 
+            var labeledIds = labels.Select(h => h.ApplicationId).ToList();
+            if (await db.Applications.AnyAsync(a => labeledIds.Contains(a.ApplicationId)
+                && (a.Cv.ExtractionStatus != ExtractionStatuses.Completed || a.Cv.ExtractedText == null
+                    || a.Cv.ExtractedText.Trim() == ""), ct))
+                return Problem(400, "CV chưa sẵn sàng", "Có CV chưa trích xuất xong, lỗi hoặc không có nội dung chữ. Hãy kiểm tra hồ sơ trước khi chạy đánh giá.");
+
             var activeRunId = await db.EvaluationRuns.AsNoTracking()
                 .Where(r => r.RunType == RunTypes.PromptTest && r.PromptVersionId == request.PromptVersionId
                     && r.EvaluationSetId == request.EvaluationSetId

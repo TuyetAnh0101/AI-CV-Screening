@@ -67,7 +67,9 @@ public static class EvaluationSetEndpoints
                 Name = s.Name,
                 Description = s.Description,
                 LabelCount = s.HrLabels.Count(),
-                PassCount = s.HrLabels.Count(h => h.IsPass)
+                PassCount = s.HrLabels.Count(h => h.IsPass),
+                UnreadyCount = s.HrLabels.Count(h => h.Application.Cv.ExtractionStatus != ExtractionStatuses.Completed
+                    || h.Application.Cv.ExtractedText == null || h.Application.Cv.ExtractedText.Trim() == "")
             })
             .ToListAsync(ct);
         return TypedResults.Ok(list);
@@ -164,6 +166,8 @@ public static class EvaluationSetEndpoints
             .OrderBy(a => a.Job.Title).ThenBy(a => a.ApplicationId)
             .Select(a => new LabelCandidateDto
             {
+                CvId = a.CvId,
+                HasExtractedText = a.Cv.ExtractedText != null && a.Cv.ExtractedText.Trim() != "",
                 ApplicationId = a.ApplicationId,
                 CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
                 FileName = a.Cv.OriginalFileName,

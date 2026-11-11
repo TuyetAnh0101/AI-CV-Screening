@@ -55,6 +55,7 @@
                 <p>@view.Excluded dòng không đủ điều kiện (thiếu nhãn, chưa chấm, lỗi hoặc trùng hồ sơ). API trả @detail.Items.Count/@detail.TotalItems dòng. Ma trận chỉ tính các hồ sơ hợp lệ, duy nhất.</p>
                 @if (view.DuplicateApplications > 0) { <p>@view.DuplicateApplications hồ sơ bị trùng: đã loại tất cả bản trùng, không tự chọn một bản.</p> }
                 @if (view.InconsistentFlags > 0) { <p>@view.InconsistentFlags dòng có IsMatch/MismatchType không khớp nhãn HR và dự đoán. Ma trận dựa trên nhãn; danh sách lệch loại các dòng mâu thuẫn. Cần kiểm tra dữ liệu API.</p> }
+                @if (view.SummaryMismatch) { <p>Thống kê tổng hợp/tỷ lệ API chưa khớp dữ liệu từng hồ sơ. Hãy làm mới bảng so sánh và lượt này; chưa dùng các số liệu để kết luận toàn bộ lượt.</p> }
             </div>
         }
         @if (view.KeywordOnly > 0) { <p class="mismatch-notice" role="note">Có @view.KeywordOnly hồ sơ chỉ keyword trong ma trận. Đây là đối chiếu dự đoán cuối, không phải toàn bộ kết quả từ AI.</p> }
@@ -109,21 +110,22 @@
     [Parameter] public IReadOnlyList<PromptVersionDto> Versions { get; set; } = [];
     [Parameter] public int? RunId { get; set; }
     [Parameter] public int RefreshVersion { get; set; }
+    [Parameter] public int? EvaluationSetId { get; set; }
     private PromptTestProgressDto? detail;
     private MismatchView? view;
     private MismatchFilter filter;
     private static readonly (MismatchFilter Key, string Label)[] filters = [(MismatchFilter.All, "Tất cả CV lệch"), (MismatchFilter.Missed, "Bỏ sót"), (MismatchFilter.WrongPick, "Chọn nhầm")];
     private HashSet<int> verifiedDetails = [];
     private int unavailableDetails, generation, lastRefresh = -1;
-    private int? lastRunId, lastActive;
+    private int? lastRunId, lastActive, lastSet;
     private bool initialized, loading, disposed;
     private string? error;
     private CancellationTokenSource? request;
     private int? ActiveId => Versions.FirstOrDefault(v => v.IsActive)?.PromptVersionId;
     protected override async Task OnParametersSetAsync()
     {
-        if (initialized && lastRefresh == RefreshVersion && lastRunId == RunId && (RunId is not null || lastActive == ActiveId)) return;
-        initialized = true; lastRefresh = RefreshVersion; lastRunId = RunId; lastActive = ActiveId;
+        if (initialized && lastRefresh == RefreshVersion && lastRunId == RunId && lastSet == EvaluationSetId && (RunId is not null || lastActive == ActiveId)) return;
+        initialized = true; lastRefresh = RefreshVersion; lastRunId = RunId; lastActive = ActiveId; lastSet = EvaluationSetId;
         await LoadAsync();
     }
     private async Task LoadAsync()
@@ -139,7 +141,7 @@
                 var runs = await Api.GetMismatchRunsAsync(ct);
                 if (Stale(current)) return;
                 if (!runs.IsSuccess) { error = runs.ErrorMessage; return; }
-                id = MismatchView.DefaultRun(runs.Data!, ActiveId)?.RunId;
+                id = MismatchView.DefaultRun(runs.Data!.Where(r => EvaluationSetId is null || r.EvaluationSetId == EvaluationSetId), ActiveId)?.RunId;
             }
             if (id is null) return;
             if (id <= 0) { error = "Mã lượt đánh giá không hợp lệ."; return; }
@@ -148,6 +150,7 @@
             if (!result.IsSuccess) { error = result.ErrorMessage; return; }
             if (result.Data!.RunId != id) { error = "API trả về sai lượt đánh giá. Không hiển thị dữ liệu này."; return; }
             var data = result.Data!;
+            if (EvaluationSetId is not null && data.EvaluationSetId != EvaluationSetId) { error = "Lượt đã chọn không thuộc bộ CV hiện tại. Hãy chọn lại lượt ở bảng so sánh."; return; }
             var analysis = MismatchView.Create(data);
             // B9 supports PromptTest evaluations. Verify existence and ownership before exposing links.
             var links = new HashSet<int>();

@@ -141,12 +141,12 @@ public class MismatchAnalysisTests
     }
     private static ServiceProvider Services(Server server) => new ServiceCollection().AddLogging()
         .AddSingleton(new PromptApiClient(new HttpClient(server) { BaseAddress = new Uri("https://fixture.test/") }, NullLogger<PromptApiClient>.Instance)).BuildServiceProvider();
-    private static async Task<string> Render(Server server, int? id = null)
+    private static async Task<string> Render(Server server, int? id = null, int? setId = null)
     {
         using var services = Services(server);
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
         return await renderer.Dispatcher.InvokeAsync(async () => WebUtility.HtmlDecode((await renderer.RenderComponentAsync<MismatchTable>(
-            ParameterView.FromDictionary(new Dictionary<string, object?> { ["Versions"] = Versions, ["RunId"] = id }))).ToHtmlString()));
+            ParameterView.FromDictionary(new Dictionary<string, object?> { ["Versions"] = Versions, ["RunId"] = id, ["EvaluationSetId"] = setId }))).ToHtmlString()));
     }
     [Fact]
     public async Task Component_defaults_to_active_run_shows_notes_scores_and_verified_links()
@@ -184,6 +184,22 @@ public class MismatchAnalysisTests
         Assert.Contains("API tạm mất kết nối", await Render(new() { Fail = true }, 2));
         var html = await Render(new() { WrongRun = true }, 2);
         Assert.Contains("sai lượt đánh giá", html); Assert.DoesNotContain("Trần Thị Bình", html);
+    }
+    [Fact]
+    public async Task Selecting_a_different_set_cannot_display_a_previous_sets_run()
+    {
+        var server = new Server();
+        var explicitRun = await Render(server, 2, 999);
+        Assert.Contains("không thuộc bộ CV hiện tại", explicitRun); Assert.DoesNotContain("Trần Thị Bình", explicitRun);
+        var defaultRun = await Render(server, null, 999);
+        Assert.Contains("Chưa có lượt đánh giá hoàn thành", defaultRun); Assert.DoesNotContain("Trần Thị Bình", defaultRun);
+    }
+    [Fact]
+    public void Matrix_detects_inconsistent_summary_and_never_claims_all_match()
+    {
+        var view = MismatchView.Create(new() { RunId=1, Status="Completed", TotalItems=1, Items=[Item(1)],
+            TotalLabeledCount=1, CorrectCount=0, MissedCount=1, WrongPickCount=0, UnscoredCount=0, AccuracyPercent=0 });
+        Assert.True(view.SummaryMismatch); Assert.False(view.AllMatch); Assert.Equal(1,view.TruePositive);
     }
     [Fact]
     public async Task No_runs_and_complete_match_have_distinct_empty_states()

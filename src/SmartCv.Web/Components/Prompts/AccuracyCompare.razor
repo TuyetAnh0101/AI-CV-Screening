@@ -20,10 +20,11 @@
     </div>
     @if (error is not null) { <p class="compare-error" role="alert">@error</p> }
     else if (loading) { <p role="status">Đang tải kết quả đánh giá...</p> }
-    else if (rows.Count == 0) { <p class="empty" role="status">Chưa có lần đánh giá nào hoàn thành. Hãy chạy đánh giá một phiên bản Prompt để xem kết quả.</p> }
+    else if (rows.Count == 0) { <div class="empty" role="status"><strong>Chưa có dữ liệu để so sánh</strong><p>Chưa có lần đánh giá nào hoàn thành. Hãy chọn bộ CV và chạy đánh giá một phiên bản Prompt để xem kết quả. Để so sánh cải thiện, chạy cả hai phiên bản trên cùng bộ CV và cấu hình.</p><a href="@(sets.Count == 0 ? "#evaluation-set-manager" : "#prompt-test-panel")">@(sets.Count == 0 ? "Tạo bộ CV đánh giá" : "Đi tới Chạy đánh giá")</a></div> }
     else
     {
         <p class="compare-note" role="note">@verification</p>
+        @foreach (var explanation in explanations) { <p class="compare-note">@explanation</p> }
         <div class="table-scroll" tabindex="0" role="region" aria-label="Bảng tỷ lệ đúng, có thể cuộn ngang">
             <table>
                 <caption class="visually-hidden">Kết quả đối chiếu nhãn HR. Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
@@ -56,6 +57,9 @@
     [Parameter] public int RefreshVersion { get; set; }
     [Parameter] public EventCallback<int> OnPick { get; set; }
     [Parameter] public int? SelectedRunId { get; set; }
+    [Parameter] public int? EvaluationSetId { get; set; }
+    [Parameter] public EventCallback<int> OnSetChanged { get; set; }
+    private int? lastSet;
     private List<EvaluationSetDto> sets = [];
     private List<PromptTestRunDto> rows = [];
     private PromptTestRunDto? best;
@@ -63,16 +67,19 @@
     private bool loading, disposed;
     private string? error;
     private string verification = "";
+    private List<string> explanations = [];
     private CancellationTokenSource? request;
     private static string Pct(decimal? percent) => percent is null ? "—" : percent.Value.ToString("0.##", CultureInfo.GetCultureInfo("vi-VN")) + "%";
     protected override async Task OnParametersSetAsync()
     {
-        if (lastRefresh == RefreshVersion) return;
+        if (lastRefresh == RefreshVersion && lastSet == EvaluationSetId) return;
+        lastSet = EvaluationSetId;
+        if (EvaluationSetId is > 0) setId = EvaluationSetId.Value;
         lastRefresh = RefreshVersion;
         await ReloadAsync();
     }
     private async Task ChangeSetAsync(ChangeEventArgs e)
-    { setId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await LoadRowsAsync(); }
+    { setId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await OnSetChanged.InvokeAsync(setId); await LoadRowsAsync(); }
     private async Task ReloadAsync()
     {
         var (version, ct) = Begin();
@@ -83,13 +90,14 @@
             if (!result.IsSuccess) { error = result.ErrorMessage; return; }
             sets = result.Data!;
             if (!sets.Any(s => s.EvaluationSetId == setId)) setId = sets.FirstOrDefault()?.EvaluationSetId ?? 0;
+            if (setId > 0 && EvaluationSetId != setId) await OnSetChanged.InvokeAsync(setId);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
         finally { if (!Stale(version)) loading = false; }
         if (!Stale(version)) await LoadRowsAsync();
     }
     private (int, CancellationToken) Begin()
-    { request?.Cancel(); request?.Dispose(); request = new(); loading = true; error = null; rows = []; best = null; excluded = 0; return (++generation, request.Token); }
+    { request?.Cancel(); request?.Dispose(); request = new(); loading = true; error = null; rows = []; best = null; excluded = 0; explanations = []; return (++generation, request.Token); }
     private bool Stale(int version) => disposed || version != generation;
     private async Task LoadRowsAsync()
     {
@@ -111,7 +119,8 @@
                 if (Stale(version)) return;
                 if (!comparison.IsSuccess || !comparison.Data!.IsFairComparison || comparison.Data.Verdict == "NotComparable"
                     || !AccuracyComparisonView.Matches(anchor, comparison.Data.Base) || !AccuracyComparisonView.Matches(candidate, comparison.Data.Candidate))
-                { verification = "Chưa xác minh được cùng cấu hình, danh sách CV và nhãn HR cho toàn bộ bảng (hoặc dữ liệu vừa thay đổi). Không xếp hạng cao nhất. Hãy làm mới hoặc chọn bộ CV khác."; return; }
+                { explanations = comparison.Data?.Warnings.Take(3).ToList() ?? []; verification = "Chưa xác minh được cùng cấu hình, danh sách CV và nhãn HR cho toàn bộ bảng (hoặc dữ liệu vừa thay đổi). Không xếp hạng cao nhất. Hãy làm mới hoặc chọn bộ CV khác."; return; }
+                if (!string.IsNullOrWhiteSpace(comparison.Data.Summary)) explanations.Add(comparison.Data.Summary);
             }
             best = AccuracyComparisonView.Best(rows, true);
             verification = best is null ? "Có CV chưa chấm được hoặc chỉ keyword; chưa kết luận bản cao nhất về AI." : "A17 đã xác minh cùng bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Đồng tỷ lệ: ưu tiên ít Bỏ sót, sau đó ID phiên bản tăng dần. Cao nhất chỉ trong các lượt hiển thị, không tự kích hoạt.";

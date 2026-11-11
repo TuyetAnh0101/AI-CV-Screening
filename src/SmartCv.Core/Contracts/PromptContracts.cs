@@ -53,6 +53,7 @@ public sealed class EvaluationSetDto
     public string? Description { get; init; }
     public int LabelCount { get; init; }   // số CV đã gán nhãn
     public int PassCount { get; init; }    // số nhãn Đạt
+    public int UnreadyCount { get; init; } // labeled applications without usable extracted CV text
 }
 
 public sealed class StartPromptTestRequest
@@ -154,6 +155,8 @@ public sealed class EvaluationSetDetailDto
 /// <summary>Hồ sơ có thể đưa vào bộ đánh giá (để giao diện cho chọn).</summary>
 public sealed class LabelCandidateDto
 {
+    public Guid CvId { get; init; }
+    public bool HasExtractedText { get; init; }
     public int ApplicationId { get; init; }
     public string? CandidateName { get; init; }
     public string FileName { get; init; } = string.Empty;

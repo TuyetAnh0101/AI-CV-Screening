@@ -22,13 +22,34 @@ public class PromptTestFlowTests
         protected override RendererInfo RendererInfo { get; } = new("Server", true);
         protected override void HandleException(Exception exception) => System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(exception);
         protected override Task UpdateDisplayAsync(in RenderBatch batch) => Task.CompletedTask;
-        private int root;
+        private int root = -1;
         public Task OpenAsync() => Dispatcher.InvokeAsync(async () =>
         {
             root = AssignRootComponentId(InstantiateComponent(typeof(PromptTestPanel)));
             await RenderRootComponentAsync(root, ParameterView.FromDictionary(new Dictionary<string, object?> { ["RunToken"] = "7" }));
         });
         public string Text => Dispatcher.InvokeAsync(() => { var r = GetCurrentRenderTreeFrames(root); return string.Join(" ", r.Array.Take(r.Count).Select(f => f.FrameType == RenderTreeFrameType.Text ? f.TextContent : f.FrameType == RenderTreeFrameType.Markup ? f.MarkupContent : "")); }).Result;
+        public Task ShowToken(string token) => Dispatcher.InvokeAsync(async () =>
+        {
+            if (root < 0) root = AssignRootComponentId(InstantiateComponent(typeof(PromptTestPanel)));
+            await RenderRootComponentAsync(root, ParameterView.FromDictionary(new Dictionary<string, object?> { ["RunToken"] = token, ["Versions"] = new List<PromptVersionDto> { new(){PromptVersionId=1,VersionName="v1"},new(){PromptVersionId=2,VersionName="v2"} } }));
+        });
+        public Task Event(string name, string target, EventArgs args) => Dispatcher.InvokeAsync(() =>
+        {
+            var frames=GetCurrentRenderTreeFrames(root);
+            for(var i=0;i<frames.Count;i++)
+            {
+                if(frames.Array[i].FrameType!=RenderTreeFrameType.Element)continue;
+                var children=frames.Array.Skip(i+1).Take(frames.Array[i].ElementSubtreeLength-1).ToList();
+                var attrs=children.TakeWhile(f=>f.FrameType==RenderTreeFrameType.Attribute).ToList();
+                var text=string.Concat(children.Where(f=>f.FrameType is RenderTreeFrameType.Text or RenderTreeFrameType.Markup)
+                    .Select(f=>f.FrameType==RenderTreeFrameType.Text ? f.TextContent : f.MarkupContent));
+                if(!attrs.Any(f=>f.AttributeName=="aria-label"&&f.AttributeValue?.ToString()==target)&&text!=target)continue;
+                var handler=attrs.FirstOrDefault(f=>f.AttributeName==name);
+                if(handler.AttributeEventHandlerId!=0)return DispatchEventAsync(handler.AttributeEventHandlerId,null,args);
+            }
+            throw new InvalidOperationException("Missing event: "+target);
+        });
     }
     [Fact]
     public async Task Interactive_polling_updates_then_stops_at_terminal_and_dispose()
@@ -51,12 +72,15 @@ public class PromptTestFlowTests
     private sealed class Server : HttpMessageHandler
     {
         public int Posts, Reads;
+        public int RunId=7;
+        public bool AdvanceId;
         public string Status = "Queued";
         public bool Exists, FailRead, LosePost, Reject;
         public TaskCompletionSource? Gate;
         public List<EvaluationSetDto> Sets = [new() { EvaluationSetId = 2, Name = "Bộ HR", Description = "Có nhãn", LabelCount = 10, PassCount = 6 }];
         public StartPromptTestRequest? Request;
-        public PromptTestDetailDto Run => new() { RunId = 7, PromptVersionId = 1, EvaluationSetId = 2, PromptVersionName = "v1", Status = Status, TotalItems = 10, ProcessedItems = Status == "Queued" ? 0 : Status == "Running" ? 6 : 10, FailedItems = 1, AccuracyPercent = Status == "Completed" ? 75 : null };
+        // Serialize the actual A15/A16 contract, including null counters before Completed.
+        public PromptTestProgressDto Run => new() { RunId = RunId, PromptVersionId = Request?.PromptVersionId ?? 1, EvaluationSetId = 2, PromptVersionName = Request is null ? "v1" : $"v{Request.PromptVersionId}", Status = Status, TotalItems = 10, ProcessedItems = Status == "Queued" ? 0 : Status == "Running" ? 6 : 10, FailedItems = 1, AccuracyPercent = Status == "Completed" ? 75 : null };
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var path = request.RequestUri!.AbsolutePath;
@@ -66,6 +90,7 @@ public class PromptTestFlowTests
                 if (Gate is not null) await Gate.Task.WaitAsync(ct);
                 if (Reject) return Json(new { detail = "Bộ CV không hợp lệ" }, HttpStatusCode.BadRequest);
                 Exists = true;
+                if(AdvanceId) { RunId++; Status="Queued"; }
                 if (LosePost) throw new HttpRequestException("lost response");
                 return Json(Run, HttpStatusCode.Created);
             }
@@ -77,6 +102,16 @@ public class PromptTestFlowTests
         private static HttpResponseMessage Json<T>(T data, HttpStatusCode code = HttpStatusCode.OK) => new(code) { Content = JsonContent.Create(data) };
     }
     private static PromptApiClient Client(Server server) => new(new HttpClient(server) { BaseAddress = new Uri("http://api.test/") }, NullLogger<PromptApiClient>.Instance);
+    [Theory]
+    [InlineData("Queued")] [InlineData("Running")] [InlineData("Failed")]
+    public async Task Actual_api_null_counters_deserialize_and_preserve_unknown_statistics(string status)
+    {
+        var result = await Client(new Server { Status = status }).GetTestAsync(7);
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Null(result.Data!.AccuracyPercent);
+        Assert.Null(result.Data.CorrectCount); Assert.Null(result.Data.MissedCount); Assert.Null(result.Data.WrongPickCount);
+        Assert.Equal(status, result.Data.Status);
+    }
     [Theory]
     [InlineData(0, 0, false)] [InlineData(10, 11, false)] [InlineData(10, 10, false)] [InlineData(10, 0, false)] [InlineData(10, 6, true)]
     public void Set_requires_two_valid_label_classes(int total, int pass, bool expected) => Assert.Equal(expected, PromptTestFlow.ValidSet(new() { LabelCount = total, PassCount = pass }));
@@ -129,6 +164,32 @@ public class PromptTestFlowTests
             return WebUtility.HtmlDecode(root.ToHtmlString());
         });
         Assert.Contains("75%", html); Assert.Contains("6 Đạt", html); Assert.Contains("4 Không đạt", html); Assert.Contains("Đánh giá hoàn thành", html); Assert.Contains("1 CV lỗi", html); Assert.Contains("progressbar", html); Assert.Equal(0, s.Posts);
+    }
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+    [Fact]
+    public async Task Worker_stall_stops_tracking_with_actionable_error_and_manual_retry_preserves_run()
+    {
+        var server = new Server { Exists = true }; var clock = new ManualClock();
+        var flow = new PromptTestFlow(Client(server), clock); await flow.RestoreAsync("7", default);
+        clock.Now += TimeSpan.FromMinutes(3); await flow.RefreshAsync(default);
+        Assert.Contains("Worker", flow.Error); Assert.True(flow.Locked); Assert.Equal(0, server.Posts);
+        flow.ResumeTracking(); await flow.RefreshAsync(default); Assert.Null(flow.Error); Assert.Equal(7, flow.Current!.RunId);
+    }
+    [Fact]
+    public async Task Parent_render_with_previous_query_does_not_restore_old_run_or_reset_new_prompt()
+    {
+        var server=new Server { Exists=true,Status="Completed",AdvanceId=true };
+        using var services=new ServiceCollection().AddLogging().AddSingleton(Client(server)).BuildServiceProvider();
+        await using var renderer=new LiveRenderer(services);await renderer.ShowToken("7");
+        await renderer.Event("onchange","Phiên bản prompt đánh giá",new ChangeEventArgs{Value="2"});
+        await renderer.Event("onclick","Chạy đánh giá",new MouseEventArgs());
+        await renderer.Event("onclick","Xác nhận chạy đánh giá",new MouseEventArgs());
+        await renderer.ShowToken("7"); // URL parameter has not caught up to the new run yet.
+        Assert.Contains("#8",renderer.Text);Assert.Contains("v2",renderer.Text);Assert.Equal(1,server.Posts);
     }
 }
 #pragma warning restore BL0006
