@@ -35,6 +35,7 @@
 }
 .history-pick:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--border); }
 .is-selected .history-pick { border-color: #99dcd3; background: #f0fdfa; }
+.is-current .history-pick { box-shadow: inset 3px 0 0 var(--brand); }
 .history-pick:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
 .history-pick:disabled { cursor: wait; opacity: .7; }
 .version-name { max-width: 100%; font-family: var(--sc-font-mono); font-size: .82rem; font-weight: 600; line-height: 1.7; }
@@ -42,6 +43,7 @@
 .version-badges:empty { display: none; }
 .history-tag { padding: 3px 7px; border-radius: 5px; font-size: .67rem; font-weight: 600; line-height: 1.5; }
 .tag-active { color: var(--fit-excellent); background: var(--fit-excellent-bg); }
+.tag-selected { color: var(--sc-info); background: var(--sc-info-bg); }
 .tag-new { color: var(--sc-info); background: var(--sc-info-bg); }
 .tag-unrated { color: var(--sc-neutral); background: var(--sc-neutral-bg); }
 .version-created { color: var(--text-muted); font-size: .72rem; line-height: 1.5; }
@@ -50,6 +52,31 @@
 .version-accuracy strong { color: var(--brand-hover); font-size: .84rem; font-variant-numeric: tabular-nums; }
 .history-empty, .history-foot { margin: 0; color: var(--text-muted); font-size: .75rem; line-height: 1.7; }
 .history-foot { padding-top: 14px; border-top: 1px solid var(--border); }
+.activation-row { padding: 8px 14px 0; }
+.history-activate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 168px;
+    max-width: 100%;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--brand-hover);
+    font: inherit;
+    font-size: .75rem;
+    font-weight: 600;
+    line-height: 1.5;
+    transition: background .15s ease, border-color .15s ease;
+}
+.history-activate:hover:not(:disabled) { background: #e6f5f2; border-color: var(--brand); }
+.history-activate:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.history-activate:disabled { cursor: wait; opacity: .65; }
+.activation-spinner { width: 12px; height: 12px; flex: 0 0 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: activation-spin .8s linear infinite; }
+@keyframes activation-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 600px) {
     .prompt-history { padding: 18px; border-radius: 14px; }
@@ -58,4 +85,6 @@
 
 @media (prefers-reduced-motion: reduce) {
     .history-pick { transition: none; }
+    .history-activate { transition: none; }
+    .activation-spinner { animation: none; }
 }
