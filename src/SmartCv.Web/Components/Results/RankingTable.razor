@@ -89,12 +89,13 @@
                 <tbody>
                     @foreach (var r in rows)
                     {
-                        var scored = RankingView.IsScored(r);
+                        var failed = IsFailed(r);
+                        var scored = !failed && RankingView.IsScored(r);
                         var keywordOnly = r.ScoreSource == ScoreSources.KeywordOnly;
                         var must = MustHaveDisplay.From(r.MatchedMustHave, r.TotalMustHave, scored);
                         <tr class="@RowClass(r, scored)" @key="r.EvaluationId">
                             <td class="c-rank" data-label="Hạng">
-                                <span class="rank @(r.Rank == 1 ? "gold" : r.Rank is >= 2 and <= 3 ? "top" : null)">@RankingView.RankText(r.Rank)</span>
+                                <span class="rank @(scored && r.Rank == 1 ? "gold" : null)">@RankingView.RankText(scored ? r.Rank : null)</span>
                             </td>
                             <td class="c-who">
                                 <div class="who">
@@ -102,6 +103,7 @@
                                     <span class="who-text">
                                         <a class="name" href="@DetailUrl(r.EvaluationId)">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</a>
                                         <span class="file" title="@r.FileName">@r.FileName</span>
+                                        @if (failed) { <span class="processing-error">@Display.SafeError(r.ErrorMessage)</span> }
                                     </span>
                                 </div>
                             </td>
@@ -132,17 +134,17 @@
                             </td>
                             <td class="c-num" data-label="Kinh nghiệm">@RankingView.Years(r.YearsExperience)</td>
                             <td class="c-bar" data-label="Điểm keyword / AI">
-                                <ScoreBar Keyword="r.KeywordScore" Final="r.FinalScore" Threshold="PassThreshold" ScoreSource="@r.ScoreSource" />
+                                <ScoreBar Keyword="@(scored ? r.KeywordScore : null)" Final="@(scored ? r.FinalScore : null)" Threshold="PassThreshold" ScoreSource="@r.ScoreSource" />
                                 <span class="parts">
-                                    KW @RankingView.Score(r.KeywordScore) · AI
-                                    <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(r.AiScore)</span>
+                                    KW @RankingView.Score(scored ? r.KeywordScore : null) · AI
+                                    <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(scored && !keywordOnly ? r.AiScore : null)</span>
                                 </span>
                             </td>
                             <td class="c-num c-final" data-label="Điểm cuối">
-                                <strong class="final">@RankingView.Score(r.FinalScore)</strong>
+                                <strong class="final">@RankingView.Score(scored ? r.FinalScore : null)</strong>
                             </td>
                             <td class="c-fit" data-label="Mức phù hợp">
-                                <FitBadge FitLabel="@r.FitLabel" FinalScore="r.FinalScore" Status="@r.Status" ScoreSource="@r.ScoreSource" Message="@r.ErrorMessage" />
+                                <FitBadge FitLabel="@r.FitLabel" FinalScore="r.FinalScore" Status="@(failed ? EvaluationStatuses.Failed : r.Status)" ScoreSource="@r.ScoreSource" Message="@r.ErrorMessage" />
                                 @if (scored)
                                 {
                                     <span class="pass @(r.PredictedPass == true ? "is-pass" : null)">@(r.PredictedPass == true ? "Dự đoán Đạt" : "Dự đoán Không đạt")</span>
@@ -187,8 +189,12 @@
     private int IssueCount => Items.Count(i => i.Status == EvaluationStatuses.Completed
                                                && FitLevel.Resolve(i.FitLabel, i.FinalScore)?.HasIssue == true);
 
-    private static string? RowClass(RankingItemDto r, bool scored) =>
-        r.Status == EvaluationStatuses.Failed ? "is-unscored is-failed" : scored ? null : "is-unscored";
+    [Parameter] public List<RunItemDto> ProgressItems { get; set; } = [];
+    private bool IsFailed(RankingItemDto r) => r.Status == EvaluationStatuses.Failed
+        || ProgressItems.Any(p => p.EvaluationId == r.EvaluationId && p.ExtractionStatus == ExtractionStatuses.Failed);
+
+    private string? RowClass(RankingItemDto r, bool scored) =>
+        IsFailed(r) ? "is-unscored is-failed" : scored ? null : "is-unscored";
 
     private void ClearSearch() => search = string.Empty;
 

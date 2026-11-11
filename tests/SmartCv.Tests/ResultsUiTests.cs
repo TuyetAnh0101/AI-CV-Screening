@@ -210,11 +210,14 @@ public class ResultsUiTests
         public Func<string, Task>? Gate { get; set; }
         public bool Offline { get; set; }
         public int? ForceStatus { get; set; }
+        public bool Timeout { get; set; }
+        public List<RunItemDto> ProgressItems { get; set; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var pathAndQuery = request.RequestUri!.PathAndQuery;
             Calls.Enqueue(pathAndQuery);
+            if (Timeout) throw new TaskCanceledException("PRIVATE timeout detail");
             // Máy chủ trả lời muộn, kể cả khi trang đã đổi lựa chọn (giới hạn 10 giây để test không bao giờ treo)
             if (Gate is not null) await Gate(pathAndQuery).WaitAsync(TimeSpan.FromSeconds(10));
             if (Offline) throw new HttpRequestException("Connection refused");
@@ -242,8 +245,11 @@ public class ResultsUiTests
                 return Problem(404, title);
             }
             if (parts.Length == 3 && RunTypesById.TryGetValue(runId, out var type))
-                return Json(new RunProgressDto(runId, type, RunStatuses.Completed, 1, "v1", "gemini-2.5-flash", 0.2m, 0.3m, 0.7m, 70m,
-                    10, 10, 0, 100, new DateTime(2026, 11, 1, 2, 0, 0, DateTimeKind.Utc), null));
+            {
+                var summary = Runs.FirstOrDefault(r => r.RunId == runId);
+                return Json(new RunProgressDto(runId, type, summary?.Status ?? RunStatuses.Completed, 1, "v1", "gemini-2.5-flash", 0.2m, 0.3m, 0.7m, 70m,
+                    summary?.TotalItems ?? 10, summary?.ProcessedItems ?? 10, 0, 0, new DateTime(2026, 11, 1, 2, 0, 0, DateTimeKind.Utc), null) { Items = ProgressItems });
+            }
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
 
@@ -436,7 +442,7 @@ public class ResultsUiTests
         Assert.Contains("#4 · 06/11/2026 09:00 · Đang phân tích", text);   // giờ Việt Nam
         Assert.Contains("#3 · 05/11/2026 09:00 · Hoàn thành", text);
         Assert.Contains("AI Engineer Intern (2 CV)", text);
-        Assert.Contains("Lượt chấm đang chạy: đã xử lý 1/3 CV", text);
+        Assert.Contains("Đang chấm 1/3 CV", text);
         // CV đang chờ chấm: không có điểm, nằm cuối
         AssertOrder(text, "Võ Thành Nam", "Đỗ Chưa Chấm");
         Assert.Contains("Đang chấm Chưa có điểm", text);   // B8: nhãn trạng thái Pending
@@ -481,7 +487,7 @@ public class ResultsUiTests
         AssertOrder(text, "Nguyễn Văn An", "Trần Thị Bình", "Lê Hoàng Cường", "Lý Văn Minh");
         var failedRow = text[text.IndexOf("Lý Văn Minh", StringComparison.Ordinal)..];
         // B8: bắt buộc —, kinh nghiệm —, thanh điểm "KW — · AI —", điểm cuối —, nhãn "Lỗi xử lý" (không có điểm 0 giả)
-        Assert.StartsWith("Lý Văn Minh CV_14.pdf — — KW — · AI — — Lỗi xử lý Chưa có điểm", failedRow);
+        Assert.StartsWith("Lý Văn Minh CV_14.pdf Trích xuất nội dung CV thất bại. — — KW — · AI — — Lỗi xử lý Chưa có điểm", failedRow);
         Assert.Contains("01 VA Nguyễn Văn An", text);
         Assert.Contains("Rất phù hợp Dự đoán Đạt", text);
         Assert.Contains("Tiềm năng Dự đoán Không đạt", text);
@@ -661,5 +667,121 @@ public class ResultsUiTests
     {
         Assert.Equal("results?runId=12", RankingView.ResultsUrl(12));
         Assert.Equal("results?runId=12&jobId=3", RankingView.ResultsUrl(12, 3));
+    }
+
+    [Theory]
+    [InlineData("Completed")]
+    [InlineData("Failed")]
+    [InlineData("Cancelled")]
+    public async Task B10_poll_updates_terminal_status_without_navigation_and_stops(string terminal)
+    {
+        var api = new FakeResultsApi();
+        var nav = Nav("results?runId=4&jobId=3");
+        var (r, sp) = await OpenAsync(api, nav);
+        await using var _ = r; using var __ = sp;
+        Assert.Contains("Đang chấm 1/3 CV", r.Text);
+        var initial = api.Calls.Count;
+        await Task.Delay(500);
+        Assert.Equal(initial, api.Calls.Count); // No render loop or early duplicate timer.
+        api.Runs[0] = Summary(4, terminal, 3, 3, [], 6);
+        await WaitUntil(() => !r.Text.Contains("trang tự cập nhật mỗi 3 giây"), "terminal state from polling");
+        Assert.Equal("https://app.test/results?runId=4&jobId=3", nav.Uri);
+        var after = api.Calls.Count;
+        await Task.Delay(3200);
+        Assert.Equal(after, api.Calls.Count);
+        Assert.Equal(2, api.Calls.Count(c => c == "/api/runs/4/ranking?jobId=3"));
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(404)]
+    [InlineData(null)]
+    public async Task B10_poll_failure_preserves_data_and_disposal_stops_requests(int? status)
+    {
+        var api = new FakeResultsApi();
+        var (r, sp) = await OpenAsync(api, Nav("results?runId=4"));
+        using var __ = sp;
+        api.ForceStatus = status;
+        api.Offline = status is null;
+        await WaitUntil(() => r.Text.Contains(status == 404 ? "Không thể tiếp tục" : "Chưa cập nhật được"), "poll failure warning");
+        Assert.Contains("Võ Thành Nam", r.Text);
+        Assert.DoesNotContain("SqlException", r.Text);
+        await r.DisposeAsync();
+        var after = api.Calls.Count;
+        await Task.Delay(3200);
+        Assert.Equal(after, api.Calls.Count);
+    }
+
+    [Fact]
+    public async Task B10_queued_zero_items_is_not_fake_completion()
+    {
+        var api = new FakeResultsApi();
+        api.Runs[0] = Summary(4, RunStatuses.Queued, 0, 0, [], 6);
+        var (r, sp) = await OpenAsync(api, Nav("results?runId=4"));
+        await using var _ = r; using var __ = sp;
+        Assert.Contains("Đang chờ chấm 0/0 CV", r.Text);
+        Assert.Contains("trang tự cập nhật mỗi 3 giây", r.Text);
+    }
+
+    [Fact]
+    public async Task B10_extraction_failure_has_priority_over_keyword_and_is_counted_once()
+    {
+        var api = new FakeResultsApi();
+        var item = AnalystRanking().Items.First(i => i.ScoreSource == ScoreSources.KeywordOnly);
+        api.ProgressItems = [new() { EvaluationId = item.EvaluationId, ExtractionStatus = ExtractionStatuses.Failed }];
+        var (r, sp) = await OpenAsync(api, Nav("results?runId=3&jobId=2"));
+        await using var _ = r; using var __ = sp;
+        Assert.Contains("1 lỗi xử lý · 0 chỉ keyword", r.Text);
+        Assert.Contains("Lỗi xử lý", r.TableText);
+        Assert.DoesNotContain("Chỉ keyword", r.TableText);
+    }
+
+    [Fact]
+    public async Task B10_timeout_is_connection_warning_and_recovers_on_next_tick()
+    {
+        var api = new FakeResultsApi();
+        var (r, sp) = await OpenAsync(api, Nav("results?runId=4"));
+        await using var _ = r; using var __ = sp;
+        api.Timeout = true;
+        await WaitUntil(() => r.Text.Contains("Chưa cập nhật được"), "timeout warning");
+        Assert.DoesNotContain("PRIVATE", r.Text);
+        Assert.DoesNotContain("Không chấm được CV này", r.Text);
+        api.Timeout = false;
+        await WaitUntil(() => !r.Text.Contains("Chưa cập nhật được"), "automatic recovery");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task B10_late_poll_cannot_overwrite_new_run_or_disposed_component(bool leave)
+    {
+        var api = new FakeResultsApi();
+        var nav = Nav("results?runId=4");
+        var (r, sp) = await OpenAsync(api, nav);
+        using var __ = sp;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        api.Gate = path => path == "/api/runs/4/ranking" ? gate.Task : Task.CompletedTask;
+        await WaitUntil(() => api.Calls.Count(c => c == "/api/runs/4/ranking") == 2, "poll request in flight");
+        await Task.Delay(300);
+        Assert.Equal(2, api.Calls.Count(c => c == "/api/runs/4/ranking"));
+        if (leave)
+        {
+            var disposing = r.DisposeAsync().AsTask();
+            gate.SetResult();
+            await disposing;
+        }
+        else
+        {
+            await r.NavigateAsync(nav, "results?runId=3&jobId=2");
+            gate.SetResult();
+            await WaitUntil(() => r.Text.Contains("Business Analyst"), "new job");
+            await Task.Delay(100);
+            Assert.DoesNotContain("Võ Thành Nam", r.Text);
+            Assert.Contains("0 lỗi xử lý · 1 chỉ keyword", r.Text);
+            await r.DisposeAsync();
+        }
+        var count = api.Calls.Count;
+        await Task.Delay(3200);
+        Assert.Equal(count, api.Calls.Count);
     }
 }
