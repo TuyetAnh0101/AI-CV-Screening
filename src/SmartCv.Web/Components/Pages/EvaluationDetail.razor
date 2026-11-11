@@ -72,7 +72,7 @@
                             <tr><th scope="row">@(keywordOnly ? "Keyword dự phòng" : "Tổng có trọng số")</th><td>@Display.Score(Display.WeightedTotal(detail))</td></tr>
                             <tr class="total"><th scope="row">Điểm cuối từ Backend</th><td>@Display.Score(ready ? detail.FinalScore : null)</td></tr>
                         </tbody></table>
-                        <p class="muted">Ngưỡng Đạt: @Display.Score(detail.PassThreshold). Điểm cuối đã áp dụng quy tắc nghiệp vụ.</p>
+                        <p class="muted">Ngưỡng Đạt: @Display.Score(detail.PassThreshold). Điểm cuối là kết quả đã lưu của lượt chấm.</p>
                     </div>
                 </div>
                 @if (Display.HasRecordedCap(detail))
@@ -125,6 +125,7 @@
             <section class="panel metadata" aria-labelledby="metadata-title">
                 <div class="section-head"><span class="eyebrow">04 / THÔNG TIN LẦN ĐÁNH GIÁ</span><h2 id="metadata-title">Nguồn và cấu hình</h2></div>
                 <dl><dt>Lượt chấm / Job</dt><dd>#@detail.RunId / #@detail.JobId</dd><dt>Phiên bản prompt</dt><dd>@Display.Text(detail.PromptVersionName)</dd><dt>Model AI</dt><dd>@Display.Text(detail.ModelName)</dd><dt>Temperature</dt><dd>@Display.Score(detail.Temperature)</dd><dt>Nguồn điểm</dt><dd>@Display.Text(detail.ScoreSource)</dd><dt>Trạng thái</dt><dd>@Display.Text(detail.Status)</dd><dt>Thời gian tạo đánh giá</dt><dd>@Display.VnTime(detail.CreatedAt)</dd><dt>Cách đọc CV</dt><dd>@Display.Text(detail.ExtractionMethod)</dd></dl>
+                <p class="muted">Kết quả và trọng số thuộc lượt chấm đã lưu. Chấm lại với cấu hình hoặc quy tắc hiện hành có thể cho kết quả khác.</p>
                 <p class="muted">API cung cấp thời gian tạo bản đánh giá, chưa có thời gian hoàn tất riêng.</p>
             </section>
         </div>

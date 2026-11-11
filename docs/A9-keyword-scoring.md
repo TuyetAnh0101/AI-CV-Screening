@@ -39,6 +39,18 @@ Có hai tầng trọng số, không được nhầm lẫn:
 
 GPA / kinh nghiệm không đọc được thì trả `null` (không phải 0), tiêu chí bị bỏ và trọng số được chia lại, kèm ghi chú trong `notes`.
 
+CV ghi rõ `0 năm`, `Chưa có kinh nghiệm` hoặc `Không có kinh nghiệm làm việc` trả **0**, là dữ liệu hợp lệ: khi job yêu cầu kinh nghiệm, tiêu chí vẫn ở mẫu số và có tỷ lệ đáp ứng `0 / yêu cầu = 0`. Không suy ra 0 từ việc CV là sinh viên / mới tốt nghiệp, thiếu thông tin hoặc chỉ chưa có kinh nghiệm với một kỹ năng cụ thể.
+
+| Nội dung CV | Số năm trích xuất | Khi job yêu cầu 2 năm |
+|---|---:|---|
+| Không đề cập kinh nghiệm | `null` | Bỏ tiêu chí, chia lại trọng số |
+| `0 năm` / `Chưa có kinh nghiệm` | `0` | Giữ tiêu chí, tỷ lệ 0 |
+| `6 tháng` | `0.5` | Tỷ lệ 0.25 |
+| `1 năm` | `1` | Tỷ lệ 0.5 |
+| `2 năm` | `2` | Tỷ lệ 1 |
+
+Ví dụ job chỉ có một kỹ năng bắt buộc C# (60%) và yêu cầu 2 năm (10%), CV đã có C#: không ghi kinh nghiệm đạt 100; ghi rõ 0 năm đạt `0.6 / 0.7 × 100 = 85.71`; 6 tháng đạt `(0.6 + 0.1 × 0.25) / 0.7 × 100 = 89.29`. Công thức và trọng số Keyword không thay đổi.
+
 > **Cần phê duyệt nghiệp vụ:** quy tắc "không ghi thì không phạt" lấy từ `HUONG_DAN_A9_A13.md` và chưa được HR chốt. Trọng số 60/20/10/10 cũng là đề xuất của tài liệu đó.
 
 ## Đọc GPA và kinh nghiệm
@@ -147,7 +159,7 @@ CV mẫu của A7 đúng job đạt 100: `cv-backend-pdf-chu.pdf` (PdfText, hồ
 - Khoảng chỉ có năm tính trọn năm (`2020 - 2022` = 3 năm).
 - Thực tập được tính là kinh nghiệm (theo dữ liệu demo).
 - Công việc tại trường (ví dụ giảng viên ở "Đại học X") bị bỏ qua vì câu có tên trường.
-- "Chưa có kinh nghiệm" / "0 năm" cho kết quả `null`, nên tiêu chí bị bỏ thay vì tính 0.
+- Câu xác nhận không có kinh nghiệm chỉ nhận khi diễn đạt rõ và nói về kinh nghiệm tổng, có thể kèm nhãn `Kinh nghiệm:` / `Experience:`. `Chưa có kinh nghiệm với Docker`, `0 năm kinh nghiệm với Docker` hoặc `Docker: 0 years of experience` không được coi là 0 năm kinh nghiệm tổng. CV có nhiều bằng chứng thời lượng dương vẫn lấy giá trị lớn nhất theo quy tắc trên.
 
 ## Đề xuất (chưa áp dụng)
 

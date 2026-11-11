@@ -61,9 +61,16 @@ prompt:
 Có CV KeywordOnly hay không chấm được mà kết luận vẫn đứng vững thì giữ kết luận,
 thêm cảnh báo và câu "Lưu ý" ở cuối `summary`.
 
-`summary` cho dữ liệu demo:
+`summary` cho snapshot demo lịch sử trước cap69 (không phải kỳ vọng chấm mới):
 
 > v2-tieu-chi-ro-rang đúng 80% (8/10 CV), cao hơn v1-co-ban 10 điểm phần trăm (70%, 7/10 CV). Sửa đúng thêm 1 CV, không làm sai thêm CV nào. Bỏ sót giữ nguyên (1 → 1), chọn nhầm giảm 1 (2 → 1).
+
+Giữ nguyên điểm/skill flags cũ rồi replay với cap69 cho 90%/90%, `Same`, delta0.
+Khác trọng số vẫn `NotComparable` dù accuracy bằng nhau. `isFairComparison`
+chỉ xác nhận các điều kiện đã snapshot; cap, trọng số Keyword, phiên bản thuật
+toán và nội dung job/CV chưa snapshot độc lập nên không chứng minh tái lập
+toàn pipeline. B15 cần hiển thị đúng phạm vi lịch sử này; không thay điểm cũ
+bằng điểm tính lại. Xem [nguồn dữ liệu và replay](scoring-data-consistency.md).
 
 ## Hợp đồng cho B15
 

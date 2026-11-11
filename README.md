@@ -175,7 +175,8 @@ AI-CV-Screening/
 │   ├── check_jobs.sql                  # Kiểm tra dữ liệu nền 5 job / 29 kỹ năng / 52 từ khóa
 │   ├── migration_InitialCreate.sql     # Script SQL sinh từ Migration InitialCreate
 │   ├── migration_SeedJobs.sql          # Script SQL sinh từ Migration SeedJobs
-│   ├── update_seed_weights_30_70.sql   # Chỉ dùng cho DB đã seed bằng bản cũ 40/60
+│   ├── update_seed_weights_30_70.sql   # Đã ngừng cập nhật; chỉ đọc snapshot lịch sử
+│   ├── check_scoring_consistency.sql  # Audit trọng số/điểm/accuracy; không sửa dữ liệu
 │   ├── test_a5_trung_database.sql      # Thử A5 trùng database – CHỈ chạy trên database thử riêng
 │   ├── check_a7.sql                    # Xem kết quả đọc chữ CV (chỉ SELECT)
 │   ├── erdplus.png                     # Sơ đồ ERD
@@ -543,7 +544,7 @@ Migration `SeedJobs` được viết để chạy an toàn trên database đã c
 - Dòng **trùng khóa nhưng khác nội dung** (ví dụ job bị sửa tay): migration dừng với lỗi `SeedJobs: ...`, ROLLBACK, không ghi đè. Báo nhóm để xử lý, **không** tự xóa dữ liệu.
 - Không cần xóa database, không chạy lại `seed_demo.sql`, không sửa tay bảng `__EFMigrationsHistory`.
 - Rollback (`dotnet ef database update InitialCreate`) chỉ gỡ dữ liệu nền khi chưa có hồ sơ/lượt chấm nào dùng tới; ngược lại sẽ báo lỗi và không xóa gì.
-- Database đã seed bằng **bản cũ 40/60**: chạy thêm một lần [`database/update_seed_weights_30_70.sql`](database/update_seed_weights_30_70.sql) (cùng tham số `sqlcmd`). Script kiểm tra trước, chạy trong transaction và chạy lại không làm thay đổi gì thêm.
+- Database đã seed bằng **bản cũ 40/60**: giữ nguyên snapshot hợp lệ. [`database/update_seed_weights_30_70.sql`](database/update_seed_weights_30_70.sql) đã ngừng cập nhật và chỉ đọc; không đổi điểm lịch sử để khớp mặc định mới. Dùng [`database/check_scoring_consistency.sql`](database/check_scoring_consistency.sql) để điều tra, xem [quy tắc bảo toàn và replay](docs/scoring-data-consistency.md).
 
 ### 10.4. Sửa dữ liệu nền về sau
 
@@ -1179,7 +1180,7 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ li�
 | Ràng buộc | CHECK, FK, UNIQUE đều bật và được tin cậy; thử vi phạm (2 prompt active, trùng FileHash, tổng trọng số ≠ 1, sai quy tắc `EvaluationSetId`, FK không tồn tại) đều bị chặn; `DBCC CHECKCONSTRAINTS` không có vi phạm |
 | Dữ liệu mẫu | 368 dòng – xem bảng dưới |
 | Chấm điểm | 4/4 lượt chấm dùng 0.30/0.70; 32/32 kết quả `Combined` đúng công thức, FitLabel và PredictedPass; `KeywordOnly` giữ nguyên 56.67; `Failed`/`Pending` không có điểm |
-| So sánh prompt | `v1-co-ban` **70%** · `v2-tieu-chi-ro-rang` **80%** (tính lại từ `HrLabels`, khớp giá trị lưu) |
+| So sánh prompt | **Snapshot demo lịch sử trước cap69:** `v1-co-ban` 70% · `v2-tieu-chi-ro-rang` 80% (đối chiếu dự đoán đã lưu với `HrLabels`). Không phải kỳ vọng khi chấm mới; [replay đóng băng với cap69](docs/scoring-data-consistency.md) cho 90%/90%. |
 | Build / Test | `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt 1/1 |
 
 | Bảng | Dòng | Bảng | Dòng | Bảng | Dòng |
@@ -1197,8 +1198,8 @@ Kiểm tra trực tiếp trên SQL Server sau khi chạy migration và dữ li�
 |---|---|
 | Mã nguồn | `Data/Seed/JobSeedData.cs` (5 / 29 / 52, ngày seed cố định 2026-11-01 UTC); `HasData` trong 3 Configuration, giữ nguyên toàn bộ cấu hình A2 |
 | Migration | `20261106142155_SeedJobs` chỉ chứa dữ liệu, **không** thay đổi schema; snapshot chứa `HasData`; không còn pending model changes |
-| Database mới | Chỉ chạy `dotnet ef database update` (không chạy file SQL nào): 2 migration, Jobs 5, JobSkills 29, JobSkillAliases 52; mỗi job 3 MustHave, NiceToHave 3 (Tester 2); từ khóa 11/11/9/9/12; không có kỹ năng thiếu từ khóa; tiếng Việt đúng. Chạy thêm `seed_demo.sql` → 368 dòng, v1 70%, v2 80% |
-| Database A2 có sẵn 368 dòng | `SeedJobs` áp dụng bình thường; dữ liệu 12 bảng **giống hệt từng byte** trước và sau; vẫn 368 dòng, 0.30/0.70, v1 70%, v2 80%; `DBCC CHECKCONSTRAINTS` không vi phạm |
+| Database mới | Chỉ chạy `dotnet ef database update` (không chạy file SQL nào): 2 migration, Jobs 5, JobSkills 29, JobSkillAliases 52; mỗi job 3 MustHave, NiceToHave 3 (Tester 2); từ khóa 11/11/9/9/12; không có kỹ năng thiếu từ khóa; tiếng Việt đúng. Chạy thêm `seed_demo.sql` → 368 dòng, snapshot lịch sử trước cap69 v1 70%, v2 80% |
+| Database A2 có sẵn 368 dòng | `SeedJobs` áp dụng bình thường; dữ liệu 12 bảng **giống hệt từng byte** trước và sau; vẫn 368 dòng, snapshot lịch sử 0.30/0.70, v1 70%, v2 80%; `DBCC CHECKCONSTRAINTS` không vi phạm |
 | An toàn | Dòng trùng khóa nhưng khác nội dung → migration dừng và ROLLBACK; rollback bị chặn khi dữ liệu nền đang được dùng; chạy `database update` lần hai: *No migrations were applied* |
 | Build / Test | `dotnet build` 0 lỗi, 0 cảnh báo · `dotnet test` đạt 10/10 (thêm 9 test dữ liệu nền và migration) |
 
