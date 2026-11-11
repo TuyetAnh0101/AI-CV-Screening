@@ -12,7 +12,7 @@
     @switch (Status)
     {
         case EvaluationStatuses.Failed:
-            <span class="fit-badge is-error" title="@(Message ?? "Không chấm được CV này.")">Lỗi xử lý</span>
+            <span class="fit-badge is-error" title="@Display.SafeError(Message)">Lỗi xử lý</span>
             break;
         case EvaluationStatuses.Pending:
             <span class="fit-badge is-pending" title="CV đang chờ hệ thống chấm điểm.">Đang chấm</span>
@@ -35,7 +35,7 @@
             }
             if (KeywordOnly)
             {
-                <span class="fit-badge is-keyword" title="AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa.">Chỉ chấm Keyword</span>
+                <span class="fit-badge is-keyword" title="AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa.">Chỉ keyword</span>
             }
             break;
     }

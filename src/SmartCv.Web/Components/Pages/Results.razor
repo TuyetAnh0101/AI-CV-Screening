@@ -7,9 +7,9 @@
     API thật A13: GET /api/runs?type=Screening · GET /api/runs/latest · GET /api/runs/{id}/ranking?jobId= · GET /api/runs/{id}
     Đổi ô chọn chỉ đổi địa chỉ (Nav.NavigateTo) → Blazor gọi lại OnParametersSetAsync → tải lại.
     Mỗi lần tải có số thứ tự + CancellationToken: phản hồi của lựa chọn cũ về muộn sẽ bị bỏ qua.
-    Chưa làm ở B7: màu theo mức (B8), trang chi tiết (B9), tự cập nhật khi đang chấm (B10), biểu đồ (B11).
+    B10: tự cập nhật khi đang chấm; biểu đồ B11 nằm ngoài phạm vi.
 *@
-@implements IDisposable
+@implements IAsyncDisposable
 @using SmartCv.Core.Constants
 @inject RunApiClient RunApi
 @inject NavigationManager Nav
@@ -90,10 +90,10 @@
             @if (CurrentStatus is RunStatuses.Queued or RunStatuses.Running)
             {
                 <div class="notice is-info" role="status">
-                    <span class="notice-icon" aria-hidden="true">i</span>
+                    <span class="notice-icon processing-indicator" aria-hidden="true">↻</span>
                     <span>
-                        Lượt chấm đang chạy@(meta is null ? null : $": đã xử lý {meta.Processed}/{meta.Total} CV").
-                        CV chưa chấm hiển thị <strong>Chưa có điểm</strong>. Bấm <strong>Làm mới</strong> để xem kết quả mới nhất.
+                        <strong>@(CurrentStatus == RunStatuses.Queued ? "Đang chờ chấm" : "Đang chấm") @(meta is null ? "" : $"{meta.Processed}/{meta.Total} CV")</strong> — trang tự cập nhật mỗi 3 giây.
+                        Số đã xử lý bao gồm cả CV lỗi, không phải số CV chấm thành công.
                     </span>
                 </div>
             }
@@ -105,6 +105,15 @@
                 </div>
             }
 
+            @if (pollingWarning is not null)
+            {
+                <div class="notice is-warn" role="status">@pollingWarning</div>
+            }
+            <aside class="attention" aria-label="Cần chú ý">
+                <strong>! Cần chú ý</strong>
+                <span>@ranking!.Items.Count(IsFailed) lỗi xử lý · @ranking.Items.Count(i => !IsFailed(i) && i.Status == EvaluationStatuses.Completed && i.ScoreSource == ScoreSources.KeywordOnly) chỉ keyword</span>
+                <small>Trong vị trí đang chọn · CV lỗi được tính riêng, không cộng vào Chỉ keyword.</small>
+            </aside>
             <section class="kpis" aria-label="Tóm tắt vị trí">
                 <div class="kpi">
                     <span class="kpi-label">CV trong vị trí</span>
@@ -128,7 +137,7 @@
                 </div>
             </section>
 
-            <RankingTable Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" />
+            <RankingTable ProgressItems="progressItems" Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" />
             break;
 
         case ViewState.NoRuns:
@@ -211,13 +220,68 @@
     private (string? Run, string? Job)? loadedQuery;
     private int loadVersion;
     private CancellationTokenSource? loadCts;
+    private CancellationTokenSource? pollCts;
+    private Task? pollTask;
+    private bool disposed;
+    private string? pollingWarning;
+    private List<RunItemDto> progressItems = [];
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!disposed && RendererInfo.IsInteractive && state == ViewState.Ready
+            && CurrentStatus is RunStatuses.Queued or RunStatuses.Running && pollTask is null)
+        {
+            pollCts = new();
+            pollTask = PollAsync(loadVersion, selectedRunId!.Value, selectedJobId, pollCts.Token);
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task PollAsync(int version, int runId, int? jobId, CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                // Read progress first so a terminal snapshot is followed by fresh evaluation rows.
+                var progress = await RunApi.GetRunAsync(runId, ct);
+                if (disposed || ct.IsCancellationRequested || version != loadVersion) return;
+                var result = await RunApi.GetRankingAsync(runId, jobId, ct);
+                if (disposed || ct.IsCancellationRequested || version != loadVersion) return;
+                var stop = false;
+                await InvokeAsync(() =>
+                {
+                    if (disposed || ct.IsCancellationRequested || version != loadVersion) return;
+                    if (result.IsSuccess && progress.IsSuccess)
+                    {
+                        ranking = result.Data!;
+                        var r = progress.Data!;
+                        meta = new(r.RunId, r.Status, r.ModelName, r.CreatedAt, r.TotalItems, r.ProcessedItems);
+                        progressItems = r.Items;
+                        pollingWarning = null;
+                        stop = CurrentStatus is not (RunStatuses.Queued or RunStatuses.Running);
+                    }
+                    else
+                    {
+                        pollingWarning = "Chưa cập nhật được kết quả từ API. Giữ dữ liệu gần nhất; sẽ thử lại sau 3 giây. Bạn có thể bấm Làm mới.";
+                        stop = result.StatusCode is 404 or 401 or 403 || progress.StatusCode is 404 or 401 or 403;
+                        if (stop) pollingWarning = "Không thể tiếp tục tự cập nhật lượt chấm này. Bấm Làm mới để kiểm tra lại.";
+                    }
+                    StateHasChanged();
+                });
+                if (stop) return;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
 
     /// <summary>Đang hiển thị đúng lượt (và job) đang chọn: dùng để giữ bảng cũ mờ đi khi bấm Làm mới thay vì nháy trắng.</summary>
     private bool ShowCurrent => ranking is not null && state is ViewState.Ready or ViewState.Loading
                                 && ranking.RunId == selectedRunId
                                 && (selectedJobId is null || selectedJobId == ranking.JobId);
 
-    private string CurrentStatus => ranking?.RunStatus ?? meta?.Status ?? string.Empty;
+    private string CurrentStatus => meta?.Status ?? ranking?.RunStatus ?? string.Empty;
 
     private IReadOnlyList<JobCountDto>? FilterJobs =>
         ranking is not null && ranking.RunId == selectedRunId ? ranking.Jobs : fallbackJobs;
@@ -246,6 +310,13 @@
     {
         var query = (RunIdQuery, JobIdQuery);
         if (!force && loadedQuery == query) return;   // Blazor có thể gọi lại với cùng tham số
+        if (disposed) return;
+        pollCts?.Cancel();
+        pollCts?.Dispose();
+        pollCts = null;
+        pollTask = null;
+        pollingWarning = null;
+        progressItems = [];
         loadedQuery = query;
 
         loadCts?.Cancel();
@@ -302,9 +373,9 @@
                 var data = result.Data!;
                 var summary = runs.FirstOrDefault(r => r.RunId == data.RunId);
                 RunMeta? newMeta = summary is null ? null
-                    : new(summary.RunId, summary.Status, summary.ModelName, summary.CreatedAt, summary.TotalItems, summary.ProcessedItems);
+                    : new(summary.RunId, data.RunStatus, summary.ModelName, summary.CreatedAt, summary.TotalItems, summary.ProcessedItems);
 
-                if (summary is null)
+                // Always read current progress: list summaries can be stale and lack extraction status.
                 {
                     // Lượt không nằm trong danh sách Screening: hỏi thêm loại lượt (PromptTest không thuộc trang này)
                     var run = await RunApi.GetRunAsync(data.RunId, ct);
@@ -317,7 +388,15 @@
                     if (run.IsSuccess)
                     {
                         var p = run.Data!;
+                        progressItems = p.Items;
                         newMeta = new(p.RunId, p.Status, p.ModelName, p.CreatedAt, p.TotalItems, p.ProcessedItems);
+                        if (p.Status != data.RunStatus)
+                        {
+                            var fresh = await RunApi.GetRankingAsync(data.RunId, jobId, ct);
+                            if (version != loadVersion) return;
+                            if (fresh.IsSuccess) data = fresh.Data!;
+                            else pollingWarning = "Chưa đồng bộ được bảng kết quả. Bấm Làm mới để thử lại.";
+                        }
                     }
                 }
 
@@ -410,9 +489,18 @@
         _ => "is-running"
     };
 
-    public void Dispose()
+    private bool IsFailed(RankingItemDto item) => item.Status == EvaluationStatuses.Failed
+        || progressItems.Any(p => p.EvaluationId == item.EvaluationId && p.ExtractionStatus == ExtractionStatuses.Failed);
+
+    public async ValueTask DisposeAsync()
     {
+        if (disposed) return;
+        disposed = true;
+        ++loadVersion;
+        pollCts?.Cancel();
         loadCts?.Cancel();
         loadCts?.Dispose();
+        if (pollTask is not null) await pollTask;
+        pollCts?.Dispose();
     }
 }

@@ -52,3 +52,6 @@ a:focus-visible, button:focus-visible, summary:focus-visible, pre:focus-visible 
 @media (max-width: 1100px) { .detail-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .panel { padding: 20px 16px; } .candidate { flex-direction: column; } .cv-actions { flex-basis: auto; } .score-content { justify-content: center; } dl { grid-template-columns: minmax(0, 1fr); gap: 6px; } dd { margin-bottom: 10px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.notice.processing-failed { background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239; }
+.notice.keyword-only { background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; }
+.notice.processing-pending { background: #eff6ff; border: 1px solid #bfdbfe; color: #075985; }

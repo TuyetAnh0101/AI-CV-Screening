@@ -296,7 +296,7 @@ public class FitLevelUiTests
 
         // AI lỗi nhưng đã chấm dự phòng bằng keyword: GIỮ mức, thêm nhãn phụ; không phải "Lỗi xử lý"
         var keywordOnly = await Badge(FitLevel.Good, 72, EvaluationStatuses.Completed, ScoreSources.KeywordOnly);
-        Assert.Equal("Phù hợp Chỉ chấm Keyword", keywordOnly.Text);
+        Assert.Equal("Phù hợp Chỉ keyword", keywordOnly.Text);
         Assert.True(keywordOnly.HasClass("fit-good"));
         Assert.True(keywordOnly.HasClass("is-keyword"));
         Assert.False(keywordOnly.HasClass("is-error"));
@@ -349,7 +349,7 @@ public class FitLevelUiTests
         Assert.Contains("Ngưỡng Đạt 65", text);                               // chú giải lấy ngưỡng của lượt chấm
         Assert.Equal(4, table.StyleOf("pass-line").Count(s => s == "left:65%"));
         Assert.True(table.HasClass("fit-excellent") && table.HasClass("fit-potential") && table.HasClass("fit-good"));
-        Assert.Contains("Phù hợp Chỉ chấm Keyword", text);
+        Assert.Contains("Phù hợp Chỉ keyword", text);
         Assert.Contains("KW 72 · AI —", text);
         Assert.Contains("Lỗi xử lý Chưa có điểm", text);
         Assert.True(table.HasClass("must-ok"));
