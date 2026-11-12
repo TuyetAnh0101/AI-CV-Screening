@@ -12,8 +12,11 @@ SELECT name, is_disabled, is_not_trusted, definition FROM sys.check_constraints
 WHERE parent_object_id IN (OBJECT_ID(N'dbo.Applications'), OBJECT_ID(N'dbo.ApplicationEvents'));
 SELECT name, is_disabled FROM sys.indexes
 WHERE object_id IN (OBJECT_ID(N'dbo.Applications'), OBJECT_ID(N'dbo.ApplicationEvents')) AND name IS NOT NULL;
-SELECT name, is_disabled, is_instead_of_trigger FROM sys.triggers
-WHERE object_id = OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange');
+-- MessageText: NCHAR(7883) is U+1ECB of the Vietnamese message; CORRUPTED means it was deployed with the wrong code page.
+SELECT t.name, t.is_disabled, t.is_instead_of_trigger, m.uses_quoted_identifier, m.uses_ansi_nulls,
+       CASE WHEN CHARINDEX(NCHAR(7883), m.definition) > 0 THEN N'Unicode OK' ELSE N'CORRUPTED' END AS MessageText
+FROM sys.triggers t JOIN sys.sql_modules m ON m.object_id = t.object_id
+WHERE t.object_id = OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange');
 SELECT name, delete_referential_action_desc, is_disabled, is_not_trusted FROM sys.foreign_keys
 WHERE parent_object_id = OBJECT_ID(N'dbo.ApplicationEvents');
 

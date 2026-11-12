@@ -1,12 +1,22 @@
-/* REVIEW BEFORE EXECUTION. Applies only ApplicationStages, never creates/drops a database.
+﻿/* REVIEW BEFORE EXECUTION. Applies only ApplicationStages, never creates/drops a database.
    Set @ExpectedDatabase to the database explicitly approved for deployment.
    Stop concurrent schema deployments; arrange backup/maintenance according to your deployment process.
-   This script has NOT been applied to the application database by Codex. */
+   This script has NOT been applied to the application database by Codex.
+   Run sqlcmd with -I (QUOTED_IDENTIFIER ON, as EF Core/SqlClient) and -f 65001 (UTF-8; the trigger message is Vietnamese).
+   Without them sqlcmd reads a file saved without BOM using the ANSI code page and creates objects with QUOTED_IDENTIFIER OFF;
+   the preflight checks below stop before any change in that case.
+     PowerShell: sqlcmd -S 'localhost\BB' -d 'SmartCvDb' -E -b -I -f 65001 -i '<approved copy>.sql'
+     CMD:        sqlcmd -S "localhost\BB" -d "SmartCvDb" -E -b -I -f 65001 -i "<approved copy>.sql" */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 DECLARE @ExpectedDatabase sysname = N'REVIEW_DATABASE_NAME_BEFORE_EXECUTION';
 IF @ExpectedDatabase = N'REVIEW_DATABASE_NAME_BEFORE_EXECUTION' OR DB_NAME() <> @ExpectedDatabase
     THROW 51035, N'Database has not been explicitly approved. Set and verify @ExpectedDatabase first.', 1;
+-- N'ị' must arrive as the single character U+1ECB (7883); otherwise the file was decoded with the wrong code page.
+IF LEN(N'ị') <> 1 OR UNICODE(N'ị') <> 7883
+    THROW 51035, N'Script text was decoded with the wrong code page; the trigger message would be corrupted. Run sqlcmd with -f 65001.', 1;
+IF SESSIONPROPERTY('QUOTED_IDENTIFIER') <> 1
+    THROW 51035, N'QUOTED_IDENTIFIER is OFF (sqlcmd default). Run sqlcmd with -I so objects match the EF Core migration.', 1;
 IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL
     THROW 51035, N'Missing EF migration history. Do not run this script on an unknown database.', 1;
 IF NOT EXISTS (SELECT 1 FROM dbo.__EFMigrationsHistory WHERE MigrationId = N'20261106142155_SeedJobs')
@@ -93,6 +103,10 @@ VALUES (N''20261112045258_ApplicationStages'', N''10.0.15'');');
         AND EXISTS (SELECT 1 FROM sys.trigger_events e WHERE e.object_id=OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange') AND e.type_desc=N'UPDATE')
         AND EXISTS (SELECT 1 FROM sys.trigger_events e WHERE e.object_id=OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange') AND e.type_desc=N'DELETE'))
         THROW 51035, N'ApplicationEvents protection trigger is missing or disabled.', 1;
+    IF NOT EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange')
+        AND uses_quoted_identifier = 1 AND uses_ansi_nulls = 1
+        AND CHARINDEX(N'Lịch sử quyết định chỉ được thêm, không được sửa hoặc xóa.', definition) > 0)
+        THROW 51035, N'ApplicationEvents trigger differs from the EF Core migration (SET options or message). Stop and investigate; no automatic repair.', 1;
     COMMIT TRANSACTION;
     SELECT N'ApplicationStages ready' AS DeploymentStatus;
 END TRY
