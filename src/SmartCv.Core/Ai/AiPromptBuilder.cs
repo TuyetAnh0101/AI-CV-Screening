@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using SmartCv.Core.Privacy;
 using SmartCv.Core.Scoring;
 
 namespace SmartCv.Core.Ai;
@@ -15,7 +16,16 @@ public static class AiPromptBuilder
 
     public static bool IsTruncated(string cvText, int maxCvChars) => cvText.Length > maxCvChars;
 
-    public static string BuildUserPrompt(JobProfile job, string cvText, int maxCvChars)
+    /// <summary>A37: dòng báo cho AI các chỗ đã che, để AI không trừ điểm vì thiếu thông tin liên hệ hay họ tên.</summary>
+    public static readonly string MaskedDataRule =
+        $"- Thông tin cá nhân trong CV đã được che để bảo vệ dữ liệu ứng viên: {PersonalDataMasker.EmailToken}, {PersonalDataMasker.PhoneToken}, " +
+        $"{PersonalDataMasker.LinkToken}, {PersonalDataMasker.NameToken}, {PersonalDataMasker.BirthDateToken}, {PersonalDataMasker.GenderToken} " +
+        "thay cho email, số điện thoại, đường dẫn mạng xã hội, họ tên, ngày/năm sinh và giới tính. " +
+        "Đây không phải thiếu sót của CV: không trừ điểm, không coi là thiếu thông tin liên hệ và không suy đoán nội dung bị che.";
+
+    /// <param name="cvText">Nội dung CV gửi AI: đã che thông tin cá nhân nếu <paramref name="personalDataMasked"/> là true.</param>
+    /// <param name="personalDataMasked">A37: true thì thêm <see cref="MaskedDataRule"/>; false giữ nguyên prompt như trước A37.</param>
+    public static string BuildUserPrompt(JobProfile job, string cvText, int maxCvChars, bool personalDataMasked = false)
     {
         var inv = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
@@ -40,6 +50,7 @@ public static class AiPromptBuilder
         sb.AppendLine("- Phân biệt kỹ năng đã dùng thực tế với kỹ năng chỉ được nhắc đến. CV chỉ ghi đang học / đang tìm hiểu thì không coi là thành thạo.");
         sb.AppendLine("- Đánh giá kinh nghiệm thực hành từ dự án, đồ án, khóa luận và thực tập khi CV có mô tả công việc, công nghệ hoặc kết quả cụ thể. Không tự quy đổi các dự án thành số năm làm việc.");
         sb.AppendLine("- Không đánh giá theo đặc điểm cá nhân không liên quan đến năng lực công việc (tên, giới tính, tuổi, quê quán, ảnh...).");
+        if (personalDataMasked) sb.AppendLine(MaskedDataRule);
 
         sb.AppendLine();
         sb.AppendLine("## NỘI DUNG CV (chữ đọc từ file, có thể có lỗi OCR như mất dấu chữ in hoa)");

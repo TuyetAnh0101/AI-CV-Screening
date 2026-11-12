@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Ai;
+using SmartCv.Core.Privacy;
 using SmartCv.Infrastructure.Gemini;
 
 namespace SmartCv.Infrastructure.Ai;
@@ -20,7 +21,10 @@ namespace SmartCv.Infrastructure.Ai;
 ///   404 = ModelUnavailable (model không tồn tại / đã bị gỡ), 429 = QuotaExceeded.
 /// - Model gọi luôn là request.Model do người gọi truyền vào (lượt chấm dùng model đã chụp); service KHÔNG tự đổi model.
 /// - Hết lượt thử: trả Failure, không bao giờ tạo điểm giả.
-/// Không ghi log API key, nội dung CV hay JSON của AI.
+/// - A37: khi Gemini:MaskPersonalData = true (mặc định), nội dung CV được che thông tin cá nhân (PersonalDataMasker) MỘT LẦN,
+///   TRƯỚC khi cắt bớt và tạo payload; mọi lần thử lại gửi cùng bản đã che. Xem trước (A10) và chấm chính thức (A11) đều đi qua đây.
+///   Che lỗi thì ném ngoại lệ (không bao giờ gửi bản gốc thay thế).
+/// Không ghi log API key, nội dung CV hay JSON của AI; về A37 chỉ ghi SỐ LƯỢNG đã che (mức Debug).
 /// </summary>
 public sealed class GeminiEvaluationService(
     HttpClient http,
@@ -50,7 +54,8 @@ public sealed class GeminiEvaluationService(
             return AiEvaluationResult.Failure(AiErrorKind.Configuration,
                 "Chưa cấu hình Gemini API key (User Secrets \"Gemini:ApiKey\")", attempts: 0);
 
-        var body = BuildRequestBody(request);
+        var cvText = PrepareCvText(request);   // A37: che trước khi cắt bớt và trước khi tạo payload
+        var body = BuildRequestBody(request, cvText);
         var url = $"models/{Uri.EscapeDataString(request.Model)}:generateContent";
         var maxAttempts = Math.Max(1, _options.MaxRetries + 1);
         AiEvaluationResult? last = null;
@@ -70,7 +75,7 @@ public sealed class GeminiEvaluationService(
 
                 if (response.IsSuccessStatusCode)
                 {
-                    last = ParseSuccess(text, request, attempt);
+                    last = ParseSuccess(text, request, cvText, attempt);
                     if (last.IsSuccess || last.ErrorKind == AiErrorKind.Blocked) return last;
                 }
                 else
@@ -130,7 +135,28 @@ public sealed class GeminiEvaluationService(
     }
 
     // ---------- Nội dung gửi đi ----------
-    private object BuildRequestBody(AiEvaluationRequest request)
+
+    /// <summary>
+    /// A37: nội dung CV sẽ gửi Gemini. Bật che: thay thông tin cá nhân bằng [EMAIL], [PHONE]...; log chỉ ghi số lượng.
+    /// Tắt che: trả nguyên nội dung gốc (hành vi trước A37).
+    /// </summary>
+    private string PrepareCvText(AiEvaluationRequest request)
+    {
+        if (!_options.MaskPersonalData) return request.CvText;
+
+        var masked = PersonalDataMasker.Mask(request.CvText, request.CandidateName);
+        logger.LogDebug(
+            "Đã che {Total} thông tin cá nhân trước khi gửi Gemini (email {Emails}, điện thoại {Phones}, link {Links}, họ tên {Names}, ngày sinh {BirthDates}, giới tính {Genders})",
+            masked.Total, masked.Emails, masked.Phones, masked.Links, masked.Names, masked.BirthDates, masked.Genders);
+        logger.LogDebug("Nguồn họ tên dùng để che: {NameSource}", masked.NameSource);
+        if (masked.NameSource == NameSource.None)
+            logger.LogInformation(
+                "Không xác định được họ tên ứng viên để che (CV chưa gắn ứng viên, không có nhãn họ tên, phần đầu CV không có tên đủ tin cậy). " +
+                "Email, số điện thoại, link, ngày sinh, giới tính vẫn được che.");
+        return masked.Text;
+    }
+
+    private object BuildRequestBody(AiEvaluationRequest request, string cvText)
     {
         var codes = request.Job.Skills.Select(s => s.SkillCode).ToArray();
 
@@ -147,7 +173,7 @@ public sealed class GeminiEvaluationService(
                 new
                 {
                     role = "user",
-                    parts = new[] { new { text = AiPromptBuilder.BuildUserPrompt(request.Job, request.CvText, _options.MaxCvCharacters) } }
+                    parts = new[] { new { text = AiPromptBuilder.BuildUserPrompt(request.Job, cvText, _options.MaxCvCharacters, _options.MaskPersonalData) } }
                 }
             },
             generationConfig = new
@@ -174,7 +200,7 @@ public sealed class GeminiEvaluationService(
     }
 
     // ---------- Đọc kết quả: candidates[0].content.parts[].text là chuỗi JSON theo responseSchema ----------
-    private AiEvaluationResult ParseSuccess(string responseText, AiEvaluationRequest request, int attempt)
+    private AiEvaluationResult ParseSuccess(string responseText, AiEvaluationRequest request, string sentCvText, int attempt)
     {
         try
         {
@@ -197,7 +223,7 @@ public sealed class GeminiEvaluationService(
                 return Invalid($"Gemini trả về rỗng (finishReason = {finish})", attempt, responseText);
 
             return JsonNode.Parse(json) is JsonObject data
-                ? Validate(data, json, request, attempt)
+                ? Validate(data, json, request, sentCvText, attempt)
                 : Invalid("JSON không phải đối tượng", attempt, json);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
@@ -207,7 +233,7 @@ public sealed class GeminiEvaluationService(
         }
     }
 
-    private AiEvaluationResult Validate(JsonObject data, string json, AiEvaluationRequest request, int attempt)
+    private AiEvaluationResult Validate(JsonObject data, string json, AiEvaluationRequest request, string sentCvText, int attempt)
     {
         var score = ReadNumber(data["score"]);
         if (score is null) return Invalid("JSON thiếu trường score", attempt, json);
@@ -245,7 +271,7 @@ public sealed class GeminiEvaluationService(
             Reasoning = reasoning,
             RawResponse = json,
             Attempts = attempt,
-            CvTruncated = AiPromptBuilder.IsTruncated(request.CvText, _options.MaxCvCharacters)
+            CvTruncated = AiPromptBuilder.IsTruncated(sentCvText, _options.MaxCvCharacters)   // theo bản thật sự gửi (đã che nếu bật A37)
         };
     }
 

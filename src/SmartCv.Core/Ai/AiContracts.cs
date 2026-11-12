@@ -11,13 +11,16 @@ public interface IAiEvaluator
 /// <summary>
 /// Dữ liệu gửi AI. Model, Temperature và SystemPrompt do NGƯỜI GỌI truyền vào, service không tự đọc prompt đang kích hoạt:
 /// xem trước (A10) dùng prompt đang kích hoạt, lượt chấm chính thức (A11/A12) dùng giá trị đã chụp lúc tạo lượt.
+/// CvText là nội dung GỐC; bản gửi Gemini thật được che thông tin cá nhân trong GeminiEvaluationService (A37).
+/// CandidateName (A37): họ tên ứng viên từ bảng Candidates để che trong CV; null khi CV chưa gắn ứng viên (khi đó đoán từ CV).
 /// </summary>
 public sealed record AiEvaluationRequest(
     string Model,
     decimal Temperature,
     string SystemPrompt,
     JobProfile Job,
-    string CvText);
+    string CvText,
+    string? CandidateName = null);
 
 /// <summary>
 /// Loại lỗi AI (không lưu database; database chỉ lưu ErrorMessage). Thêm ở CUỐI để giữ giá trị số cũ.

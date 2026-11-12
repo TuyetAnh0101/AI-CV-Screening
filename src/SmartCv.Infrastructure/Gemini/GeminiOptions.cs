@@ -48,4 +48,10 @@ public sealed class GeminiOptions
     /// <summary>Thời gian giả lập một lần gọi của AI giả.</summary>
     [Range(0, 60000)]
     public int FakeDelayMs { get; set; } = 800;
+
+    /// <summary>
+    /// A37: che email, số điện thoại, LinkedIn/Facebook/GitHub, họ tên, ngày sinh, giới tính trong CV trước khi gửi Gemini.
+    /// Mặc định BẬT. false: gửi nội dung gốc như trước A37 (chỉ dùng để so sánh điểm trước / sau khi che).
+    /// </summary>
+    public bool MaskPersonalData { get; set; } = true;
 }
