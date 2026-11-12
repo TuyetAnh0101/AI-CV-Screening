@@ -750,6 +750,29 @@ public class ResultsUiTests
     }
 
     [Fact]
+    public async Task Persistent_poll_errors_stop_after_three_failures_and_manual_refresh_recovers()
+    {
+        var api = new FakeResultsApi();
+        var (r, sp) = await OpenAsync(api, Nav("results?runId=4"));
+        await using var renderer = r;
+        using var services = sp;
+        api.ForceStatus = 500;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (!r.Text.Contains("Tạm dừng tự cập nhật")) await Task.Delay(20, deadline.Token);
+        Assert.Contains("Võ Thành Nam", r.Text);
+        Assert.DoesNotContain("SqlException", r.Text);
+        Assert.DoesNotContain("trang tự cập nhật mỗi 3 giây", r.Text);
+        var count = api.Calls.Count;
+        await Task.Delay(3200);
+        Assert.Equal(count, api.Calls.Count);
+        api.ForceStatus = null;
+        await r.ClickButtonAsync("Làm mới");
+        Assert.DoesNotContain("Tạm dừng tự cập nhật", r.Text);
+        Assert.Contains("Võ Thành Nam", r.Text);
+        Assert.True(api.Calls.Count > count);
+    }
+
+    [Fact]
     public async Task B10_timeout_is_connection_warning_and_recovers_on_next_tick()
     {
         var api = new FakeResultsApi();
