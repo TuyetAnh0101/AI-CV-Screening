@@ -1,0 +1,131 @@
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Applications
+@implements IDisposable
+@inject ApplicationApiClient Applications
+@inject EvaluationApiClient Evaluations
+@inject HrActorState ActorState
+
+<section class="decision-card" aria-labelledby="hr-title" aria-busy="@busy.ToString().ToLowerInvariant()">
+    <span class="eyebrow">HR WORKSPACE · HỒ SƠ #@Detail.ApplicationId</span>
+    <h2 id="hr-title">Quyết định của HR</h2>
+    <div class="current-stage @StageText.Css(current.Stage)">@StageText.Name(current.Stage)</div>
+    @if (current.RejectReason is not null) { <p>@StageText.Reason(current.RejectReason)</p> }
+    <p class="decision-meta">@(current.StageUpdatedAt is { } at ? $"Cập nhật {Display.VnTime(at)} · giờ Việt Nam" : "Chưa ghi nhận thay đổi giai đoạn")</p>
+    <p class="hint">AI gợi ý mức phù hợp. Quyết định tuyển dụng thuộc về HR.</p>
+    @if (message is not null) { <p class="feedback @(failed ? "is-error" : "is-success")" role="@(failed ? "alert" : "status")">@message</p> }
+    @if (!synced) { <button type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="RetryAsync">Tải lại quyết định và lịch sử</button> }
+    <fieldset disabled="@(busy || !synced)">
+        <legend class="visually-hidden">Cập nhật giai đoạn tuyển dụng</legend>
+        <label for="hr-stage">Chuyển sang</label>
+        <select id="hr-stage" class="form-select" value="@stage" @onchange="ChangeStage">
+            @foreach (var value in ApplicationStages.All) { <option value="@value">@StageText.Name(value)</option> }
+        </select>
+        @if (stage == ApplicationStages.Rejected)
+        {
+            <label for="hr-reason">Lý do loại <span aria-hidden="true">*</span></label>
+            <select id="hr-reason" class="form-select" @bind="reason" aria-required="true">
+                <option value="">Chọn lý do loại</option>
+                @foreach (var value in RejectReasons.All) { <option value="@value">@StageText.Reason(value)</option> }
+            </select>
+        }
+        <label for="hr-note">Ghi chú <small>(tùy chọn)</small></label>
+        <textarea id="hr-note" class="sc-input" rows="3" maxlength="500" @bind="note" @bind:event="oninput" aria-describedby="hr-note-count"></textarea>
+        <small id="hr-note-count">@note.Length/500 ký tự</small>
+        <label for="hr-actor">Tên HR <span aria-hidden="true">*</span></label>
+        <input id="hr-actor" class="sc-input" autocomplete="name" maxlength="100" @bind="actor" @bind:event="oninput" aria-required="true" />
+        @if (ActorState.StorageWarning is not null) { <p class="hint">@ActorState.StorageWarning</p> }
+        @if (validation is not null) { <p class="validation" role="status">@validation</p> }
+        <div class="actions"><button type="button" class="btn sc-btn-primary" disabled="@(!CanSave)" @onclick="SaveAsync">@(busy ? "Đang lưu..." : "Lưu quyết định")</button><button type="button" class="btn sc-btn-secondary" @onclick="Reset">Hủy thay đổi</button></div>
+    </fieldset>
+    <div class="history-heading"><h3>Lịch sử quyết định</h3><span>Mới nhất trước</span></div>
+    @if (busy && !synced) { <p role="status">Đang tải quyết định và lịch sử...</p> }
+    else if (eventsError is not null) { <p role="alert">@eventsError</p> }
+    else
+    {
+        <div class="history-list" role="region" aria-label="Lịch sử quyết định, cuộn để xem thêm" tabindex="@(events.Count > 0 ? 0 : -1)">
+            <StageTimeline Events="events" />
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public EvaluationDetailDto Detail { get; set; } = new();
+    private EvaluationDetailDto current = new();
+    private List<ApplicationEventDto> events = [];
+    private readonly CancellationTokenSource lifetime = new();
+    private bool busy, synced, failed, disposed;
+    private int loaded;
+    private string stage = "New", reason = "", note = "", actor = "";
+    private string? message, eventsError;
+    private string? validation => StageChangeRules.Validate(stage, stage == "Rejected" ? reason : null, note, actor).Error;
+    private bool CanSave => !busy && synced && current.StageVersion != Guid.Empty && validation is null
+        && (stage != current.Stage || (stage == "Rejected" ? reason : null) != current.RejectReason);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded == Detail.EvaluationId) return;
+        loaded = Detail.EvaluationId; current = Detail; Reset(); busy = true;
+        try { await LoadHistoryAsync(); synced = eventsError is null; }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !RendererInfo.IsInteractive) return;
+        await ActorState.EnsureLoadedAsync();
+        if (!disposed && string.IsNullOrWhiteSpace(actor)) { actor = ActorState.Actor ?? ""; StateHasChanged(); }
+    }
+    private void ChangeStage(ChangeEventArgs e) { stage = e.Value?.ToString() ?? ""; if (stage != "Rejected") reason = ""; }
+    private void Reset() { stage = current.Stage; reason = current.RejectReason ?? ""; note = ""; message = null; failed = false; }
+    private async Task LoadHistoryAsync()
+    {
+        var result = await Applications.GetEventsAsync(Detail.ApplicationId, lifetime.Token);
+        if (disposed) return;
+        eventsError = result.IsSuccess ? null : "Không tải được lịch sử. Hãy tải lại trước khi quyết định.";
+        if (result.IsSuccess) events = result.Data!.Where(e => e.ApplicationId == Detail.ApplicationId).ToList();
+    }
+    private async Task<bool> SynchronizeAsync()
+    {
+        synced = false;
+        var result = await Evaluations.GetAsync(Detail.EvaluationId, lifetime.Token);
+        if (disposed) return false;
+        if (!result.IsSuccess || result.Data?.ApplicationId != Detail.ApplicationId || result.Data.EvaluationId != Detail.EvaluationId) return false;
+        current = result.Data; stage = current.Stage; reason = current.RejectReason ?? "";
+        await LoadHistoryAsync(); synced = eventsError is null; return synced;
+    }
+    private async Task RetryAsync()
+    {
+        if (busy) return; busy = true;
+        try
+        {
+            if (await SynchronizeAsync()) { failed = false; message = "Đã tải lại quyết định và lịch sử mới nhất."; }
+            else { failed = true; message = "Chưa đồng bộ được dữ liệu. Giữ nguyên quyết định đã xác nhận; hãy thử tải lại."; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+    private async Task SaveAsync()
+    {
+        if (!CanSave) return;
+        busy = true; message = null;
+        var request = new ChangeStageRequest { ToStage = stage, RejectReason = stage == "Rejected" ? reason : null,
+            Note = note, Actor = actor.Trim(), ExpectedStage = current.Stage, ExpectedStageVersion = current.StageVersion };
+        try
+        {
+            await ActorState.SetAsync(request.Actor);
+            var response = await Applications.ChangeStageAsync(Detail.ApplicationId, request, lifetime.Token);
+            if (disposed) return;
+            failed = !response.IsSuccess;
+            message = response.IsSuccess ? (response.Data!.Outcome == "Unchanged" ? "Không có thay đổi. Không tạo lịch sử mới." : "Đã lưu quyết định HR.")
+                : response.StatusCode == 409 ? "Hồ sơ vừa được HR khác thay đổi. Đã yêu cầu tải lại; quyết định của bạn chưa được lưu."
+                : response.StatusCode == 400 ? "Dữ liệu quyết định không hợp lệ. Kiểm tra và tải lại trước khi lưu."
+                : response.StatusCode == 404 ? "Không tìm thấy hồ sơ. Hãy quay lại bảng xếp hạng."
+                : "Chưa xác nhận được kết quả lưu. Không tự gửi lại; hãy kiểm tra quyết định và lịch sử mới nhất.";
+            if (response.IsSuccess) note = "";
+            if (!await SynchronizeAsync()) { failed = true; message += " Chưa đồng bộ được dữ liệu. Bấm Tải lại quyết định và lịch sử."; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}
