@@ -5,6 +5,7 @@ using SmartCv.Core.Contracts;
 using SmartCv.Core.Options;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
+using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
 
 namespace SmartCv.Api.Endpoints;
@@ -28,7 +29,8 @@ public static class EvaluationEndpoints
         return app;
     }
 
-    private static async Task<Results<Ok<EvaluationDetailDto>, NotFound>> GetAsync(int id, SmartCvDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<EvaluationDetailDto>, NotFound>> GetAsync(int id, SmartCvDbContext db,
+        IOptions<ReviewFlagOptions> flagOptions, CancellationToken ct)
     {
         var e = await db.Evaluations.AsNoTracking()
             .Where(x => x.EvaluationId == id)
@@ -77,8 +79,11 @@ public static class EvaluationEndpoints
         if (e.Status == EvaluationStatuses.Completed && e.FinalScore is not null)
             rank = 1 + await db.Evaluations.CountAsync(x => x.RunId == e.RunId && x.Application.JobId == e.JobId && x.Status == EvaluationStatuses.Completed && x.FinalScore > e.FinalScore, ct);
 
+        var review = (await EvaluationReviewReader.ReadAsync(db.Evaluations.Where(x => x.EvaluationId == id), flagOptions.Value, ct))[id];
         return TypedResults.Ok(new EvaluationDetailDto
         {
+            ReviewFlags = review.Flags,
+            ExtractedTextLength = review.TextLength,
             EvaluationId = e.EvaluationId,
             Status = e.Status,
             ErrorMessage = e.ErrorMessage,

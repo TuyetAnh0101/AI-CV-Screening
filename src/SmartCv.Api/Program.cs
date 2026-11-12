@@ -3,6 +3,7 @@ using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
 using SmartCv.Api.Middleware;
 using SmartCv.Core.Options;
+using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,6 +29,11 @@ builder.Services.AddOptions<ScoringOptions>()
     .Validate(o => o.HasValidWeights(), "Scoring: trọng số không được âm, KeywordWeight + AiWeight và 4 trọng số Keyword* phải có tổng bằng 1.")
     .Validate(o => o.HasValidScoreLimits(), "Scoring: PassThreshold và MissingMustHaveCap phải nằm trong khoảng 0–100.")
     .Validate(o => o.PollIntervalSeconds >= 1, "Scoring: PollIntervalSeconds phải từ 1 giây trở lên.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<ReviewFlagOptions>()
+    .Bind(builder.Configuration.GetSection(ReviewFlagOptions.SectionName))
+    .Validate(o => o.HasValidThresholds(), "ReviewFlags: ScoreGap phải > 0 và <= 100, MinTextLength > 0, CappedHighAiScore từ 0 đến 100.")
     .ValidateOnStart();
 
 // A10: giới hạn tần suất riêng cho API chấm thử (mỗi lần gọi tốn quota Gemini).

@@ -11,7 +11,7 @@ using SmartCv.Infrastructure.Scoring;
 
 namespace SmartCv.Api.Endpoints;
 
-public static class RunEndpoints
+public static partial class RunEndpoints
 {
     public static WebApplication MapRunEndpoints(this WebApplication app)
     {
@@ -24,6 +24,7 @@ public static class RunEndpoints
         group.MapGet("/latest", LatestAsync);
         group.MapGet("/{id:int}", GetAsync);
         group.MapGet("/{id:int}/ranking", RankingAsync);
+        group.MapGet("/{id:int}/compare", CompareAsync);
         return app;
     }
 
@@ -162,7 +163,7 @@ public static class RunEndpoints
 
     // ---------- GET /api/runs/{id}/ranking?jobId= ----------
     private static async Task<Results<Ok<RankingResponse>, NotFound<ProblemDetailsLite>>> RankingAsync(
-        int id, SmartCvDbContext db, CancellationToken ct, int? jobId = null)
+        int id, SmartCvDbContext db, IOptions<ReviewFlagOptions> flagOptions, CancellationToken ct, int? jobId = null)
     {
         var run = await db.EvaluationRuns.AsNoTracking()
             .Where(r => r.RunId == id)
@@ -197,6 +198,8 @@ public static class RunEndpoints
             })
             .ToListAsync(ct);
 
+        var reviews = await EvaluationReviewReader.ReadAsync(db.Evaluations.Where(e => e.RunId == id && e.Application.JobId == job.JobId), flagOptions.Value, ct);
+
         // Xếp hạng: điểm cao trước; bằng điểm thì cùng hạng (1, 2, 2, 4); chưa có điểm đứng cuối, không có hạng
         var scored = rows.Where(r => r.Status == EvaluationStatuses.Completed && r.FinalScore is not null).OrderByDescending(r => r.FinalScore).ThenBy(r => r.FileName).ThenBy(r => r.EvaluationId).ToList();
         var ranks = scored.Select((row, index) => new { Score = row.FinalScore!.Value, Rank = index + 1 })
@@ -206,6 +209,7 @@ public static class RunEndpoints
             .Select(x => new RankingItemDto
             {
                 Rank = x.Rank,
+                ReviewFlags = reviews[x.Row.EvaluationId].Flags,
                 EvaluationId = x.Row.EvaluationId,
                 ApplicationId = x.Row.ApplicationId,
                 Stage = x.Row.Stage,
@@ -244,6 +248,7 @@ public static class RunEndpoints
             LevelCounts = levelCounts,
             StageCounts = ApplicationStages.All.ToDictionary(s => s, s => items.Count(i => i.Stage == s)),
             PassCount = items.Count(i => i.Rank != null && i.PredictedPass == true),
+            FlaggedCount = items.Count(i => i.ReviewFlags.Count > 0),
             Items = items
         });
     }
