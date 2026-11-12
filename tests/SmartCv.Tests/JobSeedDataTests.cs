@@ -86,11 +86,11 @@ public class JobSeedDataTests
     }
 
     [Fact]
-    public void Migrations_are_InitialCreate_then_SeedJobs_and_model_has_no_pending_changes()
+    public void Migrations_are_InitialCreate_then_SeedJobs_then_ApplicationStages_and_model_has_no_pending_changes()
     {
         using var db = CreateContext();
         Assert.Equal(
-            new[] { "20261106132922_InitialCreate", "20261106142155_SeedJobs" },
+            new[] { "20261106132922_InitialCreate", "20261106142155_SeedJobs", "20261112045258_ApplicationStages" },
             db.Database.GetMigrations().ToArray());
         Assert.False(db.Database.HasPendingModelChanges());
     }

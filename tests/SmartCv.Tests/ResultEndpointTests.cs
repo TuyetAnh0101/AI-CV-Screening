@@ -89,6 +89,9 @@ public class ResultEndpointTests
         Assert.Equal(3, ranking.PassCount);
         Assert.Equal("KeywordOnly", ranking.Items[4].ScoreSource);
         Assert.Null(ranking.Items[4].AiScore);
+        Assert.Equal(6, ranking.StageCounts.Count);
+        Assert.Equal(7, ranking.StageCounts["New"]);
+        Assert.All(ranking.Items, i => { Assert.Equal("New", i.Stage); Assert.Null(i.StageUpdatedAt); });
         foreach (var item in ranking.Items)
         {
             var detail = (await client.GetFromJsonAsync<EvaluationDetailDto>($"/api/evaluations/{item.EvaluationId}"))!;
@@ -98,6 +101,8 @@ public class ResultEndpointTests
                 (detail.PromptVersionName, detail.ModelName, detail.Temperature, detail.KeywordWeight, detail.AiWeight, detail.PassThreshold));
             Assert.Null(detail.YearsExperience);
             Assert.Null(detail.CandidateName);
+            Assert.Equal((item.Stage, item.RejectReason, item.StageUpdatedAt, item.StageVersion),
+                (detail.Stage, detail.RejectReason, detail.StageUpdatedAt, detail.StageVersion));
             if (item.Rank == 1)
             {
                 Assert.Equal(3.2m, detail.Gpa);
@@ -107,6 +112,20 @@ public class ResultEndpointTests
             else Assert.Null(detail.Gpa);
         }
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/runs/{id}/ranking?jobId=99999")).StatusCode);
+
+        var first = ranking.Items[0];
+        using var decision = await client.PatchAsJsonAsync($"/api/applications/{first.ApplicationId}/stage",
+            new ChangeStageRequest { ToStage = "Rejected", RejectReason = "MissingSkills", Actor = "HR", ExpectedStageVersion = first.StageVersion });
+        Assert.Equal(HttpStatusCode.OK, decision.StatusCode);
+        var updated = (await client.GetFromJsonAsync<RankingResponse>($"/api/runs/{id}/ranking"))!;
+        Assert.Equal(6, updated.StageCounts["New"]);
+        Assert.Equal(1, updated.StageCounts["Rejected"]);
+        Assert.Equal(7, updated.StageCounts.Values.Sum());
+        Assert.Equal(ranking.Items.Select(i => i.FinalScore), updated.Items.Select(i => i.FinalScore));
+        var rejected = updated.Items.Single(i => i.ApplicationId == first.ApplicationId);
+        var rejectedDetail = (await client.GetFromJsonAsync<EvaluationDetailDto>($"/api/evaluations/{first.EvaluationId}"))!;
+        Assert.Equal(("Rejected", "MissingSkills", rejected.StageUpdatedAt, rejected.StageVersion),
+            (rejectedDetail.Stage, rejectedDetail.RejectReason, rejectedDetail.StageUpdatedAt, rejectedDetail.StageVersion));
     }
 
     [Theory]

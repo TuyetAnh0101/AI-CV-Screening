@@ -17,7 +17,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -41,6 +41,28 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Property<int>("JobId")
                         .HasColumnType("int");
 
+                    b.Property<string>("RejectReason")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Stage")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("New");
+
+                    b.Property<DateTime?>("StageUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("StageVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.HasKey("ApplicationId")
                         .HasName("PK_Applications");
 
@@ -50,7 +72,81 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasIndex("JobId")
                         .HasDatabaseName("IX_Applications_JobId");
 
-                    b.ToTable("Applications", (string)null);
+                    b.HasIndex("JobId", "Stage")
+                        .HasDatabaseName("IX_Applications_Job_Stage");
+
+                    b.ToTable("Applications", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Applications_RejectReason", "[RejectReason] IS NULL OR [RejectReason] COLLATE Latin1_General_100_BIN2 IN (N'MissingSkills', N'NotEnoughExperience', N'OtherRequirement', N'CandidateWithdrew', N'PositionFilled', N'Duplicate')");
+
+                            t.HasCheckConstraint("CK_Applications_RejectReason_Stage", "([Stage] = N'Rejected' AND [RejectReason] IS NOT NULL) OR ([Stage] <> N'Rejected' AND [RejectReason] IS NULL)");
+
+                            t.HasCheckConstraint("CK_Applications_Stage", "[Stage] COLLATE Latin1_General_100_BIN2 IN (N'New', N'Reviewing', N'Shortlisted', N'Interview', N'Rejected', N'OnHold')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.ApplicationEvent", b =>
+                {
+                    b.Property<long>("EventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("EventId"));
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("ApplicationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("FromStage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("ToStage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("EventId")
+                        .HasName("PK_ApplicationEvents");
+
+                    b.HasIndex("ApplicationId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_ApplicationEvents_Application_CreatedAt");
+
+                    b.ToTable("ApplicationEvents", null, t =>
+                        {
+                            t.HasTrigger("TR_ApplicationEvents_NoChange");
+
+                            t.HasCheckConstraint("CK_ApplicationEvents_Actor", "LEN(LTRIM(RTRIM([Actor]))) > 0");
+
+                            t.HasCheckConstraint("CK_ApplicationEvents_FromStage", "[FromStage] COLLATE Latin1_General_100_BIN2 IN (N'New', N'Reviewing', N'Shortlisted', N'Interview', N'Rejected', N'OnHold')");
+
+                            t.HasCheckConstraint("CK_ApplicationEvents_RejectReason", "[RejectReason] IS NULL OR [RejectReason] COLLATE Latin1_General_100_BIN2 IN (N'MissingSkills', N'NotEnoughExperience', N'OtherRequirement', N'CandidateWithdrew', N'PositionFilled', N'Duplicate')");
+
+                            t.HasCheckConstraint("CK_ApplicationEvents_RejectReason_Stage", "([ToStage] = N'Rejected' AND [RejectReason] IS NOT NULL) OR ([ToStage] <> N'Rejected' AND [RejectReason] IS NULL)");
+
+                            t.HasCheckConstraint("CK_ApplicationEvents_ToStage", "[ToStage] COLLATE Latin1_General_100_BIN2 IN (N'New', N'Reviewing', N'Shortlisted', N'Interview', N'Rejected', N'OnHold')");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Candidate", b =>
@@ -1185,6 +1281,18 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Navigation("Job");
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.ApplicationEvent", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Application", "Application")
+                        .WithMany("Events")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ApplicationEvents_Applications");
+
+                    b.Navigation("Application");
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Cv", b =>
                 {
                     b.HasOne("SmartCv.Core.Entities.Candidate", "Candidate")
@@ -1306,6 +1414,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>
                 {
                     b.Navigation("Evaluations");
+
+                    b.Navigation("Events");
 
                     b.Navigation("HrLabels");
                 });

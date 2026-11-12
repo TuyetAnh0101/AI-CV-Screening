@@ -187,6 +187,7 @@ public static class RunEndpoints
             .Select(e => new
             {
                 e.EvaluationId, e.ApplicationId, e.Application.CvId,
+                e.Application.Stage, e.Application.RejectReason, e.Application.StageUpdatedAt, e.Application.StageVersion,
                 FileName = e.Application.Cv.OriginalFileName,
                 CandidateName = e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
                 e.KeywordScore, e.AiScore, e.FinalScore, e.ScoreSource, e.FitLabel, e.PredictedPass, e.YearsExperience,
@@ -207,6 +208,10 @@ public static class RunEndpoints
                 Rank = x.Rank,
                 EvaluationId = x.Row.EvaluationId,
                 ApplicationId = x.Row.ApplicationId,
+                Stage = x.Row.Stage,
+                RejectReason = x.Row.RejectReason,
+                StageUpdatedAt = x.Row.StageUpdatedAt is { } su ? DateTime.SpecifyKind(su, DateTimeKind.Utc) : null,
+                StageVersion = x.Row.StageVersion,
                 CvId = x.Row.CvId,
                 FileName = x.Row.FileName,
                 CandidateName = x.Row.CandidateName,
@@ -237,6 +242,7 @@ public static class RunEndpoints
             JobTitle = job.Title,
             Jobs = jobs,
             LevelCounts = levelCounts,
+            StageCounts = ApplicationStages.All.ToDictionary(s => s, s => items.Count(i => i.Stage == s)),
             PassCount = items.Count(i => i.Rank != null && i.PredictedPass == true),
             Items = items
         });
