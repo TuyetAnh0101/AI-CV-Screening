@@ -12,6 +12,7 @@ using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Options;
 using web::SmartCv.Web.Components.Pages;
+using web::SmartCv.Web.Components.Upload;
 using web::SmartCv.Web.Helpers;
 using web::SmartCv.Web.Models;
 using web::SmartCv.Web.Services;
@@ -243,13 +244,31 @@ public class RunProgressUiTests
         /// <summary>Bấm nút có chữ cho trước; trả Task của handler (để test bấm lặp khi request đang chạy).</summary>
         public Task<Task> ClickAsync(string text) => Dispatcher.InvokeAsync<Task>(() =>
         {
-            var frames = Frames();
-            var index = frames.FindIndex(f => (f.FrameType == RenderTreeFrameType.Text && f.TextContent.Contains(text))
-                                              || (f.FrameType == RenderTreeFrameType.Markup && f.MarkupContent.Contains(text)));
-            Assert.True(index >= 0, $"Không thấy nút \"{text}\"");
-            var handler = frames.Take(index).Last(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onclick");
-            return DispatchEventAsync(handler.AttributeEventHandlerId, null, new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+            var handler = ButtonHandler(rootId, text);
+            Assert.NotEqual(0UL, handler);
+            return DispatchEventAsync(handler, null, new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         });
+
+        private ulong ButtonHandler(int componentId, string text)
+        {
+            var current = GetCurrentRenderTreeFrames(componentId);
+            for (var i = 0; i < current.Count; i++)
+            {
+                var frame = current.Array[i];
+                if (frame.FrameType == RenderTreeFrameType.Component)
+                {
+                    var child = ButtonHandler(frame.ComponentId, text);
+                    if (child != 0) return child;
+                }
+                if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != "button") continue;
+                var subtree = current.Array.Skip(i).Take(frame.ElementSubtreeLength).ToList();
+                if (!subtree.Any(f => (f.FrameType == RenderTreeFrameType.Text && f.TextContent.Contains(text))
+                    || (f.FrameType == RenderTreeFrameType.Markup && f.MarkupContent.Contains(text)))) continue;
+                var click = subtree.FirstOrDefault(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onclick");
+                if (click.AttributeEventHandlerId != 0) return click.AttributeEventHandlerId;
+            }
+            return 0; // Instructional prose containing a button's label is not a clickable element.
+        }
 
         private List<RenderTreeFrame> AnalyzeButtonAttributes()
         {
@@ -262,6 +281,8 @@ public class RunProgressUiTests
         }
 
         public bool AnalyzeButtonDisabled => Dispatcher.InvokeAsync(() => AnalyzeButtonAttributes().Any(f => f.AttributeName == "disabled")).Result;
+        public DateTime? ProgressUpdatedAt => Dispatcher.InvokeAsync(() => Frames().Where(f => f.FrameType == RenderTreeFrameType.Component)
+            .Select(f => f.Component).OfType<RunProgressPanel>().Single().LastUpdated).Result;
 
         /// <summary>Bấm nút "Phân tích hồ sơ" (gọi thẳng handler kể cả khi nút đang khóa, để kiểm tra chặn bấm lặp).</summary>
         public Task<Task> ClickAnalyzeAsync() => Dispatcher.InvokeAsync<Task>(() => DispatchEventAsync(
@@ -585,6 +606,72 @@ public class RunProgressUiTests
         var total = calls.Count;
         await Task.Delay(200);
         Assert.Equal(total, calls.Count);
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(0)]
+    public async Task Persistent_progress_failure_stops_after_three_errors_and_explicit_retry_recovers(int status)
+    {
+        var calls = 0;
+        var recovered = 0;
+        var api = new FakeApi
+        {
+            GetRun = id =>
+            {
+                var n = Interlocked.Increment(ref calls);
+                if (Volatile.Read(ref recovered) != 0) return Task.FromResult(Json(Run(RunStatuses.Completed, processed: 2, percent: 100, id: id,
+                    items: [new() { EvaluationId = 1, Status = EvaluationStatuses.Completed, ScoreSource = ScoreSources.Combined, AiScore = 80 },
+                            new() { EvaluationId = 2, Status = EvaluationStatuses.Completed, ScoreSource = ScoreSources.Combined, AiScore = 70 }])));
+                if (n == 1) return Task.FromResult(Json(Run(RunStatuses.Running, processed: 1, percent: 50, id: id)));
+                if (status == 0) throw new HttpRequestException("Synthetic offline API");
+                return Task.FromResult(Problem(status, "Synthetic server failure"));
+            }
+        };
+        using var services = Services(api, new TestNavigationManager("https://app.test/upload?runId=7"));
+        await using var r = await OpenAsync(services);
+        await WaitUntil(() => r.Text.Contains("Tạm dừng tự cập nhật sau 3 lần lỗi"), "dừng polling sau lỗi liên tiếp");
+        Assert.Contains("Lượt phân tích #7", r.Text);
+        Assert.DoesNotContain("Tự động cập nhật mỗi 2 giây", r.Text);
+        Assert.DoesNotContain("Synthetic", r.Text);
+        Assert.Equal(4, calls);
+        await Task.Delay(200);
+        Assert.Equal(4, calls);
+        Interlocked.Exchange(ref recovered, 1);
+        await await r.ClickAsync("Thử lại ngay");
+        await WaitUntil(() => r.Text.Contains("Đã phân tích xong 2 hồ sơ"), "khôi phục sau retry chủ động");
+        Assert.Equal(5, calls);
+        Assert.DoesNotContain(api.Calls, c => c.StartsWith("POST", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(401)]
+    [InlineData(403)]
+    [InlineData(409)]
+    public async Task Non_retryable_progress_status_stops_without_repeated_requests(int status)
+    {
+        var api = new FakeApi { GetRun = _ => Task.FromResult(Problem(status, "Không thể đọc lượt này")) };
+        using var services = Services(api, new TestNavigationManager("https://app.test/upload?runId=7"));
+        await using var r = await OpenAsync(services);
+        await WaitUntil(() => r.Text.Contains("Không tải được tiến độ"), "báo lỗi GET không thể retry tự động");
+        await Task.Delay(200);
+        Assert.Single(api.Calls, c => c == "GET /api/runs/7");
+    }
+
+    [Fact]
+    public async Task Failed_manual_retry_keeps_last_confirmed_progress_timestamp()
+    {
+        var calls = 0;
+        var api = new FakeApi { GetRun = id => Task.FromResult(Interlocked.Increment(ref calls) == 1
+            ? Json(Run(RunStatuses.Running, processed: 1, id: id)) : Problem(500, "Synthetic server failure")) };
+        using var services = Services(api, new TestNavigationManager("https://app.test/upload?runId=7"));
+        await using var r = await OpenAsync(services);
+        await WaitUntil(() => r.Text.Contains("Tạm thời không cập nhật được tiến độ"), "đã có dữ liệu cũ và lần hỏi mới lỗi");
+        var lastConfirmed = r.ProgressUpdatedAt;
+        Assert.NotNull(lastConfirmed);
+        await await r.ClickAsync("Thử lại ngay");
+        Assert.Equal(lastConfirmed, r.ProgressUpdatedAt);
     }
 
     [Fact]

@@ -17,10 +17,9 @@ public sealed class CvExtractionWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await RequeuePendingAsync(stoppingToken);
-
         try
         {
+            await RequeuePendingAsync(stoppingToken);
             await foreach (var cvId in queue.DequeueAllAsync(stoppingToken))
             {
                 try
@@ -49,24 +48,38 @@ public sealed class CvExtractionWorker(
 
     private async Task RequeuePendingAsync(CancellationToken ct)
     {
-        try
+        var failures = 0;
+        while (true)
         {
-            using var scope = scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
-            var pending = await db.Cvs.AsNoTracking()
-                .Where(c => c.ExtractionStatus == ExtractionStatuses.Pending)
-                .OrderBy(c => c.UploadedAt)
-                .Select(c => c.CvId)
-                .ToListAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+                var pending = await db.Cvs.AsNoTracking()
+                    .Where(c => c.ExtractionStatus == ExtractionStatuses.Pending)
+                    .OrderBy(c => c.UploadedAt)
+                    .Select(c => c.CvId)
+                    .ToListAsync(ct);
 
-            foreach (var id in pending) await queue.EnqueueAsync(id, ct);
+                foreach (var id in pending) await queue.EnqueueAsync(id, ct);
 
-            if (pending.Count > 0)
-                logger.LogInformation("Xếp lại {Count} CV đang chờ đọc chữ", pending.Count);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "Không nạp được danh sách CV đang chờ đọc chữ (kiểm tra kết nối database)");
+                if (pending.Count > 0)
+                    logger.LogInformation("Xếp lại {Count} CV đang chờ đọc chữ", pending.Count);
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                if (ct.IsCancellationRequested)
+                    throw new OperationCanceledException("Pending CV recovery cancelled with the worker.", ex, ct);
+                failures++;
+                var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(failures - 1, 5))));
+                logger.LogError(ex, "Không nạp được danh sách CV đang chờ đọc chữ; thử lại sau {Seconds} giây (lần {Attempt})",
+                    delay.TotalSeconds, failures);
+                // Only retry the pending-ID read. The queue deduplicates IDs; no OCR or AI call is replayed here.
+                await Task.Delay(delay, ct);
+            }
         }
     }
 }
