@@ -28,7 +28,8 @@ public class PromptTestFlowTests
             root = AssignRootComponentId(InstantiateComponent(typeof(PromptTestPanel)));
             await RenderRootComponentAsync(root, ParameterView.FromDictionary(new Dictionary<string, object?> { ["RunToken"] = "7" }));
         });
-        public string Text => Dispatcher.InvokeAsync(() => { var r = GetCurrentRenderTreeFrames(root); return string.Join(" ", r.Array.Take(r.Count).Select(f => f.FrameType == RenderTreeFrameType.Text ? f.TextContent : f.FrameType == RenderTreeFrameType.Markup ? f.MarkupContent : "")); }).Result;
+        // Adjacent text frames are adjacent DOM text: joining with a space turns "#" + "8" into "# 8".
+        public string Text => Dispatcher.InvokeAsync(() => { var r = GetCurrentRenderTreeFrames(root); return string.Concat(r.Array.Take(r.Count).Select(f => f.FrameType == RenderTreeFrameType.Text ? f.TextContent : f.FrameType == RenderTreeFrameType.Markup ? f.MarkupContent : "")); }).Result;
         public Task ShowToken(string token) => Dispatcher.InvokeAsync(async () =>
         {
             if (root < 0) root = AssignRootComponentId(InstantiateComponent(typeof(PromptTestPanel)));
@@ -163,6 +164,7 @@ public class PromptTestFlowTests
             var root = await renderer.RenderComponentAsync<PromptTestPanel>(ParameterView.FromDictionary(new Dictionary<string, object?> { ["RunToken"] = "7", ["Versions"] = new List<PromptVersionDto> { new() { PromptVersionId = 1, VersionName = "v1" } } }));
             return WebUtility.HtmlDecode(root.ToHtmlString());
         });
+        Assert.Contains("Lượt #7", html);
         Assert.Contains("75%", html); Assert.Contains("6 Đạt", html); Assert.Contains("4 Không đạt", html); Assert.Contains("Đánh giá hoàn thành", html); Assert.Contains("1 CV lỗi", html); Assert.Contains("progressbar", html); Assert.Equal(0, s.Posts);
     }
     private sealed class ManualClock : TimeProvider
@@ -189,6 +191,8 @@ public class PromptTestFlowTests
         await renderer.Event("onclick","Chạy đánh giá",new MouseEventArgs());
         await renderer.Event("onclick","Xác nhận chạy đánh giá",new MouseEventArgs());
         await renderer.ShowToken("7"); // URL parameter has not caught up to the new run yet.
+        Assert.Equal(8, server.RunId);
+        Assert.Equal(2, server.Request!.PromptVersionId);
         Assert.Contains("#8",renderer.Text);Assert.Contains("v2",renderer.Text);Assert.Equal(1,server.Posts);
     }
 }

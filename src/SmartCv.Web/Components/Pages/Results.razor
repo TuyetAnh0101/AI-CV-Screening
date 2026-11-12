@@ -96,7 +96,7 @@
                 <div class="notice is-info" role="status">
                     <span class="notice-icon processing-indicator" aria-hidden="true">↻</span>
                     <span>
-                        <strong>@(CurrentStatus == RunStatuses.Queued ? "Đang chờ chấm" : "Đang chấm") @(meta is null ? "" : $"{meta.Processed}/{meta.Total} CV")</strong> — trang tự cập nhật mỗi 3 giây.
+                        <strong>@(CurrentStatus == RunStatuses.Queued ? "Đang chờ chấm" : "Đang chấm") @(meta is null ? "" : $"{meta.Processed}/{meta.Total} CV")</strong> — @(pollingStopped ? "đã tạm dừng tự cập nhật; bấm Làm mới để tiếp tục." : "trang tự cập nhật mỗi 3 giây.")
                         Số đã xử lý bao gồm cả CV lỗi, không phải số CV chấm thành công.
                     </span>
                 </div>
@@ -231,6 +231,8 @@
     private List<RunItemDto> progressItems = [];
     private bool stageInteractionBusy;
     private int stageRevision;
+    private int consecutivePollFailures;
+    private bool pollingStopped;
 
     private void StageInteractionChanged(bool busy)
     {
@@ -287,6 +289,7 @@
                     if (disposed || ct.IsCancellationRequested || version != loadVersion || stageInteractionBusy || revision != stageRevision) return;
                     if (result.IsSuccess && progress.IsSuccess)
                     {
+                        consecutivePollFailures = 0;
                         ranking = result.Data!;
                         var r = progress.Data!;
                         meta = new(r.RunId, r.Status, r.ModelName, r.CreatedAt, r.TotalItems, r.ProcessedItems);
@@ -299,6 +302,12 @@
                         pollingWarning = "Chưa cập nhật được kết quả từ API. Giữ dữ liệu gần nhất; sẽ thử lại sau 3 giây. Bạn có thể bấm Làm mới.";
                         stop = result.StatusCode is 404 or 401 or 403 || progress.StatusCode is 404 or 401 or 403;
                         if (stop) pollingWarning = "Không thể tiếp tục tự cập nhật lượt chấm này. Bấm Làm mới để kiểm tra lại.";
+                        else if (++consecutivePollFailures >= 3)
+                        {
+                            stop = true;
+                            pollingWarning = "Tạm dừng tự cập nhật sau 3 lần lỗi liên tiếp. Giữ dữ liệu gần nhất; kiểm tra API rồi bấm Làm mới để tiếp tục.";
+                        }
+                        if (stop) pollingStopped = true;
                     }
                     StateHasChanged();
                 });
@@ -346,6 +355,8 @@
         if (disposed) return;
         stageInteractionBusy = false;
         ++stageRevision;
+        consecutivePollFailures = 0;
+        pollingStopped = false;
         pollCts?.Cancel();
         pollCts?.Dispose();
         pollCts = null;

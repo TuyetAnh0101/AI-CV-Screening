@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Options;
+using SmartCv.Api.Middleware;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Data;
 
@@ -14,7 +15,8 @@ public class HealthController(
     IHttpClientFactory httpClientFactory,
     IOptions<GeminiOptions> geminiOptions,
     IOptions<ScoringOptions> scoringOptions,
-    IWebHostEnvironment env) : ControllerBase
+    IWebHostEnvironment env,
+    ILogger<HealthController> logger) : ControllerBase
 {
     // GET /api/health/database
     [HttpGet("database")]
@@ -26,14 +28,29 @@ public class HealthController(
         {
             await db.Database.OpenConnectionAsync(ct);
             var conn = db.Database.GetDbConnection();
-            var result = new { status = "OK", server = conn.DataSource, database = conn.Database };
-            await db.Database.CloseConnectionAsync();
-            return Ok(result);
+            var readiness = await DatabaseSchemaDiagnostics.InspectAsync(db, ct);
+            var result = new
+            {
+                status = readiness.IsReady ? "OK" : "SchemaOutOfDate",
+                server = conn.DataSource, database = conn.Database,
+                pendingMigrations = readiness.PendingMigrations, missingObjects = readiness.MissingObjects
+            };
+            return StatusCode(readiness.IsReady ? 200 : 503, result);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ct.IsCancellationRequested && SqlReadCancellationMiddleware.IsSqlCancellation(ex))
+        {
+            throw; // Let the request cancellation middleware preserve SqlClient's cancellation cause.
         }
         catch (Exception ex)
         {
-            return StatusCode(503, new { status = "Lỗi", message = ex.Message });
+            logger.LogError(ex, "Database readiness inspection failed");
+            return StatusCode(503, new { status = "Lỗi", message = "Không kiểm tra được database/schema. Kiểm tra log API và cấu hình kết nối." });
         }
+        finally { await db.Database.CloseConnectionAsync(); }
     }
 
     // GET /api/health/gemini – chỉ hỏi thông tin model, không tốn lượt sinh nội dung.

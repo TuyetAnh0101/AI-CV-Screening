@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.RateLimiting;
 using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
+using SmartCv.Api.Middleware;
 using SmartCv.Core.Options;
 using SmartCv.Infrastructure;
 
@@ -45,6 +46,8 @@ app.UseAuthorization();
 // Sau routing (WebApplication tự thêm ở đầu pipeline) để đọc được policy của từng endpoint.
 // M6: đặt UseAuthentication/UseAuthorization trước dòng này nếu muốn giới hạn theo người dùng.
 app.UseRateLimiter();
+
+app.UseMiddleware<SqlReadCancellationMiddleware>();
 
 app.MapControllers();
 app.MapEvaluationEndpoints();
