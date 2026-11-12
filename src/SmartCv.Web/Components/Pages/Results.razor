@@ -52,7 +52,7 @@
             @if (state != ViewState.NoRuns)
             {
                 <div class="hero-actions">
-                    <button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync" disabled="@(state == ViewState.Loading)">
+                    <button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync" disabled="@(state == ViewState.Loading || stageInteractionBusy)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
                         @(state == ViewState.Loading ? "Đang tải..." : "Làm mới")
                     </button>
@@ -141,7 +141,7 @@
                 </div>
             </section>
 
-            <RankingTable ProgressItems="progressItems" Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" />
+            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" />
             break;
 
         case ViewState.NoRuns:
@@ -229,6 +229,32 @@
     private bool disposed;
     private string? pollingWarning;
     private List<RunItemDto> progressItems = [];
+    private bool stageInteractionBusy;
+    private int stageRevision;
+
+    private void StageInteractionChanged(bool busy)
+    {
+        stageInteractionBusy = busy;
+        ++stageRevision; // Invalidate polling reads that started before a decision.
+    }
+
+    private async Task<bool> ReloadStagesAsync()
+    {
+        if (ranking is null || disposed) return false;
+        var version = loadVersion;
+        var runId = ranking.RunId;
+        var jobId = ranking.JobId;
+        try
+        {
+            var result = await RunApi.GetRankingAsync(runId, jobId, loadCts?.Token ?? default);
+            if (disposed || version != loadVersion || ranking?.RunId != runId || ranking.JobId != jobId) return false;
+            if (!result.IsSuccess) return false; // Keep the table, notification and last confirmed decision.
+            ranking = result.Data!;
+            StateHasChanged();
+            return true;
+        }
+        catch (OperationCanceledException) { return false; }
+    }
 
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
@@ -248,6 +274,8 @@
         {
             while (await timer.WaitForNextTickAsync(ct))
             {
+                if (stageInteractionBusy) continue;
+                var revision = stageRevision;
                 // Read progress first so a terminal snapshot is followed by fresh evaluation rows.
                 var progress = await RunApi.GetRunAsync(runId, ct);
                 if (disposed || ct.IsCancellationRequested || version != loadVersion) return;
@@ -256,7 +284,7 @@
                 var stop = false;
                 await InvokeAsync(() =>
                 {
-                    if (disposed || ct.IsCancellationRequested || version != loadVersion) return;
+                    if (disposed || ct.IsCancellationRequested || version != loadVersion || stageInteractionBusy || revision != stageRevision) return;
                     if (result.IsSuccess && progress.IsSuccess)
                     {
                         ranking = result.Data!;
@@ -300,10 +328,11 @@
 
     // ---------------- Đổi bộ lọc = đổi địa chỉ ----------------
 
-    private void GoToRun(int runId) => Nav.NavigateTo(RankingView.ResultsUrl(runId));
+    private void GoToRun(int runId) { if (!stageInteractionBusy) Nav.NavigateTo(RankingView.ResultsUrl(runId)); }
 
     private void GoToJob(int jobId)
     {
+        if (stageInteractionBusy) return;
         // Lượt đang chọn (kể cả khi địa chỉ chưa có runId vì đang xem lượt mới nhất)
         if (selectedRunId is { } runId) Nav.NavigateTo(RankingView.ResultsUrl(runId, jobId));
     }
@@ -315,6 +344,8 @@
         var query = (RunIdQuery, JobIdQuery);
         if (!force && loadedQuery == query) return;   // Blazor có thể gọi lại với cùng tham số
         if (disposed) return;
+        stageInteractionBusy = false;
+        ++stageRevision;
         pollCts?.Cancel();
         pollCts?.Dispose();
         pollCts = null;

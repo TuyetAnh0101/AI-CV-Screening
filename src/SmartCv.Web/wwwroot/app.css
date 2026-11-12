@@ -6,6 +6,15 @@
     font-display: swap;
 }
 
+/* B34: semantic colors of HR application stages. */
+.stage-new { --stage-fg: #475569; --stage-bg: #f1f5f9; }
+.stage-reviewing { --stage-fg: #0369a1; --stage-bg: #e0f2fe; }
+.stage-shortlisted { --stage-fg: #047857; --stage-bg: #d1fae5; }
+.stage-interview { --stage-fg: #4338ca; --stage-bg: #eef2ff; }
+.stage-rejected { --stage-fg: #be123c; --stage-bg: #ffe4e6; }
+.stage-onhold { --stage-fg: #92400e; --stage-bg: #fef3c7; }
+.stage-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--stage-fg, currentColor); flex: none; }
+
 html, body {
     font-family: var(--sc-font-body);
 }

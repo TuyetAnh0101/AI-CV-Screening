@@ -39,6 +39,8 @@ public static class ServiceCollectionExtensions
         services.Configure<SmartCv.Core.Options.CvUploadOptions>(
             configuration.GetSection(SmartCv.Core.Options.CvUploadOptions.SectionName));
 
+        services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedSessionStorage>();
+        services.AddScoped<HrActorState>();
         return services;
     }
 }

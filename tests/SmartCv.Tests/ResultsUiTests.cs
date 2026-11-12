@@ -379,6 +379,8 @@ public class ResultsUiTests
         services.AddSupplyValueFromQueryProvider();   // [SupplyParameterFromQuery] như ứng dụng thật
         var http = new HttpClient(api) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));
+        services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
+        services.AddSingleton(new HrActorState());
         return services.BuildServiceProvider();
     }
 

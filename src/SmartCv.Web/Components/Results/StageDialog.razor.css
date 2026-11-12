@@ -1,0 +1,21 @@
+.stage-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 28px; border: 1px solid var(--sc-line-200); border-radius: var(--sc-radius-section); background: var(--sc-surface-0); color: var(--text-main); box-shadow: 0 24px 80px #0a2e2d40; }
+.stage-dialog::backdrop { background: #0a2e2d80; backdrop-filter: blur(3px); }
+.decision-kicker { color: var(--sc-brand-700); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+h2 { font-family: var(--sc-font-display); font-size: 22px; line-height: 1.35; margin: 8px 0; overflow-wrap: anywhere; }
+.dialog-heading p { color: var(--sc-ink-500); font-size: 13px; margin-bottom: 20px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.field-label { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 600; }
+.reason { display: flex; align-items: center; gap: 10px; padding: 12px; min-height: 52px; border: 1px solid var(--sc-line-200); border-radius: 10px; font-size: 13px; cursor: pointer; }
+.reason.is-selected { background: var(--sc-error-bg); border-color: var(--sc-error); }
+.reason input { flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--sc-error); }
+.dialog-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; font-size: 13px; font-weight: 600; }
+.dialog-field small { font-size: 12px; font-weight: 400; color: var(--sc-ink-500); }
+.sc-input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--sc-line-300); border-radius: 10px; background: var(--sc-surface-0); color: var(--text-main); font: inherit; font-weight: 400; }
+.sc-input:focus { border-color: var(--sc-brand-700); }
+textarea { resize: vertical; }
+.dialog-error { color: var(--sc-error); font-size: 13px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 12px; border-top: 1px solid var(--sc-line-200); }
+.dialog-actions .btn { min-height: 44px; }
+:is(input, textarea, button):focus-visible { outline: 3px solid var(--sc-brand-600); outline-offset: 3px; }
+@media (max-width: 575.98px) { .stage-dialog { padding: 20px; } .reasons { grid-template-columns: 1fr; } .dialog-actions .btn { flex: 1; } }

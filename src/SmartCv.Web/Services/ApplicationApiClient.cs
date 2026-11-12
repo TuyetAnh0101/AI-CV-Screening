@@ -7,6 +7,15 @@ namespace SmartCv.Web.Services;
 public sealed class ApplicationApiClient(HttpClient http, ILogger<ApplicationApiClient> logger)
     : ApiClientBase(http, logger)
 {
+    public Task<ApiResult<StageOptionsResponse>> GetStageOptionsAsync(CancellationToken ct = default) =>
+        GetAsync<StageOptionsResponse>("api/applications/stage-options", ct);
+
+    public Task<ApiResult<StageChangeResultDto>> ChangeStageAsync(int applicationId, ChangeStageRequest request, CancellationToken ct = default) =>
+        PatchJsonAsync<StageChangeResultDto>($"api/applications/{applicationId}/stage", request, ct);
+
+    public Task<ApiResult<BulkStageChangeResponse>> ChangeStagesAsync(BulkChangeStageRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<BulkStageChangeResponse>("api/applications/stage", request, ct);
+
     /// <summary>Chuẩn bị và gửi các CV đã tải thành công, có tích chọn, vào một Job đang tuyển.
     /// Chưa gọi từ nút Phân tích trên trang Upload; luồng điều phối nút đó thuộc B6.</summary>
     public Task<ApiResult<CreateApplicationsResponse>> AssignSelectedAsync(
