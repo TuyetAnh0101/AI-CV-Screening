@@ -40,11 +40,13 @@ public sealed class RankingResponse
     public Dictionary<string, int> LevelCounts { get; init; } = new();  // số CV theo mức (biểu đồ B11)
     public Dictionary<string, int> StageCounts { get; init; } = new();
     public int PassCount { get; init; }
+    public int FlaggedCount { get; init; }
     public List<RankingItemDto> Items { get; init; } = [];
 }
 
 public sealed class RankingItemDto
 {
+    public List<ReviewFlagDto> ReviewFlags { get; init; } = [];
     public string Stage { get; init; } = "New";
     public string? RejectReason { get; init; }
     public DateTime? StageUpdatedAt { get; init; }
@@ -71,6 +73,8 @@ public sealed class RankingItemDto
 /// <summary>Chi tiết kết quả chấm một CV: GET /api/evaluations/{id} (trang B9).</summary>
 public sealed class EvaluationDetailDto
 {
+    public List<ReviewFlagDto> ReviewFlags { get; init; } = [];
+    public int? ExtractedTextLength { get; init; }
     public string Stage { get; init; } = "New";
     public string? RejectReason { get; init; }
     public DateTime? StageUpdatedAt { get; init; }
@@ -128,4 +132,59 @@ public sealed class EvaluationSkillDto
     public string SkillType { get; init; } = string.Empty;   // MustHave | NiceToHave
     public bool IsMatched { get; init; }
     public string? Evidence { get; init; }
+}
+
+public sealed record ReviewFlagDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+}
+
+public sealed class CandidateCompareResponse
+{
+    public int RunId { get; init; }
+    public string PromptVersionName { get; init; } = string.Empty;
+    public decimal PassThreshold { get; init; }
+    public int JobId { get; init; }
+    public string JobTitle { get; init; } = string.Empty;
+    public decimal JobMinYearsExperience { get; init; }
+    public decimal? JobMinGpa { get; init; }
+    public List<CompareSkillDto> Skills { get; init; } = [];
+    public List<CandidateCompareItemDto> Candidates { get; init; } = [];
+}
+
+public sealed class CompareSkillDto
+{
+    public string SkillCode { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string SkillType { get; init; } = string.Empty;
+}
+
+public sealed class CandidateCompareItemDto
+{
+    public int EvaluationId { get; init; }
+    public int ApplicationId { get; init; }
+    public Guid CvId { get; init; }
+    public string? CandidateName { get; init; }
+    public string FileName { get; init; } = string.Empty;
+    public int? Rank { get; init; }
+    public int RankTotal { get; init; }
+    public decimal? KeywordScore { get; init; }
+    public decimal? AiScore { get; init; }
+    public decimal? FinalScore { get; init; }
+    public string? ScoreSource { get; init; }
+    public string? FitLabel { get; init; }
+    public bool? PredictedPass { get; init; }
+    public decimal? YearsExperience { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public string? ErrorMessage { get; init; }
+    public string Stage { get; init; } = "New";
+    public string? RejectReason { get; init; }
+    public DateTime? StageUpdatedAt { get; init; }
+    public Guid StageVersion { get; init; }
+    public string? Reasoning { get; init; }
+    public int MatchedMustHave { get; init; }
+    public int TotalMustHave { get; init; }
+    public List<ReviewFlagDto> ReviewFlags { get; init; } = [];
+    public Dictionary<string, string?> MatchedSkills { get; init; } = new();
 }
