@@ -1,0 +1,105 @@
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Applications
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog class="stage-dialog" @ref="dialog" aria-labelledby="stage-dialog-title" aria-describedby="stage-dialog-description" aria-busy="@Busy.ToString().ToLowerInvariant()">
+    <div class="dialog-heading">
+        <span class="decision-kicker">QUYẾT ĐỊNH CỦA HR</span>
+        <h2 id="stage-dialog-title">@Title</h2>
+        <p id="stage-dialog-description">@(IsReject ? "Chọn lý do để ghi nhận quyết định. Bạn có thể mở lại hồ sơ sau này." : "Tên của bạn được ghi cùng quyết định và nhớ trong tab này.")</p>
+    </div>
+    <fieldset disabled="@(Busy || submitting)">
+        @if (IsReject)
+        {
+            <div class="reasons" role="radiogroup" aria-required="true" aria-labelledby="reasons-label">
+                <p id="reasons-label" class="field-label">Lý do loại <span aria-hidden="true">*</span></p>
+                @foreach (var reasonCode in RejectReasons.All)
+                {
+                    <label class="reason @(reason == reasonCode ? "is-selected" : null)">
+                        <input type="radio" name="stage-reason" value="@reasonCode" checked="@(reason == reasonCode)" @onchange="() => reason = reasonCode" />
+                        <span>@StageText.Reason(reasonCode)</span>
+                    </label>
+                }
+            </div>
+        }
+        @if (!ActorOnly)
+        {
+        <label class="dialog-field">
+            <span>Ghi chú <small>(tùy chọn)</small></span>
+            <textarea class="sc-input" aria-label="Ghi chú quyết định" rows="3" maxlength="500" @bind="note" @bind:event="oninput" placeholder="Ghi thêm bối cảnh cho quyết định này..."></textarea>
+            <small>@(note?.Length ?? 0)/500 ký tự</small>
+        </label>
+        }
+        <label class="dialog-field">
+            <span>Người thao tác <span aria-hidden="true">*</span></span>
+            <input class="sc-input" aria-label="Tên HR thực hiện quyết định" autocomplete="name" maxlength="100" required @bind="actor" @bind:event="oninput" placeholder="Ví dụ: HR - Trần Thu Hà" />
+        </label>
+    </fieldset>
+    @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
+    <div class="dialog-actions">
+        <button type="button" class="btn sc-btn-secondary" disabled="@(Busy || submitting)" @onclick="CancelAsync">Hủy</button>
+        <button type="button" class="btn @(IsReject ? "btn-danger" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">
+            @(Busy || submitting ? "Đang lưu..." : ActorOnly ? "Lưu tên HR" : IsReject ? "Loại hồ sơ" : "Lưu quyết định")
+        </button>
+    </div>
+</dialog>
+
+@code {
+    [Parameter] public string ToStage { get; set; } = ApplicationStages.Reviewing;
+    [Parameter] public string Title { get; set; } = "Đổi giai đoạn";
+    [Parameter] public string? Actor { get; set; }
+    [Parameter] public string? InitialReason { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool ActorOnly { get; set; }
+    [Parameter] public EventCallback<Decision> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<StageDialog>? reference;
+    private string? reason, actor, note, error;
+    private bool submitting, disposed;
+    private bool IsReject => ToStage == ApplicationStages.Rejected;
+    protected override void OnInitialized() { actor = Actor; reason = InitialReason; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !RendererInfo.IsInteractive) return;
+        try
+        {
+            var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Results/StageDialog.razor.js");
+            if (disposed) { await imported.DisposeAsync(); return; }
+            module = imported;
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (Busy || submitting) return;
+        if (IsReject && reason is null) { error = "Hãy chọn lý do loại."; return; }
+        var (change, validation) = StageChangeRules.Validate(ToStage, IsReject ? reason : null, note, actor);
+        if (change is null) { error = validation; return; }
+        error = null;
+        submitting = true;
+        try { await OnConfirm.InvokeAsync(new Decision(change.ToStage, change.RejectReason, change.Note, change.Actor)); }
+        finally { submitting = false; }
+    }
+
+    [JSInvokable] public Task CancelFromBrowser() => InvokeAsync(CancelAsync);
+    private Task CancelAsync() => Busy || submitting ? Task.CompletedTask : OnCancel.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException) { }
+        }
+        reference?.Dispose();
+    }
+    public sealed record Decision(string ToStage, string? RejectReason, string? Note, string Actor);
+}

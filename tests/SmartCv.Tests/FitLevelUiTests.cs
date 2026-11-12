@@ -11,6 +11,7 @@ using SmartCv.Core.Scoring;
 using web::SmartCv.Web.Components.Results;
 using web::SmartCv.Web.Components.Shared;
 using web::SmartCv.Web.Helpers;
+using web::SmartCv.Web.Services;
 
 namespace SmartCv.Tests;
 
@@ -141,7 +142,11 @@ public class FitLevelUiTests
 
     // ================= (2) Component thật =================
 
-    private sealed class ComponentRenderer() : Renderer(new ServiceCollection().BuildServiceProvider(), NullLoggerFactory.Instance)
+    private static IServiceProvider TableServices() => new ServiceCollection()
+        .AddSingleton(new ApplicationApiClient(new HttpClient(), NullLogger<ApplicationApiClient>.Instance))
+        .AddSingleton(new HrActorState()).BuildServiceProvider();
+
+    private sealed class ComponentRenderer() : Renderer(TableServices(), NullLoggerFactory.Instance)
     {
         public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
         protected override RendererInfo RendererInfo { get; } = new("Server", isInteractive: true);
