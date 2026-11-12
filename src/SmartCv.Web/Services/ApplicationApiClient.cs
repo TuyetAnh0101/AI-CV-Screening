@@ -10,6 +10,9 @@ public sealed class ApplicationApiClient(HttpClient http, ILogger<ApplicationApi
     public Task<ApiResult<StageOptionsResponse>> GetStageOptionsAsync(CancellationToken ct = default) =>
         GetAsync<StageOptionsResponse>("api/applications/stage-options", ct);
 
+    public Task<ApiResult<List<ApplicationEventDto>>> GetEventsAsync(int applicationId, CancellationToken ct = default) =>
+        GetAsync<List<ApplicationEventDto>>($"api/applications/{applicationId}/events", ct);
+
     public Task<ApiResult<StageChangeResultDto>> ChangeStageAsync(int applicationId, ChangeStageRequest request, CancellationToken ct = default) =>
         PatchJsonAsync<StageChangeResultDto>($"api/applications/{applicationId}/stage", request, ct);
 

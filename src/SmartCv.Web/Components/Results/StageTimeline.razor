@@ -1,0 +1,19 @@
+@if (Events.Count == 0)
+{
+    <p class="timeline-empty">Chưa có quyết định HR được ghi nhận.</p>
+}
+else
+{
+    <ol class="decision-timeline" aria-label="Lịch sử quyết định mới nhất trước">
+        @foreach (var item in Events.OrderByDescending(e => e.CreatedAt).ThenByDescending(e => e.EventId))
+        {
+            <li @key="item.EventId">
+                <div class="transition"><span>@StageText.Name(item.FromStage)</span><span aria-label="sang">→</span><strong class="@StageText.Css(item.ToStage)">@StageText.Name(item.ToStage)</strong></div>
+                @if (item.RejectReason is not null) { <p>Lý do: @StageText.Reason(item.RejectReason)</p> }
+                @if (!string.IsNullOrWhiteSpace(item.Note)) { <blockquote>@item.Note</blockquote> }
+                <footer><strong>@item.Actor</strong><time datetime="@DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc).ToString("O")">@Display.VnTime(item.CreatedAt) · giờ Việt Nam</time></footer>
+            </li>
+        }
+    </ol>
+}
+@code { [Parameter] public IReadOnlyList<ApplicationEventDto> Events { get; set; } = []; }
