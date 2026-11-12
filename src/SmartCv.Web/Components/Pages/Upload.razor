@@ -438,6 +438,7 @@
 
             // 3. Ghi runId lên địa chỉ: OnParametersSet sẽ mở thẻ tiến độ và bắt đầu hỏi API
             run = start.Data;
+            runUpdatedAt = DateTime.UtcNow; // POST đã xác nhận lượt mới, không dùng thời gian của lượt trước.
             runNotice = notFound > 0
                 ? $"{notFound} CV không còn trên máy chủ nên không được đưa vào lượt phân tích."
                 : null;
@@ -485,7 +486,7 @@
         tab = Tab.Analyze;
         runNotFound = false;
         runError = null;
-        runUpdatedAt = keepCreated ? DateTime.UtcNow : null;
+        if (!keepCreated) runUpdatedAt = null; // Retry lỗi phải giữ thời gian dữ liệu được API xác nhận gần nhất.
         runLoading = !keepCreated;
 
         // Lúc prerender chưa tương tác được: không hỏi API, trang tương tác sẽ bắt đầu lại.
@@ -508,7 +509,7 @@
     /// <summary>
     /// Hỏi GET /api/runs/{id} cho tới khi lượt kết thúc, không tồn tại, đổi lượt khác hoặc rời trang.
     /// Mỗi vòng gắn với CTS riêng: kết quả trả về muộn của lượt cũ bị bỏ, không ghi đè lượt mới.
-    /// Lỗi kết nối / máy chủ: giữ dữ liệu cũ, báo lỗi và thử lại thưa dần (tối đa 5 lần khoảng thường).
+    /// Lỗi kết nối / máy chủ: giữ dữ liệu cũ, thử lại thưa dần rồi dừng sau ba lỗi liên tiếp.
     /// </summary>
     private async Task PollLoopAsync(int runId, CancellationTokenSource cts)
     {
@@ -544,6 +545,9 @@
                     runError = result.StatusCode >= 500
                         ? "Máy chủ API đang gặp lỗi."
                         : result.ErrorMessage ?? "Không lấy được tiến độ phân tích.";
+                    stop = result.StatusCode is 400 or 401 or 403 or 409 || failures >= 3;
+                    if (failures >= 3)
+                        runError = "Tạm dừng tự cập nhật sau 3 lần lỗi liên tiếp. Giữ tiến độ đã tải; kiểm tra API rồi bấm \"Thử lại ngay\" để tiếp tục.";
                 }
 
                 if (stop) polling = false;

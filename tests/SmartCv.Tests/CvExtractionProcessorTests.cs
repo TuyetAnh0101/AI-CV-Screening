@@ -192,6 +192,59 @@ public class CvExtractionProcessorTests
         }
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task Worker_recovers_pending_cvs_when_database_is_unavailable_at_startup(int initialFailures)
+    {
+        var options = new DbContextOptionsBuilder<SmartCvDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options;
+        var storage = TestSupport.Storage(TestSupport.TempRoot());
+        var extractor = new FakeExtractor(TextExtractionResult.Success("recovered", ExtractionMethods.PdfText, 1));
+        var id = Guid.NewGuid();
+        await using (var seed = new SmartCvDbContext(options))
+        {
+            seed.Cvs.Add(new Cv
+            {
+                CvId = id, OriginalFileName = "synthetic-recovery.pdf", ContentType = "application/pdf", FileSizeBytes = 1,
+                StoredPath = await storage.SaveAsync(id, ".pdf", new MemoryStream([1]), DateTime.UtcNow),
+                FileHash = id.ToString("N").PadRight(64, '0'), ExtractionStatus = ExtractionStatuses.Pending,
+                UploadedAt = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+        var resolutions = 0;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ =>
+        {
+            if (Interlocked.Increment(ref resolutions) <= initialFailures) throw new InvalidOperationException("Synthetic startup database failure");
+            return new SmartCvDbContext(options);
+        });
+        services.AddSingleton<ICvFileStorage>(storage);
+        services.AddSingleton<ICvExtractionQueue, CvExtractionQueue>();
+        services.AddSingleton<ICvTextExtractor>(extractor);
+        services.AddScoped<CvExtractionProcessor>();
+        services.AddSingleton<CvExtractionWorker>();
+        await using var provider = services.BuildServiceProvider();
+        var worker = provider.GetRequiredService<CvExtractionWorker>();
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            while (!deadline.IsCancellationRequested)
+            {
+                await using var check = new SmartCvDbContext(options);
+                if (!await check.Cvs.AnyAsync(c => c.ExtractionStatus == ExtractionStatuses.Pending)) break;
+                try { await Task.Delay(20, deadline.Token); } catch (OperationCanceledException) { break; }
+            }
+            await using var result = new SmartCvDbContext(options);
+            Assert.Equal(ExtractionStatuses.Completed, (await result.Cvs.SingleAsync()).ExtractionStatus);
+            Assert.Equal(1, extractor.Calls);
+            Assert.True(resolutions > initialFailures);
+        }
+        finally { await worker.StopAsync(CancellationToken.None); }
+    }
+
     private sealed class FakeExtractor(TextExtractionResult? result = null, Exception? error = null) : ICvTextExtractor
     {
         private int _calls;
