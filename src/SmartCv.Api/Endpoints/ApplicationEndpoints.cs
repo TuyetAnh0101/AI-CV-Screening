@@ -218,9 +218,10 @@ public static class ApplicationEndpoints
         var application = await db.Applications.FirstOrDefaultAsync(a => a.ApplicationId == id, ct);
         if (application is null) return TypedResults.NotFound();
 
-        // Hồ sơ đã có kết quả chấm hoặc nhãn HR thì không xóa, để giữ lịch sử
+        // Hồ sơ đã có kết quả chấm, nhãn HR hoặc quyết định thì không xóa, để giữ lịch sử.
         var used = await db.Evaluations.AnyAsync(e => e.ApplicationId == id, ct)
-                   || await db.HrLabels.AnyAsync(h => h.ApplicationId == id, ct);
+                   || await db.HrLabels.AnyAsync(h => h.ApplicationId == id, ct)
+                   || await db.ApplicationEvents.AnyAsync(e => e.ApplicationId == id, ct);
         if (used)
             return UsedProblem();
 
@@ -238,14 +239,16 @@ public static class ApplicationEndpoints
         }
         catch (DbUpdateConcurrencyException)
         {
-            return TypedResults.NotFound();   // người khác vừa xóa hồ sơ này
+            if (await db.Applications.AsNoTracking().AnyAsync(a => a.ApplicationId == id, ct))
+                return Problem(409, "Hồ sơ vừa được đổi", "Hãy tải lại dữ liệu trước khi bỏ gắn hồ sơ.");
+            return TypedResults.NotFound();
         }
 
         return TypedResults.NoContent();
     }
 
     private static ProblemHttpResult UsedProblem() =>
-        Problem(409, "Không thể bỏ gắn", "Hồ sơ này đã được chấm điểm hoặc gán nhãn HR, cần giữ lại để đối chiếu.");
+        Problem(409, "Không thể bỏ gắn", "Hồ sơ này đã được chấm điểm, gán nhãn hoặc có quyết định HR, cần giữ lại để đối chiếu.");
 
     private static bool IsSql(DbUpdateException ex, params int[] numbers) =>
         ex.InnerException is SqlException sql && numbers.Contains(sql.Number);

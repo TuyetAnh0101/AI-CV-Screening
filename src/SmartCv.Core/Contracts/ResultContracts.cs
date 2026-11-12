@@ -38,12 +38,17 @@ public sealed class RankingResponse
     public string JobTitle { get; init; } = string.Empty;
     public List<JobCountDto> Jobs { get; init; } = [];            // để làm ô lọc job (B7)
     public Dictionary<string, int> LevelCounts { get; init; } = new();  // số CV theo mức (biểu đồ B11)
+    public Dictionary<string, int> StageCounts { get; init; } = new();
     public int PassCount { get; init; }
     public List<RankingItemDto> Items { get; init; } = [];
 }
 
 public sealed class RankingItemDto
 {
+    public string Stage { get; init; } = "New";
+    public string? RejectReason { get; init; }
+    public DateTime? StageUpdatedAt { get; init; }
+    public Guid StageVersion { get; init; }
     public int? Rank { get; init; }               // null: chưa chấm / lỗi (đứng cuối bảng)
     public int EvaluationId { get; init; }
     public int ApplicationId { get; init; }
@@ -66,6 +71,10 @@ public sealed class RankingItemDto
 /// <summary>Chi tiết kết quả chấm một CV: GET /api/evaluations/{id} (trang B9).</summary>
 public sealed class EvaluationDetailDto
 {
+    public string Stage { get; init; } = "New";
+    public string? RejectReason { get; init; }
+    public DateTime? StageUpdatedAt { get; init; }
+    public Guid StageVersion { get; init; }
     public decimal? Gpa { get; init; }
     public int EvaluationId { get; init; }
     public string Status { get; init; } = string.Empty;
