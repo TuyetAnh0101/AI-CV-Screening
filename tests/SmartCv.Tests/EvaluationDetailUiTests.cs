@@ -85,7 +85,7 @@ public sealed class EvaluationDetailUiTests
     };
     private static ServiceProvider Services(Api api)
     {
-        var services = new ServiceCollection().AddLogging();
+        var services = new ServiceCollection().AddLogging().AddSingleton(B36PrivacyTests.NormalView());
         services.AddSingleton<NavigationManager>(new Nav());
         services.AddSupplyValueFromQueryProvider();
         services.AddSingleton<Microsoft.AspNetCore.Components.Web.IErrorBoundaryLogger, BoundaryLogger>();

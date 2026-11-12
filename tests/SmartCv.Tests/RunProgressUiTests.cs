@@ -292,7 +292,7 @@ public class RunProgressUiTests
 
     private static ServiceProvider Services(FakeApi api, TestNavigationManager nav)
     {
-        var services = new ServiceCollection();
+        var services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView());
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {

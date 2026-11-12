@@ -43,13 +43,14 @@
     else
     {
         <div class="history-list" role="region" aria-label="Lịch sử quyết định, cuộn để xem thêm" tabindex="@(events.Count > 0 ? 0 : -1)">
-            <StageTimeline Events="events" />
+            <StageTimeline Events="events" Anonymous="Anonymous" />
         </div>
     }
 </section>
 
 @code {
     [Parameter, EditorRequired] public EvaluationDetailDto Detail { get; set; } = new();
+    [Parameter] public bool Anonymous { get; set; }
     private EvaluationDetailDto current = new();
     private List<ApplicationEventDto> events = [];
     private readonly CancellationTokenSource lifetime = new();

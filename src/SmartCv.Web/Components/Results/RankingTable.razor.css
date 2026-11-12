@@ -56,13 +56,22 @@
 
 /* ---------- Thanh công cụ: tìm · lọc nhanh · sắp xếp ---------- */
 .ranking-tools {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     padding: 14px 20px 16px;
     border-bottom: 1px solid var(--border);
 }
+.ranking-tools .quick { grid-column:1 / -1; flex-wrap:wrap; }
+.ranking-tools .sort { grid-column:2; grid-row:1; }
+.stage-filters .flag-filter { color:#92400e; background:#fffbeb; border-color:#fcd34d; }
+.stage-filters .flag-filter.on { background:#fef3c7; box-shadow:0 0 0 1px #d97706; }
+.ranking-head { align-items:center; gap:16px; }
+.ranking-head > div:first-child { flex:1 1 350px; }
+.legend { order:3; flex-basis:100%; padding-bottom:8px; }
+@media(max-width:767.98px) { .ranking-tools { grid-template-columns:minmax(0,1fr); } .ranking-tools .sort { grid-column:1; grid-row:auto; } .ranking-tools .sort select { width:100%; min-height:44px; } .ranking-head { padding:16px; } }
 
 .search {
     position: relative;

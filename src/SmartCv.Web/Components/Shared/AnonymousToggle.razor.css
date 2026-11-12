@@ -1,0 +1,8 @@
+.anonymous-control { display:flex; flex-direction:column; gap:4px; padding:12px 16px; border:1px solid var(--sc-line-200,#dce7e5); border-radius:12px; background:var(--sc-surface-0,#fff); max-width:100%; }
+label { display:flex; align-items:center; gap:10px; min-height:44px; cursor:pointer; color:var(--sc-brand-800,#115e59); }
+input { appearance:none; position:relative; width:40px; height:24px; border-radius:999px; background:#cbd5e1; cursor:pointer; flex:none; transition:background .15s; }
+input::before { content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform .15s; }
+input:checked { background:var(--sc-brand-700,#0f766e); } input:checked::before { transform:translateX(16px); } input:disabled { opacity:.55; cursor:wait; }
+small,p { font-size:.75rem; line-height:1.6; color:var(--sc-ink-500,#64748b); margin:0; }
+button { border:0; background:none; color:var(--sc-brand-700,#0f766e); text-decoration:underline; min-height:44px; }
+:is(input,button):focus-visible { outline:3px solid var(--sc-brand-700,#0f766e); outline-offset:4px; }

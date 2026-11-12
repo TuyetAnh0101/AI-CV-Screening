@@ -10,10 +10,10 @@ else
             <li @key="item.EventId">
                 <div class="transition"><span>@StageText.Name(item.FromStage)</span><span aria-label="sang">→</span><strong class="@StageText.Css(item.ToStage)">@StageText.Name(item.ToStage)</strong></div>
                 @if (item.RejectReason is not null) { <p>Lý do: @StageText.Reason(item.RejectReason)</p> }
-                @if (!string.IsNullOrWhiteSpace(item.Note)) { <blockquote>@item.Note</blockquote> }
-                <footer><strong>@item.Actor</strong><time datetime="@DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc).ToString("O")">@Display.VnTime(item.CreatedAt) · giờ Việt Nam</time></footer>
+                @if (!string.IsNullOrWhiteSpace(item.Note)) { <blockquote>@(Anonymous ? "Ghi chú được ẩn để bảo vệ thông tin cá nhân." : item.Note)</blockquote> }
+                <footer><strong>@(Anonymous ? "HR đã ghi nhận" : item.Actor)</strong><time datetime="@DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc).ToString("O")">@Display.VnTime(item.CreatedAt) · giờ Việt Nam</time></footer>
             </li>
         }
     </ol>
 }
-@code { [Parameter] public IReadOnlyList<ApplicationEventDto> Events { get; set; } = []; }
+@code { [Parameter] public IReadOnlyList<ApplicationEventDto> Events { get; set; } = []; [Parameter] public bool Anonymous { get; set; } }

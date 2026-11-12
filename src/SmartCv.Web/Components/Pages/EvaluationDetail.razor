@@ -2,10 +2,14 @@
 @implements IDisposable
 @using SmartCv.Core.Constants
 @inject EvaluationApiClient EvaluationApi
+@inject AnonymityState Anonymity
 
-<PageTitle>Chi tiết đánh giá CV · SCApp</PageTitle>
+<PageTitle>@(detail is null ? "Chi tiết đánh giá CV" : Anonymity.Name(detail.CandidateName, detail.Rank, detail.ApplicationId)) · SCApp</PageTitle>
 <div class="evaluation-detail">
+    <div class="detail-toolbar">
     <nav class="breadcrumb" aria-label="Điều hướng"><a href="@BackUrl">← Bảng xếp hạng</a><span>/ Chi tiết đánh giá #@Id</span></nav>
+    <AnonymousToggle />
+    </div>
     @if (loading)
     {
         <section class="panel state" role="status" aria-live="polite"><LoadingIndicator Text="Đang tải chi tiết đánh giá..." /></section>
@@ -21,16 +25,18 @@
         <header class="panel candidate">
             <div class="identity">
                 <p class="eyebrow">HỒ SƠ ĐÁNH GIÁ · HẠNG @(detail.Rank?.ToString() ?? "—")/@detail.RankTotal</p>
-                <h1>@(string.IsNullOrWhiteSpace(detail.CandidateName) ? "Chưa có tên ứng viên" : detail.CandidateName)</h1>
+                <h1>@Anonymity.Name(detail.CandidateName, detail.Rank, detail.ApplicationId)</h1>
                 <p class="job">@Display.Text(detail.JobTitle)</p>
-                <p class="muted">@Display.Text(detail.CandidateEmail) · @Display.Text(detail.FileName)</p>
+                <p class="muted">@(Anonymity.Enabled ? "Thông tin liên hệ đã ẩn" : Display.Text(detail.CandidateEmail)) · @Anonymity.FileName(detail.FileName)</p>
                 <div class="badges">
-                    <FitBadge FitLabel="@detail.FitLabel" FinalScore="detail.FinalScore" Status="@detail.Status" ScoreSource="@detail.ScoreSource" />
+                    <FitBadge FitLabel="@Anonymity.Label(detail.FitLabel)" FinalScore="detail.FinalScore" Status="@detail.Status" ScoreSource="@detail.ScoreSource" />
                     <span class="prediction">Dự đoán: @(!ready || detail.PredictedPass is null ? "Chưa có" : detail.PredictedPass == true ? "Đạt" : "Không đạt")</span>
                 </div>
             </div>
             <div class="cv-actions">
-                @if (cvUrl is null)
+                @if (Anonymity.Enabled)
+                { <button type="button" class="btn sc-btn-secondary" disabled>Xem CV gốc</button><small>Tắt Ẩn danh để xem CV gốc</small> }
+                else if (cvUrl is null)
                 {
                     <button type="button" class="btn sc-btn-primary" disabled="@(checkingCv || detail.CvId == Guid.Empty)" @onclick="CheckCvAsync">@(checkingCv ? "Đang kiểm tra CV..." : "Xem CV gốc")</button>
                 }
@@ -43,6 +49,10 @@
                 <button type="button" class="btn sc-btn-secondary" @onclick="LoadAsync">Làm mới kết quả</button>
             </div>
         </header>
+        @if (detail.ReviewFlags.Count > 0)
+        {
+            <aside class="review-notice" aria-label="Cần xem kỹ trước khi quyết định"><strong>⚑ Cần xem kỹ trước khi quyết định</strong><ul>@foreach (var flag in detail.ReviewFlags) { <li>@flag.Message</li> }</ul></aside>
+        }
         @if (!ready || keywordOnly)
         {
             <aside class="notice @(detail.Status == EvaluationStatuses.Failed ? "processing-failed" : keywordOnly ? "keyword-only" : "processing-pending")" role="status">
@@ -52,7 +62,7 @@
                 {
                     <p>Bấm Làm mới kết quả để kiểm tra khi lượt chấm hoàn tất.</p>
                 }
-                @if (!string.IsNullOrWhiteSpace(detail.ErrorMessage)) { <p>@Display.SafeError(detail.ErrorMessage)</p> }
+                @if (!string.IsNullOrWhiteSpace(detail.ErrorMessage)) { <p>@Anonymity.Text(Display.SafeError(detail.ErrorMessage))</p> }
                 @if (detail.Status == EvaluationStatuses.Failed)
                 {
                     <p>Kiểm tra file CV gốc và khả năng đọc nội dung. Nếu file đọc được, liên hệ quản trị viên để kiểm tra lần đánh giá. Khi API chưa cung cấp lý do cụ thể, chưa thể kết luận lỗi PDF hay OCR.</p>
@@ -89,14 +99,16 @@
                 <div class="section-head"><span class="eyebrow">02 / AI INSIGHTS</span><h2 id="ai-title">Nhận xét của Gemini AI</h2></div>
                 @if (ready && !keywordOnly && detail.ScoreSource == ScoreSources.Combined && detail.AiScore is not null)
                 {
-                    <p class="prose">@(string.IsNullOrWhiteSpace(detail.Reasoning) ? "Chưa có nhận xét AI trong kết quả." : detail.Reasoning)</p>
+                    <p class="prose">@(string.IsNullOrWhiteSpace(detail.Reasoning) ? "Chưa có nhận xét AI trong kết quả." : Anonymity.Text(detail.Reasoning))</p>
                     <p class="muted">Nhận xét do AI tạo, cần được người tuyển dụng đối chiếu với CV.</p>
                 }
                 else
                 {
                     <p>Chưa có nhận xét Gemini thành công để hiển thị.</p>
                 }
-                @if (ready && !keywordOnly && detail.AiScore is not null && !string.IsNullOrWhiteSpace(detail.AiRawResponse))
+                @if (Anonymity.Enabled)
+                { <p class="muted">JSON gốc được ẩn vì có thể chứa thông tin cá nhân.</p> }
+                else if (ready && !keywordOnly && detail.AiScore is not null && !string.IsNullOrWhiteSpace(detail.AiRawResponse))
                 {
                     <details><summary>Xem JSON gốc AI trả về</summary><p class="muted">Dữ liệu gốc được lưu; không mặc định là JSON hợp lệ hoặc kết quả AI thành công. Có thể chọn và sao chép nội dung.</p><pre tabindex="0" aria-label="Phản hồi AI gốc">@detail.AiRawResponse</pre></details>
                 }
@@ -116,7 +128,7 @@
                             @foreach (var skill in group.OrderByDescending(s => s.IsMatched))
                             {
                                 <li><span class="skill-mark @(skill.IsMatched ? "matched" : "missing")" aria-label="@(skill.IsMatched ? "Phù hợp" : "Còn thiếu")">@(skill.IsMatched ? "✓" : "!")</span><div><strong>@Display.Text(skill.DisplayName)</strong>
-                                    <p>@(!string.IsNullOrWhiteSpace(skill.Evidence) ? skill.Evidence : skill.IsMatched ? "API ghi nhận phù hợp nhưng chưa cung cấp câu bằng chứng từ CV." : "Không tìm thấy trong CV theo kết quả đánh giá.")</p>
+                                    <p>@(!string.IsNullOrWhiteSpace(skill.Evidence) ? Anonymity.Text(skill.Evidence) : skill.IsMatched ? "API ghi nhận phù hợp nhưng chưa cung cấp câu bằng chứng từ CV." : "Không tìm thấy trong CV theo kết quả đánh giá.")</p>
                                 </div></li>
                             }
                         </ul>
@@ -125,7 +137,7 @@
             </section>
             </div>
             <aside class="decision-column" aria-label="Quyết định và lịch sử HR">
-                @if (detail.ApplicationId > 0) { <HrDecisionPanel Detail="detail" @key="(detail.EvaluationId, detail.StageVersion)" /> }
+                @if (detail.ApplicationId > 0) { <HrDecisionPanel Detail="detail" Anonymous="Anonymity.Enabled" @key="(detail.EvaluationId, detail.StageVersion)" /> }
             <section class="panel metadata" aria-labelledby="metadata-title">
                 <div class="section-head"><span class="eyebrow">04 / THÔNG TIN LẦN ĐÁNH GIÁ</span><h2 id="metadata-title">Nguồn và cấu hình</h2></div>
                 <dl><dt>Lượt chấm / Job</dt><dd>#@detail.RunId / #@detail.JobId</dd><dt>Phiên bản prompt</dt><dd>@Display.Text(detail.PromptVersionName)</dd><dt>Model AI</dt><dd>@Display.Text(detail.ModelName)</dd><dt>Temperature</dt><dd>@Display.Score(detail.Temperature)</dd><dt>Nguồn điểm</dt><dd>@Display.Text(detail.ScoreSource)</dd><dt>Trạng thái</dt><dd>@Display.Text(detail.Status)</dd><dt>Thời gian tạo đánh giá</dt><dd>@Display.VnTime(detail.CreatedAt)</dd><dt>Cách đọc CV</dt><dd>@Display.Text(detail.ExtractionMethod)</dd></dl>
@@ -149,6 +161,8 @@
     private CancellationTokenSource? cts;
     private List<EvaluationSkillDto> Skills => detail?.Skills ?? [];
     private string BackUrl => Display.BackUrl(RunId, JobId);
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+    private void PrivacyChanged() => _ = InvokeAsync(() => { if (Anonymity.Enabled) cvUrl = null; StateHasChanged(); });
 
     protected override Task OnParametersSetAsync() => loadedId == Id ? Task.CompletedTask : LoadAsync();
     private async Task LoadAsync()
@@ -184,7 +198,7 @@
     };
     private async Task CheckCvAsync()
     {
-        if (detail is null || checkingCv || cts is null) return;
+        if (Anonymity.Enabled || detail is null || checkingCv || cts is null) return;
         var current = version;
         var cvId = detail.CvId;
         var token = cts.Token;
@@ -193,7 +207,7 @@
         try
         {
             var result = await EvaluationApi.CheckCvAsync(cvId, token);
-            if (disposed || current != version) return;
+            if (disposed || current != version || Anonymity.Enabled) return;
             if (result.IsSuccess) cvUrl = EvaluationApi.CvUrl(cvId);
             else cvError = result.StatusCode switch
             {
@@ -206,5 +220,5 @@
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         finally { if (!disposed && current == version) checkingCv = false; }
     }
-    public void Dispose() { disposed = true; ++version; cts?.Cancel(); cts?.Dispose(); }
+    public void Dispose() { disposed = true; Anonymity.Changed -= PrivacyChanged; ++version; cts?.Cancel(); cts?.Dispose(); }
 }

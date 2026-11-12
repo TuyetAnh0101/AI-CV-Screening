@@ -8,6 +8,7 @@
 @using SmartCv.Core.Constants
 @inject ApplicationApiClient ApplicationApi
 @inject HrActorState ActorState
+@inject AnonymityState Anonymity
 @implements IDisposable
 
 <section class="ranking" aria-labelledby="ranking-title" aria-busy="@((Loading || busy) ? "true" : "false")">
@@ -21,6 +22,7 @@
             <li><span class="lg lg-final" aria-hidden="true"></span>Điểm cuối (màu theo mức)</li>
             <li><span class="lg lg-pass" aria-hidden="true"></span>Ngưỡng Đạt @RankingView.Score(PassThreshold)</li>
         </ul>
+        <AnonymousToggle />
     </div>
 
     <div class="decision-intro"><span class="decision-mark" aria-hidden="true">✓</span><span><strong>Không bỏ lỡ ứng viên phù hợp</strong><br />AI gợi ý mức phù hợp. HR quyết định giai đoạn hồ sơ.</span></div>
@@ -36,7 +38,7 @@
     <div class="ranking-tools">
         <div class="search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input type="search" placeholder="Tìm tên ứng viên, tên file..." aria-label="Tìm ứng viên theo tên hoặc tên file"
+            <input type="search" placeholder="@(Anonymity.Enabled ? "Tìm bí danh, ví dụ #1..." : "Tìm tên ứng viên, tên file...")" aria-label="@(Anonymity.Enabled ? "Tìm ứng viên theo bí danh" : "Tìm ứng viên theo tên hoặc tên file")"
                    @bind="search" @bind:event="oninput" @bind:after="ClearSelection" autocomplete="off" disabled="@(busy || pending is not null)" />
             @if (!string.IsNullOrEmpty(search))
             {
@@ -50,7 +52,7 @@
                 var on = filter == value;
                 <button type="button" class="quick-btn @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
                         disabled="@(busy || pending is not null)" @onclick="() => SetFitFilter(value)">
-                    @label <span class="count">@RankingView.Count(StageFilteredItems, search, value)</span>
+                    @label <span class="count">@Apply(StageFilteredItems, value).Count</span>
                 </button>
             }
         </div>
@@ -58,7 +60,7 @@
         <label class="sort">
             <span class="visually-hidden">Sắp xếp</span>
             <select class="form-select" @bind="sort" aria-label="Sắp xếp bảng xếp hạng" disabled="@(busy || pending is not null)">
-                @foreach (var (value, label) in RankingView.Sorts)
+                @foreach (var (value, label) in RankingView.Sorts.Where(s => !Anonymity.Enabled || s.Value != RankingSort.NameAsc))
                 {
                     <option value="@value">@label</option>
                 }
@@ -75,6 +77,7 @@
                 <i class="stage-dot" aria-hidden="true"></i>@StageText.Name(stage) <span>@StageCount(stage)</span>
             </button>
         }
+        <button id="flag-filter" type="button" class="stage-filter flag-filter @(flaggedOnly ? "on" : null)" aria-pressed="@flaggedOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="() => { flaggedOnly = !flaggedOnly; selected.Clear(); }">⚑ Cần xem kỹ <span>@FlaggedCount</span></button>
     </div>
     @if (message is not null)
     {
@@ -139,17 +142,18 @@
                         var keywordOnly = r.ScoreSource == ScoreSources.KeywordOnly;
                         var must = MustHaveDisplay.From(r.MatchedMustHave, r.TotalMustHave, scored);
                         <tr class="@RowClass(r, scored) @(selected.Contains(r.ApplicationId) ? "is-selected" : null)" @key="r.EvaluationId">
-                            <td class="c-select"><input type="checkbox" @key="(r.ApplicationId, selectVersion, selected.Contains(r.ApplicationId))" aria-label="@($"Chọn hồ sơ {r.ApplicationId}: {r.CandidateName ?? r.FileName}")" checked="@selected.Contains(r.ApplicationId)" disabled="@TableLocked" @onchange="e => Toggle(r.ApplicationId, e)" /></td>
+                            <td class="c-select"><input type="checkbox" @key="(r.ApplicationId, selectVersion, selected.Contains(r.ApplicationId))" aria-label="@($"Chọn hồ sơ {r.ApplicationId}: {NameOf(r)}")" checked="@selected.Contains(r.ApplicationId)" disabled="@TableLocked" @onchange="e => Toggle(r.ApplicationId, e)" /></td>
                             <td class="c-rank" data-label="Hạng">
                                 <span class="rank @(scored && r.Rank == 1 ? "gold" : null)">@RankingView.RankText(scored ? r.Rank : null)</span>
                             </td>
                             <td class="c-who">
                                 <div class="who">
-                                    <span class="avatar" aria-hidden="true">@RankingView.Initials(r.CandidateName, r.FileName)</span>
+                                    <span class="avatar" aria-hidden="true">@Anonymity.Initials(r)</span>
                                     <span class="who-text">
-                                        <a class="name" href="@DetailUrl(r.EvaluationId)">@(r.CandidateName ?? "Chưa rõ tên ứng viên")</a>
-                                        <span class="file" title="@r.FileName">@r.FileName</span>
-                                        @if (failed) { <span class="processing-error">@Display.SafeError(r.ErrorMessage)</span> }
+                                        <a class="name" href="@DetailUrl(r.EvaluationId)">@NameOf(r)</a>
+                                        <ReviewFlagsBadge Flags="r.ReviewFlags" />
+                                        <span class="file" title="@Anonymity.FileName(r.FileName)">@Anonymity.FileName(r.FileName)</span>
+                                        @if (failed) { <span class="processing-error">@Anonymity.Text(Display.SafeError(r.ErrorMessage))</span> }
                                     </span>
                                 </div>
                             </td>
@@ -190,7 +194,7 @@
                                 <strong class="final">@RankingView.Score(scored ? r.FinalScore : null)</strong>
                             </td>
                             <td class="c-fit" data-label="Mức phù hợp">
-                                <FitBadge FitLabel="@r.FitLabel" FinalScore="r.FinalScore" Status="@(failed ? EvaluationStatuses.Failed : r.Status)" ScoreSource="@r.ScoreSource" Message="@r.ErrorMessage" />
+                                <FitBadge FitLabel="@Anonymity.Label(r.FitLabel)" FinalScore="r.FinalScore" Status="@(failed ? EvaluationStatuses.Failed : r.Status)" ScoreSource="@r.ScoreSource" Message="@Anonymity.Text(r.ErrorMessage)" />
                                 @if (scored)
                                 {
                                     <span class="pass @(r.PredictedPass == true ? "is-pass" : null)">@(r.PredictedPass == true ? "Dự đoán Đạt" : "Dự đoán Không đạt")</span>
@@ -201,7 +205,7 @@
                                 }
                             </td>
                             <td class="c-stage" data-label="Giai đoạn">
-                                <select id="stage-select-@r.ApplicationId" class="stage-select @StageText.Css(StageOf(r))" aria-label="@($"Giai đoạn hồ sơ {r.ApplicationId}: {r.CandidateName ?? r.FileName}")" value="@StageOf(r)" disabled="@TableLocked" @key="(r.ApplicationId, selectVersion, StageOf(r))" @onchange="e => RequestRowAsync(r, e)">
+                                <select id="stage-select-@r.ApplicationId" class="stage-select @StageText.Css(StageOf(r))" aria-label="@($"Giai đoạn hồ sơ {r.ApplicationId}: {NameOf(r)}")" value="@StageOf(r)" disabled="@TableLocked" @key="(r.ApplicationId, selectVersion, StageOf(r))" @onchange="e => RequestRowAsync(r, e)">
                                     @foreach (var stage in ApplicationStages.All) { <option value="@stage">@StageText.Name(stage)</option> }
                                 </select>
                                 @if (StageOf(r) == ApplicationStages.Rejected && ReasonOf(r) is { } reason)
@@ -268,6 +272,7 @@
         search = string.Empty;
         filter = RankingFilter.All;
         stageFilter = null;
+        flaggedOnly = false;
         selected.Clear();
     }
 }

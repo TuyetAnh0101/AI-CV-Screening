@@ -1,0 +1,19 @@
+@if (Flags.Count > 0)
+{
+    <div class="review-flags" @onmouseenter="Show" @onmouseleave="Leave">
+        <button type="button" aria-label="@($"Cần xem kỹ: {Flags.Count} lý do")" aria-expanded="@open.ToString().ToLowerInvariant()" aria-describedby="@id" @onclick="Pin" @onfocus="Focus" @onblur="Blur" @onkeydown="Key"><span aria-hidden="true">⚑</span></button>
+        <div id="@id" class="flag-reasons" role="note" hidden="@(!open)"><strong>Cần xem kỹ</strong><ul>@foreach (var flag in Flags) { <li>@flag.Message</li> }</ul></div>
+    </div>
+}
+@code {
+    [Parameter] public IReadOnlyList<ReviewFlagDto> Flags { get; set; } = [];
+    private bool open, pinned, focused;
+    private readonly string id = "review-" + Guid.NewGuid().ToString("N");
+    private void Show() => open = true;
+    private void Focus() { focused = true; Show(); }
+    private void Blur() { focused = false; Close(); }
+    private void Leave() { if(!pinned && !focused) open = false; }
+    private void Pin() { if(pinned) Close(); else { pinned = true; open = true; } }
+    private void Close() { pinned = false; open = false; }
+    private void Key(KeyboardEventArgs e) { if(e.Key == "Escape") Close(); }
+}

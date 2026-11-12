@@ -13,6 +13,7 @@
 @using SmartCv.Core.Constants
 @inject RunApiClient RunApi
 @inject NavigationManager Nav
+@inject AnonymityState Anonymity
 
 <PageTitle>Kết quả &amp; xếp hạng · SmartCV</PageTitle>
 
@@ -132,7 +133,7 @@
                 <div class="kpi">
                     <span class="kpi-label">Điểm cao nhất</span>
                     <span class="kpi-value">@RankingView.Score(summary.Top?.FinalScore)</span>
-                    <span class="kpi-hint">@(summary.Top is null ? "Chưa có CV nào có điểm" : summary.Top.CandidateName ?? summary.Top.FileName)</span>
+                    <span class="kpi-hint">@(summary.Top is null ? "Chưa có CV nào có điểm" : Anonymity.Name(summary.Top.CandidateName, summary.Top.Rank, summary.Top.ApplicationId))</span>
                 </div>
                 <div class="kpi">
                     <span class="kpi-label">Điểm trung bình</span>
@@ -141,7 +142,7 @@
                 </div>
             </section>
 
-            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" />
+            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" />
             break;
 
         case ViewState.NoRuns:
@@ -331,6 +332,8 @@
 
     private string LoadingText => selectedRunId is { } id ? $"Đang tải bảng xếp hạng lượt chấm #{id}..." : "Đang tải lượt chấm mới nhất...";
 
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
     protected override Task OnParametersSetAsync() => LoadAsync(force: false);
 
     private Task RefreshAsync() => LoadAsync(force: true);
@@ -542,6 +545,7 @@
     {
         if (disposed) return;
         disposed = true;
+        Anonymity.Changed -= PrivacyChanged;
         ++loadVersion;
         pollCts?.Cancel();
         loadCts?.Cancel();

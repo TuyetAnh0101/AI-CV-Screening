@@ -373,7 +373,7 @@ public class ResultsUiTests
 
     private static ServiceProvider Services(FakeResultsApi api, TestNavigationManager nav)
     {
-        var services = new ServiceCollection();
+        var services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView());
         services.AddLogging();
         services.AddSingleton<NavigationManager>(nav);
         services.AddSupplyValueFromQueryProvider();   // [SupplyParameterFromQuery] như ứng dụng thật

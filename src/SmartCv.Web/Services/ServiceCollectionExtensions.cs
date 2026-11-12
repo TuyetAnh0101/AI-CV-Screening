@@ -41,6 +41,8 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedSessionStorage>();
         services.AddScoped<HrActorState>();
+        services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage>();
+        services.AddScoped<AnonymityState>();
         return services;
     }
 }
