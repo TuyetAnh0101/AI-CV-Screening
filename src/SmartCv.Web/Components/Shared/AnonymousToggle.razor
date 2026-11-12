@@ -1,0 +1,14 @@
+@implements IDisposable
+@inject AnonymityState Anonymity
+<div class="anonymous-control">
+    <label><input type="checkbox" role="switch" aria-label="Ẩn danh" checked="@Anonymity.Enabled" disabled="@(Anonymity.Saving || (!Anonymity.Loaded && Anonymity.Warning is null))" @onchange="e => Anonymity.SetAsync(e.Value is true)" /><strong>Ẩn danh</strong></label>
+    <small>Giúp giảm thiên kiến khi đọc hồ sơ</small>
+    @if (Anonymity.Warning is { } warning)
+    { <p role="status">@warning <button type="button" @onclick="Anonymity.RetryAsync">Thử đọc lại</button></p> }
+</div>
+@code {
+    protected override void OnInitialized() => Anonymity.Changed += Update;
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender && RendererInfo.IsInteractive) await Anonymity.EnsureLoadedAsync(); }
+    private void Update() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Anonymity.Changed -= Update;
+}

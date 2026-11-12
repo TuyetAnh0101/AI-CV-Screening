@@ -23,13 +23,17 @@ public partial class RankingTable
     private string StageOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.Stage ?? row.Stage;
     private string? ReasonOf(RankingItemDto row) => overrides.TryGetValue(row.ApplicationId, out var value) ? value.RejectReason : row.RejectReason;
     private Guid VersionOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.StageVersion ?? row.StageVersion;
-    private IEnumerable<RankingItemDto> StageFilteredItems => Items.Where(r => stageFilter is null || StageOf(r) == stageFilter);
-    private List<RankingItemDto> VisibleRows => RankingView.Apply(StageFilteredItems, search, filter, sort);
+    private bool flaggedOnly;
+    [Parameter] public int FlaggedCount { get; set; }
+    private IEnumerable<RankingItemDto> FlagFilteredItems => Items.Where(r => !flaggedOnly || r.ReviewFlags.Count > 0);
+    private IEnumerable<RankingItemDto> StageFilteredItems => FlagFilteredItems.Where(r => stageFilter is null || StageOf(r) == stageFilter);
+    private List<RankingItemDto> VisibleRows => Apply(StageFilteredItems, filter);
+    private List<RankingItemDto> Apply(IEnumerable<RankingItemDto> rows, RankingFilter fit) => Anonymity.Sort(rows.Where(r => Anonymity.Matches(r, search) && RankingView.MatchesFilter(r, fit)), sort).ToList();
     private bool AllVisibleSelected => VisibleRows.Count > 0 && VisibleRows.All(r => selected.Contains(r.ApplicationId));
     private bool SomeVisibleSelected => !AllVisibleSelected && VisibleRows.Any(r => selected.Contains(r.ApplicationId));
-    private int StageCount(string? stage) => RankingView.Apply(Items, search, filter, sort).Count(r => stage is null || StageOf(r) == stage);
+    private int StageCount(string? stage) => Apply(FlagFilteredItems, filter).Count(r => stage is null || StageOf(r) == stage);
     private string DialogTitle => pending!.Single
-        ? $"{StageText.Name(pending.ToStage)} · {Items.FirstOrDefault(r => r.ApplicationId == pending.Rows[0].Id)?.CandidateName ?? $"Hồ sơ #{pending.Rows[0].Id}"}"
+        ? $"{StageText.Name(pending.ToStage)} · {NameOf(Items.First(r => r.ApplicationId == pending.Rows[0].Id))}"
         : $"{StageText.Name(pending.ToStage)} · {pending.Rows.Count} hồ sơ";
     private string? DialogReason => pending is { Single: true, ToStage: ApplicationStages.Rejected }
         && Items.FirstOrDefault(r => r.ApplicationId == pending.Rows[0].Id) is { } row ? ReasonOf(row) : null;
@@ -53,6 +57,9 @@ public partial class RankingTable
     }
 
     private void ClearSelection() => selected.Clear();
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+    private string NameOf(RankingItemDto row) => Anonymity.Name(row.CandidateName, row.Rank, row.ApplicationId);
+    private void PrivacyChanged() => _ = InvokeAsync(() => { search = ""; message = null; if (Anonymity.Enabled && sort == RankingSort.NameAsc) sort = RankingSort.FinalDesc; selected.Clear(); StateHasChanged(); });
     private void SetFitFilter(RankingFilter value) { filter = value; selected.Clear(); }
     private void SetStageFilter(string? stage) { stageFilter = stage; selected.Clear(); }
     private void Toggle(int id, ChangeEventArgs e)
@@ -175,11 +182,23 @@ public partial class RankingTable
     }
     private void ShowFailure(string? detail, int? status)
     {
+        if (Anonymity.Enabled)
+        {
+            Show(status switch
+            {
+                409 => "Hồ sơ vừa được HR khác thay đổi. Hệ thống sẽ tải lại; hãy kiểm tra quyết định mới trước khi thao tác tiếp.",
+                400 => "Dữ liệu quyết định không hợp lệ. Hãy kiểm tra giai đoạn, lý do và ghi chú.",
+                404 => "Hồ sơ không còn tồn tại. Hãy tải lại bảng xếp hạng.",
+                null => "Chưa xác nhận được kết quả lưu. Hệ thống sẽ tải lại; không tự gửi lại quyết định.",
+                _ => "Máy chủ chưa xử lý được quyết định. Hãy kiểm tra dữ liệu mới trước khi thử lại."
+            }, true);
+            return;
+        }
         var text = status is >= 500 ? "Máy chủ gặp lỗi khi xử lý quyết định. Hãy kiểm tra dữ liệu mới trước khi thử lại." : detail ?? "Không đổi được giai đoạn.";
         if (status == 409) text = "Hồ sơ vừa được đổi. " + text;
         if (status is null) text += " Chưa xác nhận được kết quả lưu; hệ thống sẽ tải lại dữ liệu. Không tự gửi lại quyết định.";
         Show(text, true);
     }
     private void Show(string text, bool error) { message = text; messageIsError = error; }
-    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+    public void Dispose() { disposed = true; Anonymity.Changed -= PrivacyChanged; lifetime.Cancel(); lifetime.Dispose(); }
 }

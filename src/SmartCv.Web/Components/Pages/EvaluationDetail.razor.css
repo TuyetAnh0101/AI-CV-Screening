@@ -1,4 +1,8 @@
 .evaluation-detail { max-width: 1440px; margin: 0 auto; color: var(--sc-ink-900, #0f172a); overflow-wrap: anywhere; }
+.detail-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
+.detail-toolbar .breadcrumb { margin:0; }
+.review-notice { padding:16px 20px; margin-bottom:24px; background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #d97706; border-radius:12px; color:#78350f; font-size:.85rem; line-height:1.6; }
+.review-notice ul { padding-left:20px; margin:8px 0 0; }
 .breadcrumb { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; font-size: .85rem; }
 .breadcrumb a { color: var(--sc-brand-700, #0f766e); font-weight: 650; text-decoration: none; }
 .breadcrumb span, .muted { color: var(--sc-ink-500, #64748b); }

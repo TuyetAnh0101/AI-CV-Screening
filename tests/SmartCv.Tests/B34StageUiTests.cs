@@ -74,7 +74,7 @@ public class B34StageUiTests
         }
         var actor = new HrActorState();
         await actor.SetAsync("HR - Trần Thu Hà");
-        using var services = new ServiceCollection().AddSingleton(actor).AddSingleton<IJSRuntime>(new NoJs())
+        using var services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView()).AddSingleton(actor).AddSingleton<IJSRuntime>(new NoJs())
             .AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance)).BuildServiceProvider();
         await using var renderer = new LiveRenderer(services);
         async Task<bool> Reload()
@@ -173,7 +173,8 @@ public class B34StageUiTests
         await env.Renderer.Change("stage-select-9", "Reviewing");
         Assert.Null(env.Api.LastSingle!.RejectReason);
         Assert.Equal("Reviewing", env.Api.Items.Single(r => r.ApplicationId == 9).Stage);
-        Assert.DoesNotContain("Ẩn danh", env.Renderer.Text);
+        Assert.Contains("Ẩn danh", env.Renderer.Text); // B36 adds the control; this fixture explicitly opted out.
+        Assert.DoesNotContain("Ứng viên #", env.Renderer.Text);
     }
 
     [Fact]
@@ -312,7 +313,7 @@ public class B34StageUiTests
         private Environment(int count)
         {
             Api = new(count);
-            services = new ServiceCollection().AddSingleton(Actor)
+            services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView()).AddSingleton(Actor)
                 .AddSingleton(new ApplicationApiClient(new HttpClient(Api) { BaseAddress = new("https://api.test/") }, NullLogger<ApplicationApiClient>.Instance))
                 .AddSingleton<IJSRuntime>(new NoJs()).BuildServiceProvider();
             Renderer = new(services);

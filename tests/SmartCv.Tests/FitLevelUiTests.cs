@@ -143,6 +143,7 @@ public class FitLevelUiTests
     // ================= (2) Component thật =================
 
     private static IServiceProvider TableServices() => new ServiceCollection()
+        .AddSingleton(B36PrivacyTests.NormalView())
         .AddSingleton(new ApplicationApiClient(new HttpClient(), NullLogger<ApplicationApiClient>.Instance))
         .AddSingleton(new HrActorState()).BuildServiceProvider();
 
