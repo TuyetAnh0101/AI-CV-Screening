@@ -26,7 +26,7 @@ namespace SmartCv.Api.Endpoints;
 ///   DELETE /api/evaluation-sets/{id}/labels/{applicationId}  bỏ nhãn một hồ sơ
 /// A16: nhãn đổi → tính lại accuracy trong cùng transaction và khóa bộ đánh giá.
 /// </summary>
-public static class EvaluationSetEndpoints
+public static partial class EvaluationSetEndpoints
 {
     public const int MaxLabelsPerRequest = 2000;
     public const long MaxCsvBytes = 1024 * 1024;   // 1 MB ~ hàng chục nghìn dòng
@@ -41,6 +41,8 @@ public static class EvaluationSetEndpoints
         group.MapGet("/{id:int}", GetAsync).WithName("GetEvaluationSet").WithSummary("Một bộ CV đánh giá và các nhãn HR");
         group.MapGet("/{id:int}/applications", CandidatesAsync).WithName("ListLabelCandidates")
             .WithSummary("Hồ sơ có thể gán nhãn trong bộ này");
+        group.MapGet("/{id:int}/label-suggestions", SuggestionsAsync).WithName("LabelSuggestions")
+            .WithSummary("Đề xuất nhãn từ quyết định HR, chỉ đọc; HR xác nhận rồi lưu qua API labels hiện có");
         group.MapPut("/{id:int}/labels", SaveLabelsAsync).WithName("SaveHrLabels").WithSummary("Gán / sửa nhãn HR");
         group.MapPost("/{id:int}/labels/import", ImportCsvAsync).WithName("ImportHrLabels")
             .WithSummary("Nhập nhãn HR từ file CSV")
