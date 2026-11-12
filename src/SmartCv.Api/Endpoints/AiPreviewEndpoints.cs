@@ -47,7 +47,11 @@ public static class AiPreviewEndpoints
         var opt = options.Value;
         var application = await db.Applications.AsNoTracking()
             .Where(a => a.ApplicationId == id)
-            .Select(a => new { a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText })
+            .Select(a => new
+            {
+                a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText,
+                CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null   // A37: để che họ tên trước khi gửi AI
+            })
             .FirstOrDefaultAsync(ct);
         if (application is null) return TypedResults.NotFound();
 
@@ -68,7 +72,9 @@ public static class AiPreviewEndpoints
             return TypedResults.Problem(title: "Vị trí chưa có tiêu chí chấm",
                 detail: "Job không có kỹ năng và CV không có dữ liệu GPA / kinh nghiệm phù hợp nên không tính được điểm.", statusCode: 409);
 
-        var aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job, application.ExtractedText), ct);
+        // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che thông tin cá nhân trong GeminiEvaluationService (A37).
+        var aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job,
+            application.ExtractedText, application.CandidateName), ct);
         var combined = ScoreCombiner.Combine(keyword, aiResult, opt.KeywordWeight, opt.AiWeight, opt.PassThreshold, opt.MissingMustHaveCap);
 
         return TypedResults.Ok(new AiPreviewDto(

@@ -188,7 +188,11 @@ public sealed class RunScoringProcessor(
 
         var info = await db.Applications.AsNoTracking()
             .Where(a => a.ApplicationId == evaluation.ApplicationId)
-            .Select(a => new { a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText })
+            .Select(a => new
+            {
+                a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText,
+                CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null   // A37: để che họ tên trước khi gửi AI
+            })
             .FirstOrDefaultAsync(ct);
 
         // Xét trạng thái trước: khi đọc lại (A7), CV về Pending nhưng vẫn còn chữ cũ
@@ -218,7 +222,9 @@ public sealed class RunScoringProcessor(
                 }
                 else
                 {
-                    aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(run.ModelName, run.Temperature, run.SystemPrompt, job!, info.ExtractedText!), ct);
+                    // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che trong GeminiEvaluationService (A37).
+                    aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(run.ModelName, run.Temperature, run.SystemPrompt, job!,
+                        info.ExtractedText!, info.CandidateName), ct);
                     result = ScoreCombiner.Combine(keyword, aiResult, run.KeywordWeight, run.AiWeight, run.PassThreshold, _scoring.MissingMustHaveCap);
                 }
             }
