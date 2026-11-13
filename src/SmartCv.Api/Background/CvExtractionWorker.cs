@@ -57,7 +57,7 @@ public sealed class CvExtractionWorker(
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
                 var pending = await db.Cvs.AsNoTracking()
-                    .Where(c => c.ExtractionStatus == ExtractionStatuses.Pending)
+                    .Where(c => c.AnonymizedAt == null && c.ExtractionStatus == ExtractionStatuses.Pending)
                     .OrderBy(c => c.UploadedAt)
                     .Select(c => c.CvId)
                     .ToListAsync(ct);

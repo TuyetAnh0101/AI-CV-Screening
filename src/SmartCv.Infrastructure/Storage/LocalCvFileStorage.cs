@@ -10,7 +10,7 @@ namespace SmartCv.Infrastructure.Storage;
 /// và không bị lỗi với tên chứa ký tự lạ hoặc đường dẫn giả mạo kiểu "../../".
 /// Thư mục nằm ngoài wwwroot nên không truy cập trực tiếp được qua web; chỉ đọc qua GET /api/cvs/{id}/file.
 /// </summary>
-public sealed class LocalCvFileStorage : ICvFileStorage
+public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage
 {
     private readonly string _contentRoot;   // thư mục gốc của Api, ví dụ D:\Projects\SmartCv\src\SmartCv.Api
     private readonly string _storageRoot;   // tương đối, ví dụ "Uploads/CV"
@@ -72,13 +72,109 @@ public sealed class LocalCvFileStorage : ICvFileStorage
         if (File.Exists(fullPath)) File.Delete(fullPath);
     }
 
+    // Recovery copies are private, deterministic by CV ID and never served by any HTTP endpoint.
+    // A crash before SQL commit is repaired on retry; a crash after commit is purged on retry.
+    private string RecoveryPath(Guid id) => ToFullPath($"{_storageRoot}/.a39-recovery/{id:N}");
+
+    private string ErasurePath(string storedPath)
+    {
+        var full = ToFullPath(storedPath);
+        var root = Path.GetFullPath(Path.Combine(_contentRoot, _storageRoot));
+        for (var current = full; current is not null; current = Path.GetDirectoryName(current))
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Không xử lý file qua liên kết hệ thống.");
+            if (string.Equals(current, root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return full;
+        }
+        throw new IOException("Đường dẫn lưu CV không hợp lệ.");
+    }
+
+    public IReadOnlyList<Guid> PendingErasureIds(int limit)
+    {
+        if (limit is < 1 or > 200) throw new ArgumentOutOfRangeException(nameof(limit));
+        var directory = Path.GetDirectoryName(ErasurePath($"{_storageRoot}/.a39-recovery/entry"))!;
+        try
+        {
+            return Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly).Take(limit)
+                .Select(path => Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty).ToArray();
+        }
+        catch (DirectoryNotFoundException) { return []; }
+    }
+
+    public bool PrepareErasure(Guid cvId, string storedPath)
+    {
+        var original = ErasurePath(storedPath);
+        var backup = RecoveryPath(cvId);
+        ErasurePath($"{_storageRoot}/.a39-recovery/{cvId:N}");
+        // A retained journal belongs to a previously interrupted attempt for this exact CV/path.
+        if (File.Exists(backup + ".json"))
+        {
+            var recorded = System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(backup + ".json"));
+            if (recorded != storedPath) throw new IOException("Cần kiểm tra bản phục hồi CV.");
+            RollbackErasure(cvId);
+        }
+        FileStream input;
+        try { input = new FileStream(original, FileMode.Open, FileAccess.Read, FileShare.None); }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return false; }
+        using (input)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+            using var output = new FileStream(backup, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            input.CopyTo(output);
+            output.Flush(flushToDisk: true);
+        }
+        using (var journal = new FileStream(backup + ".json", FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(storedPath);
+            journal.Write(bytes);
+            journal.Flush(flushToDisk: true);
+        }
+        File.Delete(original);
+        return true;
+    }
+
+    public void RollbackErasure(Guid cvId)
+    {
+        var backup = RecoveryPath(cvId);
+        ErasurePath($"{_storageRoot}/.a39-recovery/{cvId:N}");
+        if (!File.Exists(backup + ".json")) return;
+        var stored = System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(backup + ".json"))
+            ?? throw new IOException("Bản phục hồi không hợp lệ.");
+        var original = ErasurePath(stored);
+        if (!File.Exists(original)) File.Copy(backup, original, overwrite: false);
+        File.Delete(backup);
+        File.Delete(backup + ".json");
+    }
+
+    public void CompleteErasure(Guid cvId)
+    {
+        var backup = RecoveryPath(cvId);
+        ErasurePath($"{_storageRoot}/.a39-recovery/{cvId:N}");
+        if (File.Exists(backup + ".json"))
+        {
+            var stored = System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(backup + ".json"))
+                ?? throw new IOException("Bản phục hồi không hợp lệ.");
+            DeleteMissingAllowed(ErasurePath(stored));
+        }
+        DeleteMissingAllowed(backup);
+        DeleteMissingAllowed(backup + ".json");
+    }
+
+    private static void DeleteMissingAllowed(string path)
+    {
+        try { File.Delete(path); }
+        catch (DirectoryNotFoundException) { } // missing file/directory is already erased; permission and I/O still propagate
+    }
+
     /// <summary>Đổi đường dẫn tương đối sang đường dẫn đầy đủ, và chặn mọi đường dẫn thoát ra ngoài thư mục gốc.</summary>
     private string ToFullPath(string storedPath)
     {
         var fullPath = Path.GetFullPath(Path.Combine(_contentRoot, storedPath.Replace('/', Path.DirectorySeparatorChar)));
         var allowedRoot = Path.GetFullPath(Path.Combine(_contentRoot, _storageRoot)) + Path.DirectorySeparatorChar;
 
-        if (!fullPath.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
+        if (!fullPath.StartsWith(allowedRoot, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             throw new InvalidOperationException("Đường dẫn file CV không hợp lệ.");
 
         return fullPath;

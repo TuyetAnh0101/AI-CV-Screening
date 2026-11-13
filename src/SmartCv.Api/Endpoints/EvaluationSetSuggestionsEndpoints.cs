@@ -17,7 +17,7 @@ public static partial class EvaluationSetEndpoints
         // Same candidate pool as the A36 guide: no decision yet / failed extraction is excluded.
         // The set scopes the CURRENT label, not the candidate pool (which includes unlabeled applications).
         var candidates = db.Applications.AsNoTracking()
-            .Where(a => a.Stage != ApplicationStages.New && a.Cv.ExtractionStatus != ExtractionStatuses.Failed);
+            .Where(a => a.Stage != ApplicationStages.New && a.Cv.ExtractionStatus != ExtractionStatuses.Failed && a.Cv.AnonymizedAt == null);
         if (jobId is { } job) candidates = candidates.Where(a => a.JobId == job);
         var rows = await (from app in candidates
             join label in db.HrLabels.AsNoTracking().Where(h => h.EvaluationSetId == id)

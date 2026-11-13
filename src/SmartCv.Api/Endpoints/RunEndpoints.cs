@@ -36,6 +36,8 @@ public static partial class RunEndpoints
             return Results.Problem(statusCode: 400, title: "Cần từ 1 đến 500 mã hồ sơ hợp lệ.");
         if (await db.Applications.CountAsync(a => ids.Contains(a.ApplicationId), ct) != ids.Length)
             return Results.Problem(statusCode: 400, title: "Hồ sơ không tồn tại.");
+        if (await db.Applications.AnyAsync(a => ids.Contains(a.ApplicationId) && a.Cv.AnonymizedAt != null, ct))
+            return Results.Problem(statusCode: 409, title: "Không chấm lại CV đã được ẩn danh hóa.");
         var prompts = await db.PromptVersions.AsNoTracking().Where(p => p.IsActive)
             .Select(p => new { p.PromptVersionId, p.VersionName }).Take(2).ToListAsync(ct);
         if (prompts.Count != 1)
@@ -80,13 +82,13 @@ public static partial class RunEndpoints
             .OrderBy(e => e.EvaluationId).Select(e => new RunItemDto
             {
                 EvaluationId = e.EvaluationId, ApplicationId = e.ApplicationId, CvId = e.Application.CvId,
-                FileName = e.Application.Cv.OriginalFileName,
-                CandidateName = e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
+                FileName = e.Application.Cv.AnonymizedAt == null ? e.Application.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
+                CandidateName = e.Application.Cv.AnonymizedAt == null && e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
                 JobId = e.Application.JobId, JobTitle = e.Application.Job.Title, Status = e.Status,
                 ExtractionStatus = e.Application.Cv.ExtractionStatus,
                 KeywordScore = e.KeywordScore, AiScore = e.AiScore, FinalScore = e.FinalScore,
                 ScoreSource = e.ScoreSource, FitLabel = e.FitLabel, PredictedPass = e.PredictedPass,
-                ErrorMessage = e.ErrorMessage ?? (e.Application.Cv.ExtractionStatus == "Failed"
+                ErrorMessage = e.Application.Cv.AnonymizedAt != null ? null : e.ErrorMessage ?? (e.Application.Cv.ExtractionStatus == "Failed"
                     ? "CV trích xuất thất bại."
                     : e.Application.Cv.ExtractionStatus != "Completed" ? "Đang chờ trích xuất CV."
                     : e.ScoreSource == ScoreSources.KeywordOnly ? "AI lỗi, chỉ tính điểm từ khóa." : null)
@@ -189,10 +191,10 @@ public static partial class RunEndpoints
             {
                 e.EvaluationId, e.ApplicationId, e.Application.CvId,
                 e.Application.Stage, e.Application.RejectReason, e.Application.StageUpdatedAt, e.Application.StageVersion,
-                FileName = e.Application.Cv.OriginalFileName,
-                CandidateName = e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
+                FileName = e.Application.Cv.AnonymizedAt == null ? e.Application.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
+                CandidateName = e.Application.Cv.AnonymizedAt == null && e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
                 e.KeywordScore, e.AiScore, e.FinalScore, e.ScoreSource, e.FitLabel, e.PredictedPass, e.YearsExperience,
-                e.Status, e.ErrorMessage,
+                e.Status, ErrorMessage = e.Application.Cv.AnonymizedAt == null ? e.ErrorMessage : null,
                 MatchedMustHave = e.Skills.Count(s => s.IsMatched && s.JobSkill.SkillType == SkillTypes.MustHave),
                 TotalMustHave = e.Application.Job.Skills.Count(s => s.SkillType == SkillTypes.MustHave)
             })

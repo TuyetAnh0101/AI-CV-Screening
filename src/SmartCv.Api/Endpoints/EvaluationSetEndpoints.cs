@@ -123,8 +123,8 @@ public static partial class EvaluationSetEndpoints
             .Select(h => new
             {
                 h.ApplicationId,
-                CandidateName = h.Application.Cv.Candidate != null ? h.Application.Cv.Candidate.FullName : null,
-                FileName = h.Application.Cv.OriginalFileName,
+                CandidateName = h.Application.Cv.AnonymizedAt == null && h.Application.Cv.Candidate != null ? h.Application.Cv.Candidate.FullName : null,
+                FileName = h.Application.Cv.AnonymizedAt == null ? h.Application.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
                 h.Application.JobId,
                 JobTitle = h.Application.Job.Title,
                 h.IsPass, h.Note, h.LabeledBy, h.LabeledAt
@@ -171,8 +171,8 @@ public static partial class EvaluationSetEndpoints
                 CvId = a.CvId,
                 HasExtractedText = a.Cv.ExtractedText != null && a.Cv.ExtractedText.Trim() != "",
                 ApplicationId = a.ApplicationId,
-                CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
-                FileName = a.Cv.OriginalFileName,
+                CandidateName = a.Cv.AnonymizedAt == null && a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
+                FileName = a.Cv.AnonymizedAt == null ? a.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
                 JobId = a.JobId,
                 JobTitle = a.Job.Title,
                 ExtractionStatus = a.Cv.ExtractionStatus,
@@ -274,8 +274,8 @@ public static partial class EvaluationSetEndpoints
             .Select(a => new
             {
                 a.ApplicationId,
-                a.Cv.OriginalFileName,
-                CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
+                OriginalFileName = a.Cv.AnonymizedAt == null ? a.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
+                CandidateName = a.Cv.AnonymizedAt == null && a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
                 a.Job.Title,
                 Label = a.HrLabels.Where(h => h.EvaluationSetId == id).Select(h => new { h.IsPass, h.Note }).FirstOrDefault()
             })

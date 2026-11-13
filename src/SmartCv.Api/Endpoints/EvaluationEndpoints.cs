@@ -47,7 +47,7 @@ public static class EvaluationEndpoints
                 x.Application.JobId, JobTitle = x.Application.Job.Title,
                 JobMinGpa = x.Application.Job.MinGpa, JobMinYears = x.Application.Job.MinYearsExperience,
                 x.KeywordScore, x.AiScore, x.FinalScore, x.ScoreSource, x.FitLabel, x.PredictedPass,
-                x.YearsExperience, x.Reasoning, x.AiRawResponse, x.CreatedAt
+                x.YearsExperience, x.Reasoning, x.AiRawResponse, x.CreatedAt, x.Application.Cv.AnonymizedAt
             })
             .FirstOrDefaultAsync(ct);
         if (e is null) return TypedResults.NotFound();
@@ -68,7 +68,7 @@ public static class EvaluationEndpoints
                 DisplayName = s.DisplayName,
                 SkillType = s.SkillType,
                 IsMatched = saved.TryGetValue(s.SkillCode, out var m) && m.IsMatched,
-                Evidence = saved.TryGetValue(s.SkillCode, out var m2) ? m2.Evidence : null
+                Evidence = e.AnonymizedAt is null && saved.TryGetValue(s.SkillCode, out var m2) ? m2.Evidence : null
             })
             .OrderBy(s => s.SkillType == "MustHave" ? 0 : 1).ThenByDescending(s => s.IsMatched).ThenBy(s => s.DisplayName)
             .ToList();
@@ -86,7 +86,7 @@ public static class EvaluationEndpoints
             ExtractedTextLength = review.TextLength,
             EvaluationId = e.EvaluationId,
             Status = e.Status,
-            ErrorMessage = e.ErrorMessage,
+            ErrorMessage = e.AnonymizedAt is null ? e.ErrorMessage : null,
             RunId = e.RunId,
             RunType = e.RunType,
             PromptVersionId = e.PromptVersionId,
@@ -102,10 +102,10 @@ public static class EvaluationEndpoints
             StageUpdatedAt = e.StageUpdatedAt is { } su ? DateTime.SpecifyKind(su, DateTimeKind.Utc) : null,
             StageVersion = e.StageVersion,
             CvId = e.CvId,
-            FileName = e.FileName,
+            FileName = e.AnonymizedAt is null ? e.FileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
             ContentType = e.ContentType,
-            CandidateName = e.CandidateName,
-            CandidateEmail = e.CandidateEmail,
+            CandidateName = e.AnonymizedAt is null ? e.CandidateName : null,
+            CandidateEmail = e.AnonymizedAt is null ? e.CandidateEmail : null,
             ExtractionMethod = e.ExtractionMethod,
             JobId = e.JobId,
             JobTitle = e.JobTitle,
@@ -120,9 +120,9 @@ public static class EvaluationEndpoints
             FitLabel = e.FitLabel,
             PredictedPass = e.PredictedPass,
             YearsExperience = e.YearsExperience,
-            Gpa = ReadGpa(e.AiRawResponse),
-            Reasoning = e.Reasoning,
-            AiRawResponse = e.AiRawResponse,
+            Gpa = e.AnonymizedAt is null ? ReadGpa(e.AiRawResponse) : null,
+            Reasoning = e.AnonymizedAt is null ? e.Reasoning : null,
+            AiRawResponse = e.AnonymizedAt is null ? e.AiRawResponse : null,
             CreatedAt = DateTime.SpecifyKind(e.CreatedAt, DateTimeKind.Utc),
             Skills = skills
         });

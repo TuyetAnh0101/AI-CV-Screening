@@ -41,9 +41,11 @@ public static class ScoringPreviewEndpoints
     {
         var application = await db.Applications.AsNoTracking()
             .Where(a => a.ApplicationId == id)
-            .Select(a => new { a.JobId, a.Cv.OriginalFileName, a.Cv.ExtractionStatus, a.Cv.ExtractedText })
+            .Select(a => new { a.JobId, a.Cv.OriginalFileName, a.Cv.ExtractionStatus, a.Cv.ExtractedText, a.CvId, a.Cv.AnonymizedAt })
             .FirstOrDefaultAsync(ct);
         if (application is null) return TypedResults.NotFound();
+        if (application.AnonymizedAt is not null)
+            return TypedResults.Problem(statusCode: 409, title: "CV đã được ẩn danh hóa");
 
         // Xét trạng thái trước: khi đọc lại (A7), CV về Pending nhưng vẫn còn chữ cũ, không được chấm trên chữ đó.
         if (application.ExtractionStatus != ExtractionStatuses.Completed || string.IsNullOrWhiteSpace(application.ExtractedText))
@@ -57,6 +59,8 @@ public static class ScoringPreviewEndpoints
             return TypedResults.Problem(title: "Vị trí chưa có tiêu chí chấm",
                 detail: "Job không có kỹ năng và CV không có dữ liệu GPA / kinh nghiệm phù hợp nên không tính được điểm.", statusCode: 409);
 
+        if (await db.Cvs.AnyAsync(c => c.CvId == application.CvId && c.AnonymizedAt != null, ct))
+            return TypedResults.Problem(statusCode: 409, title: "CV đã được ẩn danh hóa trong lúc chấm thử");
         return TypedResults.Ok(new KeywordPreviewDto(
             id, application.OriginalFileName, job.Title, result.Score, result.Gpa, result.YearsExperience,
             result.Skills.Select(s => new SkillPreviewDto(
