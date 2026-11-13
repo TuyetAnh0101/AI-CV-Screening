@@ -29,8 +29,11 @@ public sealed class CvUploadService(
 {
     private readonly CvUploadOptions _options = options.Value;
 
-    public async Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CancellationToken cancellationToken = default)
+    public async Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CvUploadSource source, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!CvSourceChannels.IsValid(source.SourceChannel) || source.ConsentConfirmedAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Nguồn CV và thời điểm xác nhận UTC không hợp lệ.", nameof(source));
         // Giữ đúng thứ tự file người dùng gửi: kết quả thứ i ứng với file thứ i
         var results = new CvUploadItemResult[files.Count];
         var passed = new List<PassedFile>();   // file qua được bước 1–2, chờ kiểm tra trùng
@@ -115,7 +118,7 @@ public sealed class CvUploadService(
             }
 
             // A6: lưu file rồi ghi database (mỗi file một lần, để file này lỗi không kéo theo file khác)
-            results[p.Index] = await SaveAsync(p, cancellationToken);
+            results[p.Index] = await SaveAsync(p, source, cancellationToken);
         }
 
         var failed = results.Count(r => r.Status == CvUploadStatuses.Rejected);
@@ -145,7 +148,7 @@ public sealed class CvUploadService(
     /// Thứ tự: ghi file ra ổ đĩa → thêm dòng Cvs → SaveChanges. Nếu bước nào lỗi thì dọn file vừa ghi,
     /// để không có file "mồ côi" (có trên ổ đĩa mà không có trong database).
     /// </summary>
-    private async Task<CvUploadItemResult> SaveAsync(PassedFile p, CancellationToken ct)
+    private async Task<CvUploadItemResult> SaveAsync(PassedFile p, CvUploadSource source, CancellationToken ct)
     {
         var cvId = Guid.NewGuid();
         var uploadedAt = DateTime.UtcNow;   // dùng cho cả thư mục yyyy/MM và cột UploadedAt
@@ -163,6 +166,8 @@ public sealed class CvUploadService(
             cv = new Cv
             {
                 CvId = cvId,
+                SourceChannel = source.SourceChannel,
+                ConsentConfirmedAt = source.ConsentConfirmedAtUtc,
                 CandidateId = null,                 // chưa biết ứng viên; bổ sung khi đọc được tên (A10) hoặc HR nhập (M3)
                 OriginalFileName = p.Name,
                 StoredPath = storedPath,

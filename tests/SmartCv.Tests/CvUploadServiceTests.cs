@@ -22,6 +22,8 @@ public class CvUploadServiceTests
 {
     private sealed record Ctx(CvUploadService Service, SmartCvDbContext Db, string Root, ICvFileStorage Storage, RecordingQueue Queue)
     {
+        public Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CancellationToken ct = default) =>
+            Service.UploadAsync(files, A38TestData.ConfirmedSource(), ct);
         public string[] SavedFiles() =>
             Directory.Exists(Path.Combine(Root, "Uploads")) ? Directory.GetFiles(Path.Combine(Root, "Uploads"), "*", SearchOption.AllDirectories) : [];
     }
@@ -54,7 +56,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync([Unreadable(name, length)]);
+        var result = await ctx.UploadAsync([Unreadable(name, length)]);
 
         var item = Assert.Single(result.Files);
         Assert.Equal(CvUploadStatuses.Rejected, item.Status);
@@ -70,7 +72,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync(
+        var result = await ctx.UploadAsync(
         [
             File("gia-mao-pdf.pdf", "Day khong phai CV ma la file chu"u8.ToArray(), "application/pdf"),
             File("anh-png-doi-duoi.pdf", TestSupport.Png("x"), "application/pdf"),
@@ -88,7 +90,7 @@ public class CvUploadServiceTests
         var ctx = Create();
         var bytes = TestSupport.Pdf("cung-noi-dung");
 
-        var result = await ctx.Service.UploadAsync([File("cv-mau-1.pdf", bytes), File("cv-mau-1-ban-sao.pdf", bytes)]);
+        var result = await ctx.UploadAsync([File("cv-mau-1.pdf", bytes), File("cv-mau-1-ban-sao.pdf", bytes)]);
 
         Assert.Equal(CvUploadStatuses.Accepted, result.Files[0].Status);
         Assert.Equal(CvUploadErrorCodes.Duplicate, result.Files[1].ErrorCode);
@@ -102,7 +104,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync([File("cv.pdf", TestSupport.Pdf("ban-cu")), File("cv.pdf", TestSupport.Pdf("ban-da-sua"))]);
+        var result = await ctx.UploadAsync([File("cv.pdf", TestSupport.Pdf("ban-cu")), File("cv.pdf", TestSupport.Pdf("ban-da-sua"))]);
 
         Assert.All(result.Files, f => Assert.Equal(CvUploadStatuses.Accepted, f.Status));
         Assert.Equal(2, ctx.SavedFiles().Length);   // tên vật lý là GUID nên hai file cùng tên gốc không đè nhau
@@ -123,7 +125,7 @@ public class CvUploadServiceTests
         await ctx.Db.SaveChangesAsync();
         ctx.Db.ChangeTracker.Clear();
 
-        var result = await ctx.Service.UploadAsync([File("cv-moi.pdf", bytes), File("khac.pdf", TestSupport.Pdf("khac"))]);
+        var result = await ctx.UploadAsync([File("cv-moi.pdf", bytes), File("khac.pdf", TestSupport.Pdf("khac"))]);
 
         var dup = result.Files[0];
         Assert.Equal(CvUploadErrorCodes.Duplicate, dup.ErrorCode);
@@ -140,7 +142,7 @@ public class CvUploadServiceTests
         var ctx = Create();
         var cv1 = TestSupport.Pdf("cv-mau-1");
 
-        var result = await ctx.Service.UploadAsync(
+        var result = await ctx.UploadAsync(
         [
             File("cv-mau-1.pdf", cv1),
             File("file-rong.pdf", []),
@@ -172,7 +174,7 @@ public class CvUploadServiceTests
         var pdf = TestSupport.Pdf("cv-luu");
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        var result = await ctx.Service.UploadAsync(
+        var result = await ctx.UploadAsync(
         [
             File(@"C:\Users\hr\Desktop\Nguyễn Văn An CV.PDF", pdf, "application/octet-stream"),
             File("anh.JPG", TestSupport.Jpg("anh")),
@@ -217,7 +219,7 @@ public class CvUploadServiceTests
         var root = TestSupport.TempRoot();
         var ctx = Create(storage: new FailingStorage(TestSupport.Storage(root), failOnCall: 1));
 
-        var result = await ctx.Service.UploadAsync([File("loi.pdf", TestSupport.Pdf("loi")), File("ok.pdf", TestSupport.Pdf("ok"))]);
+        var result = await ctx.UploadAsync([File("loi.pdf", TestSupport.Pdf("loi")), File("ok.pdf", TestSupport.Pdf("ok"))]);
 
         Assert.Equal(CvUploadStatuses.Rejected, result.Files[0].Status);
         Assert.Equal(CvUploadErrorCodes.SaveFailed, result.Files[0].ErrorCode);
@@ -233,7 +235,7 @@ public class CvUploadServiceTests
         var db = new FailingSaveDb(Guid.NewGuid().ToString("N"));
         var ctx = Create(db: db);
 
-        var result = await ctx.Service.UploadAsync([File("cv.pdf", TestSupport.Pdf("db-loi"))]);
+        var result = await ctx.UploadAsync([File("cv.pdf", TestSupport.Pdf("db-loi"))]);
 
         Assert.Equal(CvUploadErrorCodes.SaveFailed, Assert.Single(result.Files).ErrorCode);
         Assert.Empty(ctx.SavedFiles());       // file đã ghi được xóa: không có file mồ côi
@@ -248,7 +250,7 @@ public class CvUploadServiceTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => ctx.Service.UploadAsync([File("cv.pdf", TestSupport.Pdf("a"))], cts.Token));
+            () => ctx.UploadAsync([File("cv.pdf", TestSupport.Pdf("a"))], cts.Token));
         Assert.Empty(ctx.SavedFiles());
     }
 
@@ -260,7 +262,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync([File(sent, TestSupport.Pdf(sent))]);
+        var result = await ctx.UploadAsync([File(sent, TestSupport.Pdf(sent))]);
 
         Assert.Equal(expected, Assert.Single(result.Files).FileName);
         Assert.All(ctx.SavedFiles(), f => Assert.StartsWith(Path.Combine(ctx.Root, "Uploads", "CV"), f));
@@ -271,7 +273,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync([]);
+        var result = await ctx.UploadAsync([]);
 
         Assert.Equal((0, 0, 0), (result.TotalFiles, result.SuccessCount, result.FailedCount));
     }
@@ -296,7 +298,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create();
 
-        var result = await ctx.Service.UploadAsync([
+        var result = await ctx.UploadAsync([
             File("a.pdf", TestSupport.Pdf("q-a")),
             File("rong.pdf", []),
             File("b.png", TestSupport.Png("q-b")),
@@ -311,7 +313,7 @@ public class CvUploadServiceTests
     {
         var ctx = Create(storage: new FailingStorage(TestSupport.Storage(TestSupport.TempRoot()), failOnCall: 1));
 
-        var result = await ctx.Service.UploadAsync([File("a.pdf", TestSupport.Pdf("q-fail"))]);
+        var result = await ctx.UploadAsync([File("a.pdf", TestSupport.Pdf("q-fail"))]);
 
         Assert.Equal(CvUploadErrorCodes.SaveFailed, result.Files[0].ErrorCode);
         Assert.Empty(ctx.Queue.Items);
@@ -323,7 +325,7 @@ public class CvUploadServiceTests
         // Xếp hàng lỗi sau khi đã lưu: KHÔNG được xóa file/dòng Cvs; CV vẫn Pending, worker xếp lại khi khởi động
         var ctx = Create(queueFails: true);
 
-        var result = await ctx.Service.UploadAsync([File("a.pdf", TestSupport.Pdf("q-queue-fail"))]);
+        var result = await ctx.UploadAsync([File("a.pdf", TestSupport.Pdf("q-queue-fail"))]);
 
         Assert.Equal(CvUploadStatuses.Accepted, result.Files[0].Status);
         var cv = await ctx.Db.Cvs.AsNoTracking().SingleAsync();

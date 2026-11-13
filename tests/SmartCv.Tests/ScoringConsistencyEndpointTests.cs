@@ -180,7 +180,7 @@ public class ScoringConsistencyEndpointTests
         {
             { new ByteArrayContent(TestSupport.Pdf("synthetic-empty-content")), "files", "empty-content.pdf" }
         };
-        using var uploaded = await client.PostAsync("/api/cvs/upload", upload);
+        using var uploaded = await client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(upload));
         var uploadDto = await uploaded.Content.ReadFromJsonAsync<CvUploadResponse>();
         Assert.NotNull(uploadDto);
         var file = Assert.Single(uploadDto.Files);

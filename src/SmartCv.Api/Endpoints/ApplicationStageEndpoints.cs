@@ -2,11 +2,14 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore.Storage;
 using SmartCv.Core.Applications;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
+using SmartCv.Core.Options;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Privacy;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -42,7 +45,7 @@ public static class ApplicationStageEndpoints
 
     // ---------- PATCH /api/applications/{id}/stage ----------
     private static async Task<Results<Ok<StageChangeResultDto>, ProblemHttpResult>> ChangeOneAsync(
-        int id, ChangeStageRequest request, SmartCvDbContext db, ILogger<ApplicationEvent> logger, CancellationToken ct)
+        int id, ChangeStageRequest request, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
     {
         var (change, error) = StageChangeRules.Validate(request.ToStage, request.RejectReason, request.Note, request.Actor);
         if (change is null) return Problem(400, "Dữ liệu không hợp lệ", error!);
@@ -62,19 +65,30 @@ public static class ApplicationStageEndpoints
         if (StageChangeRules.IsNoOp(new CurrentStage(app.ApplicationId, app.Stage, app.RejectReason), change))
             return TypedResults.Ok(Unchanged(app, "Hồ sơ đã ở giai đoạn này."));
 
-        var ev = Apply(app, change, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var ev = Apply(app, change, now);
         db.ApplicationEvents.Add(ev);
+        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
         try
         {
+            await CvRetentionWriter.ExtendAsync(db, [app.CvId], change.ToStage, now, retention.Value.Months, ct);
             await db.SaveChangesAsync(ct); // EF checks original concurrency tokens in the UPDATE predicate.
+            if (transaction is not null) await transaction.CommitAsync(ct);
         }
         catch (DbUpdateConcurrencyException)
         {
+            await RollbackAsync(transaction);
             return Conflict(); // SaveChanges rolls back the event as well; never retry an HR decision silently.
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 or 547 })
         {
+            await RollbackAsync(transaction);
             // Concurrent deletion (FK) or overlapping SQL Server transactions (deadlock victim).
+            return Conflict();
+        }
+        catch (SqlException ex) when (ex.Number is 1205 or 547)
+        {
+            await RollbackAsync(transaction);
             return Conflict();
         }
 
@@ -84,7 +98,7 @@ public static class ApplicationStageEndpoints
 
     // ---------- POST /api/applications/stage ----------
     private static async Task<Results<Ok<BulkStageChangeResponse>, ProblemHttpResult>> ChangeManyAsync(
-        BulkChangeStageRequest request, SmartCvDbContext db, ILogger<ApplicationEvent> logger, CancellationToken ct)
+        BulkChangeStageRequest request, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
     {
         var idError = StageChangeRules.ValidateIds(request.ApplicationIds);
         if (idError is not null) return Problem(400, "Danh sách hồ sơ không hợp lệ", idError);
@@ -113,13 +127,20 @@ public static class ApplicationStageEndpoints
             events[p.ApplicationId] = ev;
         }
 
-        // MỘT lần SaveChanges = MỘT giao dịch: lỗi giữa chừng thì không hồ sơ nào bị đổi
+        // Retention SQL + the single SaveChanges share a transaction. A stale HR decision rolls back both.
+        await using var transaction = db.Database.IsRelational() && events.Count > 0 ? await db.Database.BeginTransactionAsync(ct) : null;
         try
         {
-            if (events.Count > 0) await db.SaveChangesAsync(ct);
+            if (events.Count > 0)
+            {
+                await CvRetentionWriter.ExtendAsync(db, events.Keys.Select(id => apps[id].CvId), change.ToStage, now, retention.Value.Months, ct);
+                await db.SaveChangesAsync(ct);
+                if (transaction is not null) await transaction.CommitAsync(ct);
+            }
         }
         catch (DbUpdateConcurrencyException ex)
         {
+            await RollbackAsync(transaction);
             var conflicts = ex.Entries.Where(e => e.Entity is Application)
                 .Select(e => ((Application)e.Entity).ApplicationId).ToHashSet();
             db.ChangeTracker.Clear();
@@ -129,9 +150,17 @@ public static class ApplicationStageEndpoints
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 1205 or 547 })
         {
+            await RollbackAsync(transaction);
             db.ChangeTracker.Clear();
             var saved = await db.Applications.AsNoTracking().Where(a => ids.Contains(a.ApplicationId))
                 .ToDictionaryAsync(a => a.ApplicationId, ct);
+            return BulkConflict(plan, saved, events.Keys.ToHashSet());
+        }
+        catch (SqlException ex) when (ex.Number is 1205 or 547)
+        {
+            await RollbackAsync(transaction);
+            db.ChangeTracker.Clear();
+            var saved = await db.Applications.AsNoTracking().Where(a => ids.Contains(a.ApplicationId)).ToDictionaryAsync(a => a.ApplicationId, ct);
             return BulkConflict(plan, saved, events.Keys.ToHashSet());
         }
         logger.LogInformation("Đổi hàng loạt sang {To}: {Changed} đổi, {Same} giữ nguyên, {Missing} không có, bởi {Actor}",
@@ -231,6 +260,11 @@ public static class ApplicationStageEndpoints
     };
 
     private static DateTime Utc(DateTime d) => DateTime.SpecifyKind(d, DateTimeKind.Utc);
+    private static async Task RollbackAsync(IDbContextTransaction? transaction)
+    {
+        // SQL Server may already have rolled back a deadlock victim.
+        if (transaction?.GetDbTransaction().Connection is not null) await transaction.RollbackAsync(CancellationToken.None);
+    }
 
     private const string ConflictMessage = "Hồ sơ vừa được người khác thay đổi. Hãy tải lại dữ liệu rồi thao tác lại.";
 

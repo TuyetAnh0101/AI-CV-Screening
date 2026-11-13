@@ -15,6 +15,10 @@ public class Cv
     public string ExtractionStatus { get; set; } = "Pending";  // Pending | Completed | Failed
     public string? ExtractionError { get; set; }
     public DateTime UploadedAt { get; set; }
+    public string? SourceChannel { get; set; }
+    public DateTime? ConsentConfirmedAt { get; set; }
+    public DateTime? RetainUntil { get; set; }
+    public DateTime? AnonymizedAt { get; set; }
 
     public Candidate? Candidate { get; set; }
     public ICollection<Application> Applications { get; set; } = new List<Application>();

@@ -14,7 +14,7 @@ public class CvExtractEndpointTests
     private static async Task<Guid> UploadAsync(HttpClient client, byte[] bytes, string name)
     {
         using var content = new MultipartFormDataContent { { new ByteArrayContent(bytes), "files", name } };
-        using var response = await client.PostAsync("/api/cvs/upload", content);
+        using var response = await client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(content));
         var body = await response.Content.ReadFromJsonAsync<CvUploadResponse>();
         Assert.Equal(CvUploadStatuses.Accepted, body!.Files[0].Status);
         return body.Files[0].CvId!.Value;
