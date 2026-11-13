@@ -72,7 +72,8 @@ public static class AiPromptBuilder
         return sb.ToString();
     }
 
-    private static string Limit(string text, int maxChars)
+    /// <summary>Phần CV nằm trong prompt. A41: AiPromptAssembler dùng lại để đếm đúng số ký tự gửi đi.</summary>
+    internal static string Limit(string text, int maxChars)
     {
         if (text.Length <= maxChars) return text;
         var end = maxChars > 0 && char.IsHighSurrogate(text[maxChars - 1]) ? maxChars - 1 : maxChars;   // không cắt giữa emoji

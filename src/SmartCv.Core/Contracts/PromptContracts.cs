@@ -24,6 +24,9 @@ namespace SmartCv.Core.Contracts;
 //   DELETE /api/evaluation-sets/{id}/labels/{applicationId}  bỏ nhãn một hồ sơ                          A15
 //   GET    /api/prompt-tests/compare?baseRunId=1&candidateRunId=2                                       A17
 //   GET    /api/prompts/compare?baseVersionId=1&candidateVersionId=2&evaluationSetId=1               A17
+//
+// A41 (chỉ THÊM trường/lớp, không đổi trường cũ): Matrix, AccuracyLow, AccuracyHigh cho lần chạy; Conclusive, ConclusionNote
+// cho so sánh. Công cụ chấm thử / nội dung gửi Gemini nằm ở PromptToolContracts.cs.
 
 /// <summary>Một phiên bản system prompt (bảng PromptVersions) kèm kết quả đánh giá gần nhất.</summary>
 public sealed class PromptVersionDto
@@ -82,8 +85,31 @@ public class PromptTestSummaryDto
     public int MissedCount { get; init; }            // bỏ sót: HR Đạt, AI Không đạt
     public int WrongPickCount { get; init; }         // chọn nhầm: HR Không đạt, AI Đạt
 
+    // A41: ma trận 2×2 và khoảng tin cậy 95% (Wilson) của AccuracyPercent, đơn vị %. null khi chưa có tỷ lệ đúng.
+    public ConfusionMatrixDto? Matrix { get; init; }
+    public decimal? AccuracyLow { get; init; }       // ví dụ 56.25
+    public decimal? AccuracyHigh { get; init; }      // ví dụ 80.90
+
     public DateTime CreatedAt { get; init; }         // UTC
     public DateTime? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// A41: ma trận nhầm lẫn 2×2 (hàng = nhãn HR, cột = dự đoán AI) của các CV có nhãn được xét.
+///                 AI Đạt        AI Không đạt
+///   HR Đạt        TruePass      Missed (bỏ sót)
+///   HR Không đạt  WrongPick     TrueFail
+/// Unscored: CV chưa chấm xong hoặc chấm lỗi; không nằm trong 4 ô nhưng VẪN ở mẫu số của tỷ lệ đúng (tính là sai, A16).
+/// TruePass + Missed + WrongPick + TrueFail + Unscored = Total = số CV có nhãn được xét.
+/// </summary>
+public sealed class ConfusionMatrixDto
+{
+    public int TruePass { get; init; }
+    public int Missed { get; init; }
+    public int WrongPick { get; init; }
+    public int TrueFail { get; init; }
+    public int Unscored { get; init; }
+    public int Total => TruePass + Missed + WrongPick + TrueFail + Unscored;
 }
 
 /// <summary>Chi tiết một lần chạy đánh giá: thêm từng CV so với nhãn HR.</summary>
@@ -217,6 +243,13 @@ public sealed class PromptCompareDto
     public string Summary { get; init; } = string.Empty;           // một câu tiếng Việt cho quản lý
     public bool IsFairComparison { get; init; }                     // cùng bộ CV, model, temperature, trọng số, ngưỡng
     public List<string> Warnings { get; init; } = [];
+
+    /// <summary>
+    /// A41: mức độ kết luận, tách khỏi Verdict (giữ nguyên cho B16). true chỉ khi Verdict là Better/Worse và hai khoảng tin cậy 95%
+    /// của Base/Candidate không chồng nhau. Verdict = Better mà Conclusive = false: chênh lệch chỉ là quan sát, chưa đủ cơ sở kết luận.
+    /// </summary>
+    public bool Conclusive { get; init; }
+    public string? ConclusionNote { get; init; }                    // câu tiếng Việt, ví dụ "Chưa đủ dữ liệu để kết luận bản nào tốt hơn, cần thêm CV có nhãn."
 
     public List<PromptCompareItemDto> Items { get; init; } = [];    // CV thay đổi trước, rồi tới CV giữ nguyên
 }

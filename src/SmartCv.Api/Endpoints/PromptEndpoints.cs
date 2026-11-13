@@ -2,13 +2,17 @@ using System.Linq.Expressions;
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Ai;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Gemini;
+using SmartCv.Infrastructure.Scoring;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -19,6 +23,9 @@ namespace SmartCv.Api.Endpoints;
 ///   GET  /api/prompts/{id}            một bản
 ///   POST /api/prompts                 tạo bản mới (KHÔNG có API sửa: prompt đã tạo là cố định, sửa = lưu thành bản mới)
 ///   POST /api/prompts/{id}/activate   kích hoạt; bản đang dùng cũ tự tắt (chỉ một bản IsActive = 1)
+/// A41:
+///   POST /api/prompts/assembled-preview   nội dung SẼ gửi Gemini cho một hồ sơ (đã che dữ liệu cá nhân);
+///                                         không gọi Gemini, không tốn lượt chấm thử, không ghi database
 /// </summary>
 public static class PromptEndpoints
 {
@@ -35,7 +42,70 @@ public static class PromptEndpoints
         group.MapGet("/{id:int}", GetAsync).WithName("GetPrompt").WithSummary("Một phiên bản prompt");
         group.MapPost("/", CreateAsync).WithName("CreatePrompt").WithSummary("Lưu thành phiên bản mới");
         group.MapPost("/{id:int}/activate", ActivateAsync).WithName("ActivatePrompt").WithSummary("Kích hoạt một phiên bản");
+        // A41: trả nội dung CV (đã che) và thông tin job nên nằm trong cùng chốt chặn Development ở trên
+        group.MapPost("/assembled-preview", AssembledPreviewAsync).WithName("PreviewAssembledPrompt")
+            .WithSummary("Nội dung sẽ gửi Gemini cho một hồ sơ (đã che dữ liệu cá nhân); không gọi Gemini, không tốn lượt, không lưu")
+            .WithMetadata(new RequestSizeLimitAttribute(PromptToolSupport.MaxRequestBytes))
+            .WithDescription("Body JSON (UTF-8): { \"applicationId\": 5 } kèm \"systemPrompt\" (nháp) hoặc \"promptVersionId\"; " +
+                             "không có cả hai thì dùng bản đang kích hoạt.")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status415UnsupportedMediaType);
         return app;
+    }
+
+    // ---------- A41: POST /api/prompts/assembled-preview ----------
+    private static async Task<Results<Ok<AssembledPromptDto>, ProblemHttpResult>> AssembledPreviewAsync(
+        HttpContext http, SmartCvDbContext db, IOptions<ScoringOptions> scoring, IOptions<GeminiOptions> gemini, CancellationToken ct)
+    {
+        var (request, bodyProblem) = await PromptToolSupport.ReadJsonBodyAsync<AssembledPreviewRequest>(http, ct);
+        if (bodyProblem is not null) return bodyProblem;
+        if (request is null)
+            return Problem(400, "Thiếu nội dung yêu cầu",
+                "Gửi JSON { \"applicationId\": 5 }, kèm systemPrompt (bản nháp) hoặc promptVersionId nếu không dùng bản đang kích hoạt.");
+        if (request.ApplicationId <= 0)
+            return Problem(400, "Mã hồ sơ không hợp lệ", "applicationId phải là số nguyên dương.");
+        var invalid = PromptToolSupport.ValidateSource(request.SystemPrompt, request.PromptVersionId);
+        if (invalid is not null) return invalid;
+
+        // Fail-closed: cấu hình cũ (không che) sẽ gửi CV gốc cho Gemini; API xem trước không bao giờ trả CV chưa che.
+        var g = gemini.Value;
+        if (!g.MaskPersonalData)
+            return TypedResults.Problem(title: "Chưa bật che dữ liệu cá nhân",
+                detail: "Gemini:MaskPersonalData đang tắt nên nội dung gửi Gemini chứa dữ liệu cá nhân gốc. " +
+                        "API xem trước không trả nội dung này; hãy bật lại che dữ liệu (mặc định).",
+                statusCode: StatusCodes.Status409Conflict,
+                extensions: new Dictionary<string, object?> { ["code"] = "PersonalDataMaskingDisabled" });
+
+        var (application, applicationProblem) = await PromptToolSupport.LoadReadyApplicationAsync(db, request.ApplicationId, ct);
+        if (application is null) return applicationProblem!;
+        var (prompt, promptProblem) = await PromptToolSupport.ResolvePromptAsync(db, request.SystemPrompt, request.PromptVersionId, ct);
+        if (prompt is null) return promptProblem!;
+        var job = await db.LoadJobProfileAsync(application.JobId, ct);
+        if (job is null) return PromptToolSupport.JobNotFound(application.JobId);
+
+        // Cùng đầu vào và cùng cấu hình với lượt chấm thật (GeminiEvaluationService) → cùng nội dung
+        var opt = scoring.Value;
+        var assembled = AiPromptAssembler.Assemble(
+            new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job, application.ExtractedText, application.CandidateName),
+            g.MaxCvCharacters, g.MaskPersonalData);
+        var mask = assembled.Mask!;
+
+        return TypedResults.Ok(new AssembledPromptDto
+        {
+            ApplicationId = application.ApplicationId, JobId = job.JobId, JobTitle = job.Title,
+            PromptSource = prompt.Source, PromptVersionId = prompt.VersionId, PromptVersion = prompt.Name, IsDraft = prompt.IsDraft,
+            Model = opt.ModelName, Temperature = opt.Temperature, AiSimulated = g.UseFake,
+            SystemPrompt = assembled.SystemPrompt, UserPrompt = assembled.UserPrompt,
+            PersonalDataMasked = assembled.PersonalDataMasked,
+            MaskedNames = mask.Names, MaskedEmails = mask.Emails, MaskedPhones = mask.Phones, MaskedLinks = mask.Links,
+            MaskedBirthDates = mask.BirthDates, MaskedGenders = mask.Genders, MaskedTotal = mask.Total,
+            NameMaskSource = mask.NameSource.ToString(),
+            CvCharacters = assembled.CvCharacters, CvCharactersSent = assembled.CvCharactersSent,
+            MaxCvCharacters = g.MaxCvCharacters, Truncated = assembled.Truncated,
+            AllowedSkillCodes = [.. assembled.AllowedSkillCodes]
+        });
     }
 
     // ---------- GET /api/prompts ----------

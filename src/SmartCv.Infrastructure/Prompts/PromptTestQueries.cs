@@ -111,6 +111,7 @@ public static class PromptTestQueries
             AccuracyPercent = accuracy?.AccuracyPercent,
             TotalLabeledCount = accuracy?.Total, CorrectCount = accuracy?.Correct, MissedCount = accuracy?.Missed,
             WrongPickCount = accuracy?.WrongPick, UnscoredCount = accuracy?.Unscored, KeywordOnlyCount = accuracy?.KeywordOnly,
+            Matrix = ToMatrix(accuracy), AccuracyLow = accuracy?.Confidence95?.Low, AccuracyHigh = accuracy?.Confidence95?.High,
             Items = items.Select(WithOutcome).ToList()
         };
         if (transaction is not null) await transaction.CommitAsync(ct);
@@ -196,9 +197,17 @@ public static class PromptTestQueries
             CreatedAt = Utc(run.CreatedAt), CompletedAt = run.CompletedAt is { } completed ? Utc(completed) : null,
             AccuracyPercent = accuracy?.AccuracyPercent, TotalLabeledCount = accuracy?.Total,
             CorrectCount = accuracy?.Correct, MissedCount = accuracy?.Missed, WrongPickCount = accuracy?.WrongPick,
-            UnscoredCount = accuracy?.Unscored, KeywordOnlyCount = accuracy?.KeywordOnly
+            UnscoredCount = accuracy?.Unscored, KeywordOnlyCount = accuracy?.KeywordOnly,
+            Matrix = ToMatrix(accuracy), AccuracyLow = accuracy?.Confidence95?.Low, AccuracyHigh = accuracy?.Confidence95?.High
         };
     }
+
+    /// <summary>A41: ma trận 2×2 từ đúng kết quả A16 đã tính (không truy vấn thêm). null khi chưa có tỷ lệ đúng.</summary>
+    internal static ConfusionMatrixDto? ToMatrix(AccuracyResult? accuracy) => accuracy is null ? null : new ConfusionMatrixDto
+    {
+        TruePass = accuracy.TruePass, Missed = accuracy.Missed, WrongPick = accuracy.WrongPick,
+        TrueFail = accuracy.TrueFail, Unscored = accuracy.Unscored
+    };
 
     private static LabeledPrediction ToPrediction(PromptTestEvaluationDto item) =>
         new(item.ApplicationId, item.HrIsPass!.Value, item.Status, item.PredictedPass, item.ScoreSource);

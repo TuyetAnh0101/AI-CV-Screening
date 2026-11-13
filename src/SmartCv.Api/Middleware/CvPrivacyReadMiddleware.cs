@@ -7,7 +7,8 @@ namespace SmartCv.Api.Middleware;
 /// <summary>Keep an erasure from overtaking an in-flight personal-data response. No response body cache.</summary>
 public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
 {
-    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare"];
+    // A41: assembled-preview trả nội dung CV (đã che) nên cũng giữ khóa đọc, để ẩn danh hóa không chen ngang lúc đang trả.
+    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare", "/api/prompts/assembled-preview"];
     public async Task InvokeAsync(HttpContext http, IServiceScopeFactory scopes, IHostEnvironment environment, IOptions<CvUploadEndpointOptions> endpoint)
     {
         var path = http.Request.Path;

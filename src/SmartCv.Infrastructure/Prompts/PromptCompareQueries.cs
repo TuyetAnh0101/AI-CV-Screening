@@ -132,6 +132,8 @@ public static class PromptCompareQueries
             Summary = comparison.Summary,
             IsFairComparison = comparison.IsFairComparison,
             Warnings = [.. comparison.Warnings],
+            Conclusive = comparison.Conclusive,             // A41
+            ConclusionNote = comparison.ConclusionNote,     // A41
             Items = items
         };
     }
@@ -188,6 +190,9 @@ public static class PromptCompareQueries
         TotalItems = info.TotalItems, ProcessedItems = info.ProcessedItems, FailedItems = info.FailedItems,
         AccuracyPercent = accuracy.AccuracyPercent, CorrectCount = accuracy.Correct,
         MissedCount = accuracy.Missed, WrongPickCount = accuracy.WrongPick,
+        // A41: cùng phạm vi CV chung với AccuracyPercent ở trên; null khi không có CV chung nào
+        Matrix = accuracy.Total == 0 ? null : PromptTestQueries.ToMatrix(accuracy),
+        AccuracyLow = accuracy.Confidence95?.Low, AccuracyHigh = accuracy.Confidence95?.High,
         CreatedAt = Utc(info.CreatedAt), CompletedAt = info.CompletedAt is { } completed ? Utc(completed) : null
     };
 

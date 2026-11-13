@@ -30,6 +30,11 @@ public class PromptTestRunDto
     public int? WrongPickCount { get; init; }
     public int? UnscoredCount { get; init; }
     public int? KeywordOnlyCount { get; init; }
+    /// <summary>A41: ma trận 2×2 của các CV có nhãn (cùng phạm vi với TotalLabeledCount); null cho tới khi Completed.</summary>
+    public ConfusionMatrixDto? Matrix { get; init; }
+    /// <summary>A41: khoảng tin cậy 95% (Wilson) của AccuracyPercent, đơn vị %, làm tròn 2 chữ số; null khi chưa có tỷ lệ đúng.</summary>
+    public decimal? AccuracyLow { get; init; }
+    public decimal? AccuracyHigh { get; init; }
 }
 
 public sealed class PromptTestProgressDto : PromptTestRunDto
