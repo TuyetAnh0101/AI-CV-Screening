@@ -34,7 +34,7 @@ public class CvUploadEndpointTests
             part.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
             content.Add(part, "files", name);
         }
-        return content;
+        return A38TestData.WithConsent(content);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class CvUploadEndpointTests
             { new ByteArrayContent(pdf), "files", "cv-mau-1-ban-sao.pdf" },
         };
 
-        using var response = await client.PostAsync("/api/cvs/upload", content);
+        using var response = await client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(content));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);   // có file bị từ chối vẫn trả 200
         var body = await response.Content.ReadFromJsonAsync<CvUploadResponse>();
@@ -82,7 +82,7 @@ public class CvUploadEndpointTests
         using var client = factory.CreateClient();
         using var content = new MultipartFormDataContent { { new StringContent("khong co file"), "note" } };
 
-        using var response = await client.PostAsync("/api/cvs/upload", content);
+        using var response = await client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(content));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);

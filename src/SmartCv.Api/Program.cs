@@ -36,6 +36,11 @@ builder.Services.AddOptions<ReviewFlagOptions>()
     .Validate(o => o.HasValidThresholds(), "ReviewFlags: ScoreGap phải > 0 và <= 100, MinTextLength > 0, CappedHighAiScore từ 0 đến 100.")
     .ValidateOnStart();
 
+builder.Services.AddOptions<RetentionOptions>()
+    .Bind(builder.Configuration.GetSection(RetentionOptions.SectionName))
+    .Validate(o => o.Months is >= 1 and <= 120, "Retention:Months phải từ 1 đến 120.")
+    .ValidateOnStart();
+
 // A10: giới hạn tần suất riêng cho API chấm thử (mỗi lần gọi tốn quota Gemini).
 builder.Services.AddOptions<RateLimiterOptions>().Configure(o =>
     o.AddPolicy<string, AiPreviewRateLimitPolicy>(AiPreviewRateLimitPolicy.PolicyName));

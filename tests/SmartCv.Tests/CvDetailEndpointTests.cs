@@ -16,7 +16,7 @@ public class CvDetailEndpointTests
         var client = factory.CreateClient();
         var bytes = TestSupport.Pdf(name + Guid.NewGuid());
         using var content = new MultipartFormDataContent { { new ByteArrayContent(bytes), "files", name } };
-        using var response = await client.PostAsync("/api/cvs/upload", content);
+        using var response = await client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(content));
         var body = await response.Content.ReadFromJsonAsync<CvUploadResponse>();
         return (client, body!.Files[0].CvId!.Value, bytes);
     }

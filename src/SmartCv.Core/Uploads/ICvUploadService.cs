@@ -10,5 +10,5 @@ namespace SmartCv.Core.Uploads;
 /// </summary>
 public interface ICvUploadService
 {
-    Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CancellationToken cancellationToken = default);
+    Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CvUploadSource source, CancellationToken cancellationToken = default);
 }

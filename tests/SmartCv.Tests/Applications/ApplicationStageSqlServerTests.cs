@@ -37,7 +37,7 @@ public class ApplicationStageSqlServerTests
         Assert.NotEqual(Guid.Empty, app.StageVersion);
         Assert.Equal("existing-before-A35.pdf", (await db.Cvs.SingleAsync()).OriginalFileName);
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(3, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(db.Database.GetMigrations(), await db.Database.GetAppliedMigrationsAsync());
         foreach (var pair in new (string Stage, string? Reason)[]
         {
             ("Rejected", null), ("New", "Duplicate"), ("Invalid", null), ("new", null), ("Rejected", "invalid")
@@ -242,16 +242,20 @@ public class ApplicationStageSqlServerTests
         Assert.All(await db.Applications.ToListAsync(), a => { Assert.Equal("New", a.Stage); Assert.Null(a.StageUpdatedAt); });
     }
 
-    private sealed class DecisionBarrier : SaveChangesInterceptor
+    private sealed class DecisionBarrier : DbCommandInterceptor
     {
         private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int arrivals;
         public bool Armed { get; set; }
         public int Arrivals => arrivals;
-        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command,
+            CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
         {
-            if (Armed && eventData.Context!.ChangeTracker.Entries<Application>().Any(e => e.State == EntityState.Modified))
+            // Both HR requests must read the old version before either starts writing.
+            // A38 writes/locks the shared CV before SaveChanges; waiting there would manufacture a timeout.
+            if (Armed && Volatile.Read(ref arrivals) < 2
+                && command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("FROM [Applications]"))
             {
                 if (Interlocked.Increment(ref arrivals) == 2) ready.TrySetResult();
                 await ready.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);

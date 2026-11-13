@@ -135,18 +135,18 @@ public class WebApiClientTests
             Size > maxAllowedSize ? throw new IOException("Supplied file exceeds the maximum") : new MemoryStream(bytes);
     }
 
-    private static (WebApplicationFactory<Program> Api, CvApiClient Client) CvClientAgainstRealApi()
+    private static (WebApplicationFactory<Program> Api, CvApiClient Client) CvClientAgainstRealApiWithSyntheticConsent()
     {
         // API tải CV chỉ bật ở Development (A4); database InMemory (A5 tra trùng trong bảng Cvs)
         var api = TestSupport.ApiFactory();
-        return (api, new CvApiClient(api.CreateClient(),
+        return (api, new CvApiClient(A38TestData.ClientWithSyntheticConsent(api),
             Microsoft.Extensions.Options.Options.Create(new SmartCv.Core.Options.CvUploadOptions()), NullLogger<CvApiClient>.Instance));
     }
 
     [Fact]
     public async Task CvApiClient_upload_matches_A4_contract()
     {
-        var (api, client) = CvClientAgainstRealApi();
+        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
         using var _ = api;
 
         // CV 1 MB > 500 KB mặc định của Blazor: chứng minh client đã truyền maxAllowedSize = 10 MB
@@ -167,7 +167,7 @@ public class WebApiClientTests
     public async Task CvApiClient_receives_A5_rejections_per_file()
     {
         // B5 dựa vào status, errorCode, errorMessage của từng file; HTTP vẫn 200 nên IsSuccess = true
-        var (api, client) = CvClientAgainstRealApi();
+        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
         using var _ = api;
 
         var result = await client.UploadAsync(
@@ -186,7 +186,7 @@ public class WebApiClientTests
     [Fact]
     public async Task CvApiClient_shows_api_message_when_too_many_files()
     {
-        var (api, client) = CvClientAgainstRealApi();
+        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
         using var _ = api;
 
         var files = Enumerable.Range(1, 21)

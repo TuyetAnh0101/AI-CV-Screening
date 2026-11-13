@@ -125,6 +125,7 @@ public static class CvEndpoints
                 c.CvId, c.CandidateId, CandidateName = c.Candidate != null ? c.Candidate.FullName : null,
                 c.OriginalFileName, c.ContentType, c.FileSizeBytes, c.UploadedAt, c.StoredPath,
                 c.ExtractionStatus, c.ExtractionMethod, c.ExtractionError, c.ExtractedText,
+                c.SourceChannel, c.ConsentConfirmedAt, c.RetainUntil, c.AnonymizedAt,
                 Applications = c.Applications
                     .OrderBy(a => a.JobId)
                     .Select(a => new CvApplicationDto
@@ -147,6 +148,11 @@ public static class CvEndpoints
             FileSizeBytes = cv.FileSizeBytes,
             UploadedAt = DateTime.SpecifyKind(cv.UploadedAt, DateTimeKind.Utc),
             FileAvailable = SafeExists(storage, cv.StoredPath),
+            SourceChannel = cv.SourceChannel,
+            SourceChannelName = CvSourceChannels.DisplayName(cv.SourceChannel),
+            ConsentConfirmedAt = cv.ConsentConfirmedAt is { } consent ? DateTime.SpecifyKind(consent, DateTimeKind.Utc) : null,
+            RetainUntil = cv.RetainUntil is { } retain ? DateTime.SpecifyKind(retain, DateTimeKind.Utc) : null,
+            AnonymizedAt = cv.AnonymizedAt is { } anonymized ? DateTime.SpecifyKind(anonymized, DateTimeKind.Utc) : null,
             ExtractionStatus = cv.ExtractionStatus,
             ExtractionMethod = cv.ExtractionMethod,
             ExtractionError = cv.ExtractionError,
@@ -200,6 +206,8 @@ public static class CvEndpoints
 
     private static async Task<Results<Ok<CvUploadResponse>, ProblemHttpResult>> UploadAsync(
         IFormFileCollection files,
+        [FromForm] string? sourceChannel,
+        [FromForm] bool? consentConfirmed,
         ICvUploadService uploadService,
         IOptions<CvUploadOptions> options,
         CancellationToken cancellationToken)
@@ -222,12 +230,15 @@ public static class CvEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var (source, title, error) = CvUploadSource.Create(sourceChannel, consentConfirmed, DateTime.UtcNow);
+        if (source is null) return TypedResults.Problem(title: title, detail: error, statusCode: StatusCodes.Status400BadRequest);
+
         // Chuyển IFormFile (của ASP.NET) sang CvUploadFile (của Core)
         var uploadFiles = files
             .Select(f => new CvUploadFile(f.FileName, f.ContentType, f.Length, f.OpenReadStream))
             .ToList();
 
-        var result = await uploadService.UploadAsync(uploadFiles, cancellationToken);
+        var result = await uploadService.UploadAsync(uploadFiles, source, cancellationToken);
         return TypedResults.Ok(result);
     }
 }

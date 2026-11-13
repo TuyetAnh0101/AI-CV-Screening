@@ -191,8 +191,14 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Property<Guid>("CvId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("AnonymizedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("CandidateId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("ConsentConfirmedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
@@ -231,6 +237,13 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<DateTime?>("RetainUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SourceChannel")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<string>("StoredPath")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -250,6 +263,10 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasIndex("CandidateId")
                         .HasDatabaseName("IX_Cvs_CandidateId");
 
+                    b.HasIndex("RetainUntil")
+                        .HasDatabaseName("IX_Cvs_RetainUntil")
+                        .HasFilter("[AnonymizedAt] IS NULL AND [RetainUntil] IS NOT NULL");
+
                     b.ToTable("Cvs", null, t =>
                         {
                             t.HasCheckConstraint("CK_Cvs_ExtractionMethod", "ExtractionMethod IN (N'PdfText', N'PdfOcr', N'ImageOcr')");
@@ -257,6 +274,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             t.HasCheckConstraint("CK_Cvs_ExtractionStatus", "ExtractionStatus IN (N'Pending', N'Completed', N'Failed')");
 
                             t.HasCheckConstraint("CK_Cvs_FileSizeBytes", "FileSizeBytes > 0");
+
+                            t.HasCheckConstraint("CK_Cvs_SourceChannel", "SourceChannel IS NULL OR (SourceChannel COLLATE Latin1_General_100_BIN2 IN (N'Email', N'Website', N'JobBoard', N'Referral', N'Other') AND DATALENGTH(SourceChannel) = DATALENGTH(RTRIM(SourceChannel)))");
                         });
                 });
 

@@ -11,6 +11,12 @@ public sealed class CvDetailDto
     public long FileSizeBytes { get; init; }
     public DateTime UploadedAt { get; init; }            // giờ UTC
     public bool FileAvailable { get; init; }             // file gốc còn trên máy chủ không
+    public string? SourceChannel { get; init; }
+    public string SourceChannelName { get; init; } = string.Empty;
+    public DateTime? ConsentConfirmedAt { get; init; }
+    public DateTime? RetainUntil { get; init; }
+    public DateTime? AnonymizedAt { get; init; }
+    public bool IsAnonymized => AnonymizedAt is not null;
 
     // A7: kết quả đọc chữ
     public string ExtractionStatus { get; init; } = string.Empty;   // Pending | Completed | Failed
