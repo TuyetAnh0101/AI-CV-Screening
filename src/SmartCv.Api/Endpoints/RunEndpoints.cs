@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.HttpResults;
 using SmartCv.Core.Scoring;
@@ -7,6 +8,7 @@ using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Scoring;
 
 namespace SmartCv.Api.Endpoints;
@@ -22,6 +24,8 @@ public static partial class RunEndpoints
         group.MapPost("/", StartAsync).RequireRateLimiting(CvUploadRateLimiting.PolicyName).DisableAntiforgery();
         group.MapGet("/", ListAsync);
         group.MapGet("/latest", LatestAsync);
+        // A42: chỉ đọc, đặt trước /{id:int} cho dễ đọc ("estimate" không khớp ràng buộc int nên không che route theo mã)
+        group.MapGet("/estimate", EstimateAsync).WithName("EstimateRun").WithSummary("Ước tính thời gian chấm N CV");
         group.MapGet("/{id:int}", GetAsync);
         group.MapGet("/{id:int}/ranking", RankingAsync);
         group.MapGet("/{id:int}/compare", CompareAsync);
@@ -32,7 +36,7 @@ public static partial class RunEndpoints
         IOptions<ScoringOptions> options, CancellationToken ct)
     {
         var ids = (request.ApplicationIds ?? []).Distinct().ToArray();
-        if (ids.Length is 0 or > 500 || ids.Any(id => id <= 0))
+        if (ids.Length is 0 or > RunTimeEstimator.MaxCount || ids.Any(id => id <= 0))
             return Results.Problem(statusCode: 400, title: "Cần từ 1 đến 500 mã hồ sơ hợp lệ.");
         if (await db.Applications.CountAsync(a => ids.Contains(a.ApplicationId), ct) != ids.Length)
             return Results.Problem(statusCode: 400, title: "Hồ sơ không tồn tại.");
@@ -70,6 +74,48 @@ public static partial class RunEndpoints
             run.TotalItems, run.ProcessedItems, run.FailedItems,
             RunScoringProcessor.ProgressPercent(run.ProcessedItems, run.TotalItems), run.CreatedAt, run.CompletedAt));
     }
+    // ---------- A42: GET /api/runs/estimate?count=N ----------
+    private static async Task<IResult> EstimateAsync(SmartCvDbContext db, IOptions<GeminiOptions> gemini, CancellationToken ct, string? count = null)
+    {
+        // Tự đọc count để mọi giá trị sai (thiếu, chữ, số thập phân, âm, quá 500) đều là 400 tiếng Việt, không phải lỗi framework
+        if (!int.TryParse(count, NumberStyles.None, CultureInfo.InvariantCulture, out var n) || n > RunTimeEstimator.MaxCount)
+            return Results.Problem(statusCode: 400, title: "Số CV không hợp lệ",
+                detail: $"count phải là số nguyên từ 0 đến {RunTimeEstimator.MaxCount}, ví dụ /api/runs/estimate?count=10.");
+
+        // 10 lượt Screening đã xong gần nhất, chỉ các lượt có hồ sơ và có thời gian chạy dương (PromptTest không tính).
+        // Lọc và chọn cột trong SQL, không theo dõi thực thể, không đọc Evaluations hay CV.
+        var recent = await db.EvaluationRuns.AsNoTracking()
+            .Where(r => r.RunType == RunTypes.Screening && r.Status == RunStatuses.Completed
+                        && r.CompletedAt != null && r.CompletedAt > r.CreatedAt && r.TotalItems > 0)
+            .OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.RunId)
+            .Take(RunTimeEstimator.MaxSamples)
+            .Select(r => new { r.TotalItems, r.CreatedAt, CompletedAt = r.CompletedAt!.Value })
+            .ToListAsync(ct);
+
+        // AI giả (chỉ Development) không đi qua khoảng cách 4,5 giây của Gemini mà chờ FakeDelayMs mỗi CV
+        var g = gemini.Value;
+        var floorMs = g.UseFake ? g.FakeDelayMs : g.MinDelayBetweenCallsMs;
+        var e = RunTimeEstimator.Estimate(n, recent.Select(r => new RunDurationSample(r.TotalItems, r.CompletedAt - r.CreatedAt)), floorMs);
+
+        var basis = e.IsDefault
+            ? "Ước tính ban đầu (chưa có lượt chấm nào đã xong)"
+            : $"Ước tính theo {e.BasedOnRuns} lượt chấm gần nhất";
+        return Results.Ok(new RunEstimateDto
+        {
+            Count = e.Count,
+            SecondsPerCv = e.SecondsPerCv,
+            EstimatedSeconds = e.EstimatedSeconds,
+            EstimatedMinutes = e.EstimatedMinutes,
+            BasedOnRuns = e.BasedOnRuns,
+            IsDefault = e.IsDefault,
+            MinSecondsPerCv = e.MinSecondsPerCv,
+            AiSimulated = g.UseFake,
+            Text = e.Text,
+            Note = basis + (g.UseFake ? " với AI giả lập" : string.Empty) +
+                   ". Thời gian thực tế phụ thuộc hàng đợi và số lần thử lại khi Gemini quá tải, không phải cam kết."
+        });
+    }
+
     private static async Task<IResult> GetAsync(int id, SmartCvDbContext db, CancellationToken ct)
     {
         var run = await db.EvaluationRuns.AsNoTracking().Where(r => r.RunId == id)

@@ -19,6 +19,8 @@ namespace SmartCv.Infrastructure.Uploads;
 /// A6: lưu file hợp lệ vào Uploads/CV/yyyy/MM/&lt;GUID&gt;.ext và thêm dòng vào bảng Cvs (ExtractionStatus = Pending),
 ///     trả Accepted + CvId. File bị từ chối trả Rejected kèm ErrorCode, ErrorMessage (thêm mã SaveFailed).
 /// A7: sau khi CV đã lưu chắc chắn, xếp CvId vào hàng đợi để tiến trình nền đọc chữ (không chờ đọc xong).
+/// A42: trùng với CV đã có → trả thêm mã CV cũ, tên file, ngày tải (UTC) và các vị trí đã ứng tuyển để giao diện
+///      mở "Xem CV hiện có" thay vì tải lại; CV cũ đã ẩn danh hóa thì không trả thông tin nào của hồ sơ cũ.
 /// </summary>
 public sealed class CvUploadService(
     SmartCvDbContext db,
@@ -99,21 +101,18 @@ public sealed class CvUploadService(
         }
 
         // ---- Bước 4: trùng với CV đã có trong database (một câu truy vấn cho tất cả file, chỉ đọc) ----
+        // A42: cùng câu truy vấn lấy thêm mã CV và các vị trí đã ứng tuyển (không truy vấn theo từng file / từng job)
         var hashes = unique.Select(p => p.Hash).ToList();
         var existing = hashes.Count == 0
             ? new Dictionary<string, ExistingCv>(StringComparer.OrdinalIgnoreCase)
-            : await db.Cvs.AsNoTracking()
-                .Where(c => hashes.Contains(c.FileHash))
-                .Select(c => new ExistingCv(c.FileHash, c.OriginalFileName, c.UploadedAt))
-                .ToDictionaryAsync(c => c.FileHash, StringComparer.OrdinalIgnoreCase, cancellationToken);
+            : (await LoadExistingAsync(hashes, cancellationToken)).ToDictionary(c => c.FileHash, StringComparer.OrdinalIgnoreCase);
 
         foreach (var p in unique)
         {
             if (existing.TryGetValue(p.Hash, out var old))
             {
-                // Chỉ báo tên file gốc và ngày tải của CV cũ để HR nhận ra; không trả đường dẫn lưu hay CvId.
-                results[p.Index] = Rejected(p.File, p.Name, CvUploadErrorCodes.Duplicate,
-                    $"Trùng với CV đã tải trước đó: \"{old.OriginalFileName}\" (ngày {ToLocalDate(old.UploadedAt)}).");
+                // Không tạo CV mới, không đổi nguồn / xác nhận đồng ý của CV cũ, không xếp đọc chữ lại.
+                results[p.Index] = DuplicateOf(p, old);
                 continue;
             }
 
@@ -189,7 +188,12 @@ public sealed class CvUploadService(
             // nhưng ràng buộc UQ_Cvs_FileHash chỉ cho một bản vào database.
             await CleanupAsync(cvId, storedPath, cv);
             logger.LogWarning("CV mới {CvId} trùng hash với CV vừa lưu đồng thời, đã bỏ", cvId);
-            return Rejected(p.File, p.Name, CvUploadErrorCodes.Duplicate, "Trùng với một CV vừa được tải lên cùng lúc.");
+            // A42: đọc lại bản đã thắng để giao diện mở được CV hiện có; đọc lỗi thì vẫn báo trùng như cũ
+            const string concurrent = "Trùng với một CV vừa được tải lên cùng lúc.";
+            var winner = await TryLoadExistingAsync(p.Hash);
+            return winner is null
+                ? Rejected(p.File, p.Name, CvUploadErrorCodes.Duplicate, concurrent)
+                : DuplicateOf(p, winner, concurrent);
         }
         catch (OperationCanceledException)
         {
@@ -273,5 +277,61 @@ public sealed class CvUploadService(
 
     private sealed record PassedFile(int Index, CvUploadFile File, string Name, string Extension, string ContentType, string Hash);
 
-    private sealed record ExistingCv(string FileHash, string OriginalFileName, DateTime UploadedAt);
+    private sealed record ExistingCv(string FileHash, Guid CvId, string OriginalFileName, DateTime UploadedAt, DateTime? AnonymizedAt,
+        IReadOnlyList<string> JobTitles);
+
+    /// <summary>A42: CV đã có theo hash, kèm các vị trí đã ứng tuyển (không trùng lặp, theo thứ tự JobId). Một câu truy vấn, chỉ đọc.</summary>
+    private async Task<List<ExistingCv>> LoadExistingAsync(List<string> hashes, CancellationToken ct)
+    {
+        var rows = await db.Cvs.AsNoTracking()
+            .Where(c => hashes.Contains(c.FileHash))
+            .Select(c => new
+            {
+                c.FileHash, c.CvId, c.OriginalFileName, c.UploadedAt, c.AnonymizedAt,
+                JobTitles = c.Applications.OrderBy(a => a.JobId).Select(a => a.Job.Title).ToList()
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => new ExistingCv(r.FileHash, r.CvId, r.OriginalFileName, r.UploadedAt, r.AnonymizedAt,
+            r.JobTitles.Distinct(StringComparer.Ordinal).ToList())).ToList();
+    }
+
+    /// <summary>A42: đọc lại CV đã thắng khi hai request tải cùng file đồng thời. Lỗi đọc → null (vẫn báo trùng), không ném tiếp.</summary>
+    private async Task<ExistingCv?> TryLoadExistingAsync(string hash)
+    {
+        try
+        {
+            return (await LoadExistingAsync([hash], CancellationToken.None)).FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không đọc lại được CV trùng vừa lưu đồng thời; vẫn báo trùng không kèm thông tin CV cũ");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A42: kết quả trùng với CV đã có. Giữ tiền tố thông báo của A5 (giao diện cũ vẫn hiểu), thêm các vị trí đã ứng tuyển.
+    /// CV cũ đã ẩn danh hóa: không trả mã, tên file, ngày tải hay vị trí của hồ sơ cũ.
+    /// </summary>
+    private static CvUploadItemResult DuplicateOf(PassedFile p, ExistingCv old, string? message = null)
+    {
+        if (old.AnonymizedAt is not null)
+            return Rejected(p.File, p.Name, CvUploadErrorCodes.Duplicate,
+                "Trùng với một hồ sơ đã được ẩn danh hóa theo chính sách lưu trữ; không hiển thị thông tin hồ sơ cũ.");
+
+        var applied = old.JobTitles.Count == 0 ? "chưa ứng tuyển vị trí nào" : "đã ứng tuyển: " + string.Join(", ", old.JobTitles);
+        return new CvUploadItemResult
+        {
+            FileName = p.Name,
+            SizeBytes = p.File.Length,
+            ContentType = p.File.ContentType,
+            Status = CvUploadStatuses.Rejected,
+            ErrorCode = CvUploadErrorCodes.Duplicate,
+            ErrorMessage = message ?? $"Trùng với CV đã tải trước đó: \"{old.OriginalFileName}\" (ngày {ToLocalDate(old.UploadedAt)}), {applied}.",
+            ExistingCvId = old.CvId,
+            ExistingFileName = old.OriginalFileName,
+            ExistingUploadedAt = DateTime.SpecifyKind(old.UploadedAt, DateTimeKind.Utc),
+            ExistingJobTitles = [.. old.JobTitles]
+        };
+    }
 }

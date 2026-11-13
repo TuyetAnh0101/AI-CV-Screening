@@ -22,6 +22,13 @@ public sealed class CvUploadItemResult
     public Guid? CvId { get; init; }          // A6: mã CV sau khi lưu vào database
     public string? ErrorCode { get; init; }   // A5: mã lỗi để giao diện hiện thông báo
     public string? ErrorMessage { get; init; }
+
+    // A42: chỉ có khi ErrorCode = Duplicate và trùng với CV ĐÃ CÓ trong database (để giao diện mở "Xem CV hiện có").
+    // Trùng nhau trong cùng lần tải, hoặc CV cũ đã ẩn danh hóa: các trường này null / rỗng.
+    public Guid? ExistingCvId { get; init; }
+    public string? ExistingFileName { get; init; }
+    public DateTime? ExistingUploadedAt { get; init; }          // UTC
+    public List<string> ExistingJobTitles { get; init; } = [];  // các vị trí CV cũ đã ứng tuyển (không trùng lặp)
 }
 
 /// <summary>Trạng thái của từng file.</summary>

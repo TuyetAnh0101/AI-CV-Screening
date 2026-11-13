@@ -17,6 +17,7 @@ namespace SmartCv.Api.Endpoints;
 ///   POST /api/cvs/upload      tải một hoặc nhiều file (A4–A6)
 ///   GET  /api/cvs/{id}        thông tin CV, trạng thái đọc chữ, các job đã ứng tuyển (A6)
 ///   GET  /api/cvs/{id}/file   xem / tải file gốc (A6)
+///   GET  /api/cvs/{id}/text   chữ đã đọc + chỉ số chất lượng (A42); 410 khi CV đã ẩn danh hóa
 ///   POST /api/cvs/{id}/extract đọc lại chữ (A7), ví dụ khi lần trước lỗi do thiếu dữ liệu OCR
 /// </summary>
 public static class CvEndpoints
@@ -80,6 +81,14 @@ public static class CvEndpoints
             .WithName("GetCvFile")
             .WithSummary("Xem file CV gốc (thêm ?download=true để tải về)")
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // A42: chữ đã đọc + chất lượng cho B38 "Xem chữ đã đọc". Trả nội dung CV nên cùng chốt chặn Development ở trên;
+        // CvPrivacyReadMiddleware giữ khóa đọc A39 và đặt Cache-Control: no-store cho mọi route /api/cvs.
+        group.MapGet("/{id:guid}/text", GetCvTextAsync)
+            .WithName("GetCvText")
+            .WithSummary("Chữ đã đọc từ CV và chỉ số chất lượng (cảnh báo CV ảnh mờ có thể đọc sai)")
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status410Gone);
 
         // A7: đọc lại chữ. Cùng chốt chặn Development như trên; giới hạn tần suất như API tải lên vì OCR tốn CPU.
         group.MapPost("/{id:guid}/extract", ReExtractAsync)
@@ -158,9 +167,63 @@ public static class CvEndpoints
             ExtractionMethod = cv.ExtractionMethod,
             ExtractionError = cv.AnonymizedAt is null ? cv.ExtractionError : null,
             ExtractedText = cv.AnonymizedAt is null ? cv.ExtractedText : null,
+            // A42: chỉ đánh giá chữ của lần đọc đã xong; Pending (kể cả còn chữ cũ khi đọc lại) / Failed / ẩn danh → null
+            TextQuality = cv.AnonymizedAt is null && cv.ExtractionStatus == ExtractionStatuses.Completed
+                ? ToQualityDto(TextQuality.Assess(cv.ExtractedText, cv.ExtractionMethod))
+                : null,
             Applications = cv.Applications
         });
     }
+
+    // ---------- GET /api/cvs/{id}/text (A42) ----------
+    private static async Task<Results<Ok<CvTextDto>, ProblemHttpResult>> GetCvTextAsync(Guid id, SmartCvDbContext db, CancellationToken ct)
+    {
+        // Chỉ đọc các cột cần (không có StoredPath); không ghi log nội dung CV
+        var cv = await db.Cvs.AsNoTracking()
+            .Where(c => c.CvId == id)
+            .Select(c => new { c.CvId, c.OriginalFileName, c.ExtractionStatus, c.ExtractionMethod, c.ExtractionError, c.ExtractedText, c.AnonymizedAt })
+            .FirstOrDefaultAsync(ct);
+
+        if (cv is null)
+            return TypedResults.Problem(title: "Không tìm thấy CV", detail: $"Không có CV mã {id}.", statusCode: StatusCodes.Status404NotFound);
+        // A39: CV đã ẩn danh hóa không còn chữ hay tên file; trả 410 (cùng nội dung RetentionEndpoints.Gone) trước khi đụng tới nội dung
+        if (cv.AnonymizedAt is not null)
+            return TypedResults.Problem(title: "CV đã được ẩn danh hóa",
+                detail: "File gốc và nội dung CV không còn được cung cấp. Điểm và lịch sử quyết định được giữ nguyên.",
+                statusCode: StatusCodes.Status410Gone);
+
+        var completed = cv.ExtractionStatus == ExtractionStatuses.Completed;
+        return TypedResults.Ok(new CvTextDto
+        {
+            CvId = cv.CvId,
+            OriginalFileName = cv.OriginalFileName,
+            ExtractionStatus = cv.ExtractionStatus,
+            ExtractionMethod = cv.ExtractionMethod,
+            ExtractionError = cv.ExtractionError,
+            // Pending có thể còn chữ của lần đọc trước (A7 đọc lại): không trả chữ cũ như thể là kết quả mới
+            Text = completed ? cv.ExtractedText : null,
+            Quality = completed ? ToQualityDto(TextQuality.Assess(cv.ExtractedText, cv.ExtractionMethod)) : null,
+            StatusMessage = cv.ExtractionStatus switch
+            {
+                ExtractionStatuses.Completed => string.IsNullOrWhiteSpace(cv.ExtractedText)
+                    ? "Đã đọc xong nhưng không có chữ nào: kiểm tra file gốc (có thể là ảnh trắng hoặc PDF chỉ có hình)."
+                    : "Đã đọc xong.",
+                ExtractionStatuses.Pending => "CV đang chờ đọc chữ, hãy tải lại sau ít giây.",
+                ExtractionStatuses.Failed => "Không đọc được chữ từ CV. Có thể đọc lại bằng POST /api/cvs/{id}/extract.",
+                _ => $"Trạng thái đọc chữ: {cv.ExtractionStatus}."
+            }
+        });
+    }
+
+    private static TextQualityDto ToQualityDto(TextQualityResult q) => new()
+    {
+        CharCount = q.CharCount,
+        WordCount = q.WordCount,
+        LetterRatio = q.LetterRatio,
+        Level = q.Level,
+        MaybeMisread = q.MaybeMisread,
+        Warnings = [.. q.Warnings]
+    };
 
     // ---------- GET /api/cvs/{id}/file ----------
     private static async Task<Results<FileStreamHttpResult, NotFound<ProblemDetails>, ProblemHttpResult>> GetCvFileAsync(
