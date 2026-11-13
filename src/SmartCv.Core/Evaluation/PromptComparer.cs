@@ -66,7 +66,17 @@ public sealed record PromptComparison(
     string Summary,
     bool IsFairComparison,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<CompareItem> Items);
+    IReadOnlyList<CompareItem> Items)
+{
+    /// <summary>
+    /// A41: true chỉ khi Verdict là Better/Worse VÀ hai khoảng tin cậy 95% (Wilson) không chồng nhau.
+    /// Verdict giữ nguyên (B16): Better với Conclusive = false nghĩa là chênh lệch mới là kết quả quan sát, chưa đủ cơ sở kết luận.
+    /// </summary>
+    public bool Conclusive { get; init; }
+
+    /// <summary>A41: câu giải thích mức độ kết luận cho giao diện (tiếng Việt).</summary>
+    public string ConclusionNote { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// A17: so sánh hai lượt đánh giá prompt. Hàm thuần: không đọc database, không gọi Gemini.
@@ -218,6 +228,7 @@ public static class PromptComparer
 
         var summary = Summary(baseRun.PromptName, accBase, candidateRun.PromptName, accCandidate, fixedCount, brokenCount,
             verdict, reliabilityIssue, keywordAffected, unscoredCount);
+        var (conclusive, conclusionNote) = Conclusion(verdict, accBase, accCandidate);
 
         return new PromptComparison(
             accBase, accCandidate,
@@ -226,8 +237,53 @@ public static class PromptComparer
             accCandidate.Missed - accBase.Missed,
             accCandidate.WrongPick - accBase.WrongPick,
             fixedCount, brokenCount, unchangedCount, unscoredCount, keywordAffected,
-            verdict, summary, isFair, warnings, items);
+            verdict, summary, isFair, warnings, items)
+        {
+            Conclusive = conclusive,
+            ConclusionNote = conclusionNote
+        };
     }
+
+    /// <summary>A41: câu bắt buộc khi hai khoảng tin cậy chồng nhau.</summary>
+    public const string InconclusiveText = "Chưa đủ dữ liệu để kết luận bản nào tốt hơn, cần thêm CV có nhãn.";
+
+    /// <summary>
+    /// A41: hai khoảng tin cậy 95% KHÔNG chồng nhau (chạm nhau cũng tính là chồng). Thiếu một khoảng → false.
+    /// Đây là tiêu chí thận trọng, dễ giải thích cho HR; không phải kiểm định ý nghĩa thống kê chính thức.
+    /// </summary>
+    public static bool IsConclusive((decimal Low, decimal High)? a, (decimal Low, decimal High)? b) =>
+        a is { } x && b is { } y && (x.High < y.Low || y.High < x.Low);
+
+    /// <summary>
+    /// A41: mức độ kết luận, tách khỏi Verdict (quan sát). Không bao giờ nói bản mới "chắc chắn" tốt hơn:
+    /// NotComparable → chưa kết luận; khoảng tin cậy chồng nhau → chưa đủ dữ liệu; không chồng → chênh lệch rõ trên bộ CV này.
+    /// </summary>
+    public static (bool Conclusive, string Note) Conclusion(string verdict, AccuracyResult baseResult, AccuracyResult candidateResult)
+    {
+        ArgumentNullException.ThrowIfNull(baseResult);
+        ArgumentNullException.ThrowIfNull(candidateResult);
+
+        if (verdict == CompareVerdicts.NotComparable)
+            return (false, "Chưa thể kết luận bản nào tốt hơn: hai lượt chạy chưa so sánh được với nhau " +
+                           "(chưa hoàn thành, khác điều kiện, khác danh sách CV hoặc phụ thuộc CV không chấm được). Xem phần cảnh báo.");
+
+        var a = baseResult.Confidence95;
+        var b = candidateResult.Confidence95;
+        if (!IsConclusive(a, b))
+        {
+            if (verdict is not (CompareVerdicts.Better or CompareVerdicts.Worse)) return (false, InconclusiveText);
+            var delta = candidateResult.AccuracyPercent!.Value - baseResult.AccuracyPercent!.Value;
+            return (false, $"{InconclusiveText} Chênh lệch {F(Math.Abs(delta))} điểm phần trăm trên {candidateResult.Total} CV " +
+                           $"chỉ là kết quả quan sát, chưa đủ cơ sở kết luận (khoảng tin cậy 95%: {Range(a)} và {Range(b)} chồng nhau).");
+        }
+
+        return (true, $"Hai khoảng tin cậy 95% không chồng nhau ({Range(a)} và {Range(b)}): chênh lệch đủ rõ trên bộ CV này. " +
+                      "Đây là tiêu chí thận trọng để đọc kết quả, không phải kiểm định thống kê chính thức; " +
+                      "nên kiểm tra lại khi có thêm CV có nhãn.");
+    }
+
+    private static string Range((decimal Low, decimal High)? interval) =>
+        interval is { } x ? $"{F(x.Low)}–{F(x.High)}%" : "—";
 
     /// <summary>
     /// Một câu tiếng Việt cho quản lý tuyển dụng, ví dụ:

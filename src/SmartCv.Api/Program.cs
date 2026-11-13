@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using SmartCv.Api.Background;
 using SmartCv.Api.Endpoints;
 using SmartCv.Api.Middleware;
+using SmartCv.Core.Ai;
 using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure;
@@ -52,6 +54,23 @@ builder.Services.AddOptions<RetentionOptions>()
 builder.Services.AddOptions<RateLimiterOptions>().Configure(o =>
     o.AddPolicy<string, AiPreviewRateLimitPolicy>(AiPreviewRateLimitPolicy.PolicyName));
 
+// A41: số lượt chấm thử dùng chung cả ứng dụng (cửa sổ trượt), thêm vào giới hạn theo IP của A10 ở trên.
+// Sai cấu hình thì dừng lúc khởi động, không tự sửa giá trị. Bộ đếm trong bộ nhớ: chỉ đúng cho MỘT tiến trình API.
+builder.Services.AddOptions<AiPreviewOptions>()
+    .Bind(builder.Configuration.GetSection(AiPreviewOptions.SectionName))
+    .Validate(o => o.LimitPerWindow is >= 1 and <= AiPreviewOptions.MaxLimitPerWindow,
+        $"AiPreview:LimitPerWindow phải từ 1 đến {AiPreviewOptions.MaxLimitPerWindow}.")
+    .Validate(o => o.WindowMinutes is >= 1 and <= AiPreviewOptions.MaxWindowMinutes,
+        $"AiPreview:WindowMinutes phải từ 1 đến {AiPreviewOptions.MaxWindowMinutes} (24 giờ).")
+    .Validate(o => o.MaxConcurrent is >= 1 and <= AiPreviewOptions.MaxConcurrentLimit,
+        $"AiPreview:MaxConcurrent phải từ 1 đến {AiPreviewOptions.MaxConcurrentLimit}.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp =>
+{
+    var o = sp.GetRequiredService<IOptions<AiPreviewOptions>>().Value;
+    return new PreviewQuota(o.LimitPerWindow, TimeSpan.FromMinutes(o.WindowMinutes), o.MaxConcurrent, sp.GetRequiredService<TimeProvider>());
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -76,7 +95,7 @@ app.MapRetentionEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
-app.MapAiPreviewEndpoints();   // A10: POST /api/applications/{id}/ai-preview (chỉ Development, có giới hạn tần suất)
+app.MapAiPreviewEndpoints();   // A10/A41: POST /api/applications/{id}/ai-preview, GET .../ai-preview/quota (chỉ Development, có giới hạn tần suất)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
 app.MapPromptEndpoints(); // A14
 app.MapEvaluationSetEndpoints(); // A15: HR labels and CSV import.

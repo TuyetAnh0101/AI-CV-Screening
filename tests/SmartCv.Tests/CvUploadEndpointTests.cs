@@ -148,10 +148,19 @@ public class CvUploadEndpointTests
         Assert.Equal(MaxRequestBytes, upload.Metadata.GetMetadata<IRequestSizeLimitMetadata>()?.MaxRequestBodySize);
         Assert.Equal(MaxRequestBytes, upload.Metadata.GetMetadata<IFormOptionsMetadata>()?.MultipartBodyLengthLimit);
 
-        // Các endpoint khác (health check, OpenAPI) không có giới hạn riêng -> giữ mặc định của Kestrel (30 MB)
+        // Các endpoint khác KHÔNG được nới hay tắt giới hạn: không có giới hạn riêng (giữ mặc định 30 MB của Kestrel)
+        // hoặc chỉ SIẾT nhỏ hơn mặc định. A41: ai-preview và assembled-preview siết còn 256 KB (prompt nháp tối đa 20.000 ký tự).
+        const long kestrelDefaultMaxRequestBytes = 30_000_000;
         var others = endpoints.Where(e => e != upload).ToList();
         Assert.NotEmpty(others);
-        Assert.All(others, e => Assert.Null(e.Metadata.GetMetadata<IRequestSizeLimitMetadata>()));
+        Assert.All(others, e =>
+        {
+            var limit = e.Metadata.GetMetadata<IRequestSizeLimitMetadata>();
+            Assert.True(limit is null || limit.MaxRequestBodySize is { } max && max <= kestrelDefaultMaxRequestBytes,
+                $"{e.DisplayName} nới hoặc tắt giới hạn dung lượng request");
+        });
+        Assert.Equal(["/api/applications/{id:int}/ai-preview", "/api/prompts/assembled-preview"],
+            others.Where(e => e.Metadata.GetMetadata<IRequestSizeLimitMetadata>() is not null).Select(e => e.RoutePattern.RawText!).Order());
     }
 
     [Fact]

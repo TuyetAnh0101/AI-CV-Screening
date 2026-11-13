@@ -17,6 +17,27 @@ public sealed record AiPreviewDto(
     public decimal AiWeight { get; init; }
     public decimal PassThreshold { get; init; }
     public decimal? MissingMustHaveCap { get; init; }
+
+    // ----- A41: chấm thử prompt nháp / phiên bản đã lưu (mọi trường A10 ở trên giữ nguyên) -----
+
+    /// <summary>Draft | Version | Active (xem PromptSourceKinds). PromptVersion ở trên là tên hiển thị ("Nháp (chưa lưu)" với bản nháp).</summary>
+    public string PromptSource { get; init; } = PromptSourceKinds.Active;
+    public int? PromptVersionId { get; init; }      // null với bản nháp
+    public bool IsDraft { get; init; }
+
+    /// <summary>Luôn false: kết quả chấm thử không được lưu và không thay đổi kết quả tuyển dụng.</summary>
+    public bool Persisted => false;
+
+    /// <summary>Số lượt chấm thử còn lại / tối đa trong cửa sổ, sau lần gọi này. ResetsAt (UTC): lúc lượt sớm nhất được trả lại.</summary>
+    public int RemainingTries { get; init; }
+    public int TryLimit { get; init; }
+    public DateTime? QuotaResetsAt { get; init; }
+
+    /// <summary>false khi lượt được trả lại vì chưa gửi gì tới AI (ví dụ thiếu API key).</summary>
+    public bool TryCounted { get; init; }
+
+    /// <summary>Kết quả ĐÃ LƯU gần nhất của đúng hồ sơ này (null nếu chưa có), để so cạnh kết quả chấm thử.</summary>
+    public CurrentEvaluationDto? CurrentEvaluation { get; init; }
 }
 
 /// <summary>MatchedBy: Keyword (Evidence là trích dẫn từ CV), AI (chỉ Gemini xác nhận), null (không tìm thấy).</summary>
