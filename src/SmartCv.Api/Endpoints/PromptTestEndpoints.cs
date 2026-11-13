@@ -62,7 +62,7 @@ public static class PromptTestEndpoints
 
             var labeledIds = labels.Select(h => h.ApplicationId).ToList();
             if (await db.Applications.AnyAsync(a => labeledIds.Contains(a.ApplicationId)
-                && (a.Cv.ExtractionStatus != ExtractionStatuses.Completed || a.Cv.ExtractedText == null
+                && (a.Cv.AnonymizedAt != null || a.Cv.ExtractionStatus != ExtractionStatuses.Completed || a.Cv.ExtractedText == null
                     || a.Cv.ExtractedText.Trim() == ""), ct))
                 return Problem(400, "CV chưa sẵn sàng", "Có CV chưa trích xuất xong, lỗi hoặc không có nội dung chữ. Hãy kiểm tra hồ sơ trước khi chạy đánh giá.");
 

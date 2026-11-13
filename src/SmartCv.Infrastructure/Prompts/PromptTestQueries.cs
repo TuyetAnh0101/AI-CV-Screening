@@ -82,8 +82,8 @@ public static class PromptTestQueries
             .Select(e => new PromptTestEvaluationDto
             {
                 EvaluationId = e.EvaluationId, ApplicationId = e.ApplicationId, CvId = e.Application.CvId,
-                CandidateName = e.Application.Cv.Candidate == null ? null : e.Application.Cv.Candidate.FullName,
-                FileName = e.Application.Cv.OriginalFileName, JobId = e.Application.JobId, JobTitle = e.Application.Job.Title,
+                CandidateName = e.Application.Cv.AnonymizedAt != null || e.Application.Cv.Candidate == null ? null : e.Application.Cv.Candidate.FullName,
+                FileName = e.Application.Cv.AnonymizedAt == null ? e.Application.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName, JobId = e.Application.JobId, JobTitle = e.Application.Job.Title,
                 HrIsPass = e.Application.HrLabels.Where(h => h.EvaluationSetId == setId)
                     .Select(h => (bool?)h.IsPass).FirstOrDefault(),
                 HrNote = e.Application.HrLabels.Where(h => h.EvaluationSetId == setId)
@@ -91,7 +91,7 @@ public static class PromptTestQueries
                 Status = e.Status, ExtractionStatus = e.Application.Cv.ExtractionStatus,
                 KeywordScore = e.KeywordScore, AiScore = e.AiScore, FinalScore = e.FinalScore,
                 PredictedPass = e.PredictedPass, ScoreSource = e.ScoreSource, FitLabel = e.FitLabel,
-                Reasoning = e.Reasoning, ErrorMessage = e.ErrorMessage
+                Reasoning = e.Application.Cv.AnonymizedAt == null ? e.Reasoning : null, ErrorMessage = e.Application.Cv.AnonymizedAt == null ? e.ErrorMessage : null
             }).ToListAsync(ct);
         var accuracy = run.Status == RunStatuses.Completed
             ? PromptAccuracyCalculator.Calculate(items.Where(i => i.HrIsPass is not null).Select(ToPrediction)) : null;

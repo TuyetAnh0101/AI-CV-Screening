@@ -49,11 +49,13 @@ public static class AiPreviewEndpoints
             .Where(a => a.ApplicationId == id)
             .Select(a => new
             {
-                a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText,
+                a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText, a.CvId, a.Cv.AnonymizedAt,
                 CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null   // A37: để che họ tên trước khi gửi AI
             })
             .FirstOrDefaultAsync(ct);
         if (application is null) return TypedResults.NotFound();
+        if (application.AnonymizedAt is not null)
+            return TypedResults.Problem(statusCode: 409, title: "CV đã được ẩn danh hóa");
 
         if (application.ExtractionStatus != ExtractionStatuses.Completed || string.IsNullOrWhiteSpace(application.ExtractedText))
             return ScoringPreviewEndpoints.NotReady(application.ExtractionStatus);
@@ -76,6 +78,8 @@ public static class AiPreviewEndpoints
         var aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job,
             application.ExtractedText, application.CandidateName), ct);
         var combined = ScoreCombiner.Combine(keyword, aiResult, opt.KeywordWeight, opt.AiWeight, opt.PassThreshold, opt.MissingMustHaveCap);
+        if (await db.Cvs.AnyAsync(c => c.CvId == application.CvId && c.AnonymizedAt != null, ct))
+            return TypedResults.Problem(statusCode: 409, title: "CV đã được ẩn danh hóa trong lúc chấm thử");
 
         return TypedResults.Ok(new AiPreviewDto(
             prompt.VersionName, aiResult.IsSimulated ? Infrastructure.Ai.FakeAiEvaluator.ModelLabel : opt.ModelName,

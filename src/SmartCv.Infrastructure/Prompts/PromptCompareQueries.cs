@@ -162,8 +162,8 @@ public static class PromptCompareQueries
             {
                 RunId = e.RunId, EvaluationId = e.EvaluationId, ApplicationId = e.ApplicationId,
                 Status = e.Status, PredictedPass = e.PredictedPass, FinalScore = e.FinalScore, ScoreSource = e.ScoreSource,
-                CandidateName = e.Application.Cv.Candidate == null ? null : e.Application.Cv.Candidate.FullName,
-                FileName = e.Application.Cv.OriginalFileName, JobTitle = e.Application.Job.Title,
+                CandidateName = e.Application.Cv.AnonymizedAt != null || e.Application.Cv.Candidate == null ? null : e.Application.Cv.Candidate.FullName,
+                FileName = e.Application.Cv.AnonymizedAt == null ? e.Application.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName, JobTitle = e.Application.Job.Title,
                 HrIsPass = e.Application.HrLabels.Where(h => h.EvaluationSetId == setId)
                     .Select(h => (bool?)h.IsPass).FirstOrDefault(),
                 HrNote = e.Application.HrLabels.Where(h => h.EvaluationSetId == setId)

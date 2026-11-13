@@ -31,7 +31,7 @@ public sealed class CvExtractionProcessor(
         }
 
         // Chỉ xử lý CV đang chờ (tránh đọc lại CV đã xong khi bị xếp hàng 2 lần)
-        if (cv.ExtractionStatus != ExtractionStatuses.Pending) return;
+        if (cv.AnonymizedAt is not null || cv.ExtractionStatus != ExtractionStatuses.Pending) return;
 
         var started = DateTime.UtcNow;
         TextExtractionResult result;

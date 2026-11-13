@@ -94,11 +94,12 @@ public static class CvEndpoints
     }
 
     // ---------- POST /api/cvs/{id}/extract ----------
-    private static async Task<Results<Accepted<CvExtractionAcceptedDto>, NotFound>> ReExtractAsync(
+    private static async Task<Results<Accepted<CvExtractionAcceptedDto>, NotFound, ProblemHttpResult>> ReExtractAsync(
         Guid id, SmartCvDbContext db, ICvExtractionQueue queue, CancellationToken ct)
     {
         var cv = await db.Cvs.FirstOrDefaultAsync(c => c.CvId == id, ct);
         if (cv is null) return TypedResults.NotFound();
+        if (cv.AnonymizedAt is not null) return TypedResults.Problem(statusCode: 410, title: "CV đã được ẩn danh hóa");
 
         // Đang Pending (chờ hoặc đang đọc): không đặt lại, chỉ bảo đảm có trong hàng đợi (hàng đợi tự bỏ trùng)
         if (cv.ExtractionStatus != ExtractionStatuses.Pending)
@@ -141,13 +142,13 @@ public static class CvEndpoints
         return TypedResults.Ok(new CvDetailDto
         {
             CvId = cv.CvId,
-            CandidateId = cv.CandidateId,
-            CandidateName = cv.CandidateName,
-            OriginalFileName = cv.OriginalFileName,
+            CandidateId = cv.AnonymizedAt is null ? cv.CandidateId : null,
+            CandidateName = cv.AnonymizedAt is null ? cv.CandidateName : null,
+            OriginalFileName = cv.AnonymizedAt is null ? cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
             ContentType = cv.ContentType,
             FileSizeBytes = cv.FileSizeBytes,
             UploadedAt = DateTime.SpecifyKind(cv.UploadedAt, DateTimeKind.Utc),
-            FileAvailable = SafeExists(storage, cv.StoredPath),
+            FileAvailable = cv.AnonymizedAt is null && SafeExists(storage, cv.StoredPath),
             SourceChannel = cv.SourceChannel,
             SourceChannelName = CvSourceChannels.DisplayName(cv.SourceChannel),
             ConsentConfirmedAt = cv.ConsentConfirmedAt is { } consent ? DateTime.SpecifyKind(consent, DateTimeKind.Utc) : null,
@@ -155,24 +156,25 @@ public static class CvEndpoints
             AnonymizedAt = cv.AnonymizedAt is { } anonymized ? DateTime.SpecifyKind(anonymized, DateTimeKind.Utc) : null,
             ExtractionStatus = cv.ExtractionStatus,
             ExtractionMethod = cv.ExtractionMethod,
-            ExtractionError = cv.ExtractionError,
-            ExtractedText = cv.ExtractedText,
+            ExtractionError = cv.AnonymizedAt is null ? cv.ExtractionError : null,
+            ExtractedText = cv.AnonymizedAt is null ? cv.ExtractedText : null,
             Applications = cv.Applications
         });
     }
 
     // ---------- GET /api/cvs/{id}/file ----------
-    private static async Task<Results<FileStreamHttpResult, NotFound<ProblemDetails>>> GetCvFileAsync(
+    private static async Task<Results<FileStreamHttpResult, NotFound<ProblemDetails>, ProblemHttpResult>> GetCvFileAsync(
         Guid id, SmartCvDbContext db, ICvFileStorage storage, HttpContext http, CancellationToken ct, bool download = false)
     {
         // Chỉ tìm theo CvId: đường dẫn file lấy từ database, không bao giờ lấy từ request
         var cv = await db.Cvs.AsNoTracking()
             .Where(c => c.CvId == id)
-            .Select(c => new { c.StoredPath, c.ContentType, c.OriginalFileName })
+            .Select(c => new { c.StoredPath, c.ContentType, c.OriginalFileName, c.AnonymizedAt })
             .FirstOrDefaultAsync(ct);
 
         if (cv is null)
             return TypedResults.NotFound(new ProblemDetails { Title = "Không tìm thấy CV", Status = 404 });
+        if (cv.AnonymizedAt is not null) return TypedResults.Problem(statusCode: 410, title: "CV đã được ẩn danh hóa");
 
         Stream stream;
         try

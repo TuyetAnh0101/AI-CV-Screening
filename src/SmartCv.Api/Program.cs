@@ -5,6 +5,7 @@ using SmartCv.Api.Middleware;
 using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure;
+using SmartCv.Infrastructure.Privacy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,10 @@ builder.Services.AddHostedService<CvExtractionWorker>();
 
 // A11: tiến trình chấm điểm nền, chỉ chạy khi Scoring:WorkerEnabled = true.
 builder.Services.AddHostedService<RunScoringWorker>();
+builder.Services.AddScoped<CvAnonymizer>();
+builder.Services.AddScoped<RetentionProcessor>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<RetentionWorker>();
 
 // A4: giới hạn tần suất cho API tải CV (mục "CvUpload:Endpoint" trong appsettings).
 // Giới hạn dung lượng request (201 MiB) được gắn riêng cho endpoint tải CV trong CvEndpoints,
@@ -39,6 +44,8 @@ builder.Services.AddOptions<ReviewFlagOptions>()
 builder.Services.AddOptions<RetentionOptions>()
     .Bind(builder.Configuration.GetSection(RetentionOptions.SectionName))
     .Validate(o => o.Months is >= 1 and <= 120, "Retention:Months phải từ 1 đến 120.")
+    .Validate(o => o.BatchSize is >= 1 and <= 200 && o.CheckIntervalHours is >= 1 and <= 720,
+        "Retention: BatchSize từ 1 đến 200, CheckIntervalHours từ 1 đến 720.")
     .ValidateOnStart();
 
 // A10: giới hạn tần suất riêng cho API chấm thử (mỗi lần gọi tốn quota Gemini).
@@ -59,11 +66,13 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.UseMiddleware<SqlReadCancellationMiddleware>();
+app.UseMiddleware<CvPrivacyReadMiddleware>();
 
 app.MapControllers();
 app.MapEvaluationEndpoints();
 app.MapRunEndpoints(); // A12: persist run settings before background scoring.
 app.MapCvEndpoints();
+app.MapRetentionEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)

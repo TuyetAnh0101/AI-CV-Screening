@@ -193,8 +193,8 @@ public static class ApplicationEndpoints
                 JobId = a.JobId,
                 JobTitle = a.Job.Title,
                 CvId = a.CvId,
-                FileName = a.Cv.OriginalFileName,
-                CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
+                FileName = a.Cv.AnonymizedAt == null ? a.Cv.OriginalFileName : SmartCv.Core.Privacy.RetentionRules.AnonymizedFileName,
+                CandidateName = a.Cv.AnonymizedAt == null && a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null,
                 ExtractionStatus = a.Cv.ExtractionStatus,
                 CreatedAt = a.CreatedAt
             })

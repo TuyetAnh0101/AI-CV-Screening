@@ -30,7 +30,8 @@ public static partial class RunEndpoints
         if (!await db.EvaluationRuns.AsNoTracking().AnyAsync(r => r.RunId == id, ct))
             return CompareProblem(404, "Không tìm thấy lượt chấm", "Lượt chấm được yêu cầu không tồn tại.");
         var selected = await db.Evaluations.AsNoTracking().Where(e => ids.Contains(e.EvaluationId))
-            .Select(e => new { e.EvaluationId, e.RunId, e.Application.JobId, e.Reasoning }).ToListAsync(ct);
+            .Select(e => new { e.EvaluationId, e.RunId, e.Application.JobId,
+                Reasoning = e.Application.Cv.AnonymizedAt == null ? e.Reasoning : null }).ToListAsync(ct);
         if (selected.Count != ids.Count)
             return CompareProblem(404, "Không tìm thấy kết quả đánh giá", "Một hoặc nhiều kết quả đánh giá không tồn tại.");
         if (selected.Any(e => e.RunId != id))
@@ -50,7 +51,8 @@ public static partial class RunEndpoints
             .Select(s => new CompareSkillDto { SkillCode = s.SkillCode, DisplayName = s.DisplayName, SkillType = s.SkillType }).ToListAsync(ct);
         var matches = await db.EvaluationSkills.AsNoTracking()
             .Where(s => ids.Contains(s.EvaluationId) && s.IsMatched && s.JobId == jobId)
-            .Select(s => new { s.EvaluationId, s.SkillCode, s.Evidence }).ToListAsync(ct);
+            .Select(s => new { s.EvaluationId, s.SkillCode,
+                Evidence = s.Evaluation.Application.Cv.AnonymizedAt == null ? s.Evidence : null }).ToListAsync(ct);
         var rows = ranking.Items.ToDictionary(e => e.EvaluationId);
         if (ids.Any(eid => !rows.ContainsKey(eid)))
             return CompareProblem(404, "Không tìm thấy dữ liệu", "Kết quả đánh giá không còn sẵn sàng. Hãy tải lại.");
