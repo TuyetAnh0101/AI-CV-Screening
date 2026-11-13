@@ -24,6 +24,9 @@ public sealed class CvDetailDto
     public string? ExtractionError { get; init; }
     public string? ExtractedText { get; init; }
 
+    // A42: chất lượng chữ đọc được; null khi chưa đọc xong (Pending), đọc lỗi (Failed) hoặc CV đã ẩn danh hóa
+    public TextQualityDto? TextQuality { get; init; }
+
     // A8: các job CV này đã ứng tuyển
     public List<CvApplicationDto> Applications { get; init; } = [];
 }

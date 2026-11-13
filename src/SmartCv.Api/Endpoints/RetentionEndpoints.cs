@@ -21,8 +21,7 @@ public static class RetentionEndpoints
         group.MapGet("/settings", (IOptions<RetentionOptions> options) => Results.Ok(new { options.Value.Months, options.Value.AutoAnonymize, options.Value.CheckIntervalHours, options.Value.BatchSize }));
         group.MapPost("/run", RunAsync);
         app.MapPost("/api/cvs/{id:guid}/anonymize", AnonymizeAsync).WithTags("CVs").AddEndpointFilter(AuthorizedOperator);
-        // A42 is not present: expose only the tombstone guard, not an invented text/quality API.
-        app.MapGet("/api/cvs/{id:guid}/text", async (Guid id, SmartCvDbContext db, CancellationToken ct) => await db.Cvs.AnyAsync(c => c.CvId == id && c.AnonymizedAt != null, ct) ? Gone() : Results.NotFound());
+        // A42: GET /api/cvs/{id}/text (chữ đã đọc + chất lượng) nằm ở CvEndpoints và vẫn trả 410 cho CV đã ẩn danh hóa.
         return app;
     }
 
