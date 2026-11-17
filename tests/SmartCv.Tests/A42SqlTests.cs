@@ -21,6 +21,7 @@ using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Privacy;
 using SmartCv.Infrastructure.Uploads;
 
 namespace SmartCv.Tests;
@@ -114,6 +115,88 @@ public class A42SqlTests
         Assert.Equal((7m, 3, 70), (estimate.SecondsPerCv, estimate.BasedOnRuns, estimate.EstimatedSeconds));
         await using var check = A42SqlFactAttribute.Db(connection);
         Assert.Equal(1, await check.Cvs.CountAsync());
+    }
+
+    [A42SqlFact]
+    public async Task Duplicate_upload_cannot_read_existing_metadata_during_exclusive_privacy_work()
+    {
+        var connection = await A42SqlFactAttribute.NewDatabaseAsync();
+        await using var api = A42SqlFactAttribute.Api(connection);
+        using var http = api.CreateClient();
+        var bytes = TestSupport.Pdf("a42-private-upload");
+        using (var first = DuplicateForm(bytes))
+        using (var accepted = await http.PostAsync("/api/cvs/upload", first))
+            Assert.Equal(1, (await accepted.Content.ReadFromJsonAsync<CvUploadResponse>())!.SuccessCount);
+
+        await using (var db = A42SqlFactAttribute.Db(connection))
+        await using (var erasure = await CvPrivacyScope.BeginAsync(db, true, default))
+        {
+            using var content = DuplicateForm(bytes);
+            using var blocked = await http.PostAsync("/api/cvs/upload", content);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, blocked.StatusCode);
+            Assert.DoesNotContain("existingFileName", await blocked.Content.ReadAsStringAsync());
+        }
+
+        using var retry = DuplicateForm(bytes);
+        using var duplicate = await http.PostAsync("/api/cvs/upload", retry);
+        Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+        Assert.NotNull((await duplicate.Content.ReadFromJsonAsync<CvUploadResponse>())!.Files.Single().ExistingCvId);
+        Assert.Equal("no-store", duplicate.Headers.CacheControl?.ToString());
+    }
+
+    [A42SqlFact]
+    public async Task Duplicate_upload_keeps_the_read_lease_until_its_metadata_response_is_ready()
+    {
+        var connection = await A42SqlFactAttribute.NewDatabaseAsync();
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bytes = TestSupport.Pdf("a42-paused-duplicate");
+        await using (var db = A42SqlFactAttribute.Db(connection))
+        {
+            var service = new CvUploadService(db, TestSupport.Storage(TestSupport.TempRoot()), new NoopQueue(),
+                Options.Create(new CvUploadOptions()), NullLogger<CvUploadService>.Instance);
+            Assert.Equal(1, (await service.UploadAsync(
+                [new CvUploadFile("private-synthetic.pdf", "application/pdf", bytes.Length, () => new MemoryStream(bytes))],
+                A38TestData.ConfirmedSource())).SuccessCount);
+        }
+
+        await using var api = A42SqlFactAttribute.Api(connection).WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll<ICvUploadService>();
+            s.AddScoped<ICvUploadService>(provider => new PausedUploadService(
+                ActivatorUtilities.CreateInstance<CvUploadService>(provider), ready, release));
+        }));
+        using var http = api.CreateClient();
+        using var form = DuplicateForm(bytes);
+        var upload = http.PostAsync("/api/cvs/upload", form);
+        try
+        {
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            await using var db = A42SqlFactAttribute.Db(connection);
+            await Assert.ThrowsAsync<CvPrivacyBusyException>(async () =>
+            {
+                await using var erasure = await CvPrivacyScope.BeginAsync(db, true, default);
+            });
+        }
+        finally
+        {
+            release.TrySetResult();
+            using var completed = await upload;
+        }
+    }
+
+    private static MultipartFormDataContent DuplicateForm(byte[] bytes) => A38TestData.WithConsent(
+        new MultipartFormDataContent { { new ByteArrayContent(bytes), "files", "cv.pdf" } });
+
+    private sealed class PausedUploadService(ICvUploadService inner, TaskCompletionSource ready, TaskCompletionSource release) : ICvUploadService
+    {
+        public async Task<CvUploadResponse> UploadAsync(IReadOnlyList<CvUploadFile> files, CvUploadSource source, CancellationToken cancellationToken = default)
+        {
+            var result = await inner.UploadAsync(files, source, cancellationToken);
+            ready.TrySetResult();
+            await release.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            return result;
+        }
     }
 
     private static EvaluationRun Run(int prompt, string type, int? setId, int items, DateTime created, double seconds) => new()

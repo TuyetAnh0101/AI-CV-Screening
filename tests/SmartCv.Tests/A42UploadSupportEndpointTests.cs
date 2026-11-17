@@ -273,6 +273,22 @@ public class A42UploadSupportEndpointTests
     }
 
     [Fact]
+    public async Task Upload_response_with_existing_cv_metadata_is_not_cacheable()
+    {
+        using var env = await CreateAsync();
+        var bytes = TestSupport.Pdf("a42-duplicate-cache");
+        var old = await env.AddCvAsync(ExtractionStatuses.Completed, ClearText, hash: await HashAsync(bytes));
+        using var content = new MultipartFormDataContent { { new ByteArrayContent(bytes), "files", "cv.pdf" } };
+
+        using var response = await env.Client.PostAsync("/api/cvs/upload", A38TestData.WithConsent(content));
+        var duplicate = (await response.Content.ReadFromJsonAsync<CvUploadResponse>())!.Files.Single();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(old, duplicate.ExistingCvId);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
     public async Task Mixed_batch_keeps_order_counts_and_never_gives_old_cv_id_to_in_batch_duplicates()
     {
         using var env = await CreateAsync();
@@ -432,6 +448,31 @@ public class A42UploadSupportEndpointTests
         Assert.False(dto.IsDefault);
         Assert.Equal("10 CV · khoảng 2 phút", dto.Text);
         Assert.StartsWith("Ước tính theo 10 lượt chấm gần nhất", dto.Note);
+    }
+
+    [Theory]
+    [InlineData(false, 4501)]
+    [InlineData(false, 4510)]
+    [InlineData(false, 4549)]
+    [InlineData(true, 801)]
+    public async Task Estimate_rounding_respects_the_configured_real_or_fake_ai_delay(bool fakeAi, int delayMs)
+    {
+        using var env = await CreateAsync(new()
+        {
+            ["Scoring:WorkerEnabled"] = "false",
+            ["Gemini:UseFake"] = fakeAi.ToString(),
+            [fakeAi ? "Gemini:FakeDelayMs" : "Gemini:MinDelayBetweenCallsMs"] = delayMs.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        });
+        await SeedRunsAsync(env, (prompt, _) => [Run(prompt, RunTypes.Screening, RunStatuses.Completed, 10, Day, 1)]);
+
+        var dto = (await env.Client.GetFromJsonAsync<RunEstimateDto>("/api/runs/estimate?count=500"))!;
+        var floor = delayMs / 1000m;
+
+        Assert.Equal(fakeAi, dto.AiSimulated);
+        Assert.Equal(1, dto.BasedOnRuns);
+        Assert.Equal(floor, dto.MinSecondsPerCv);
+        Assert.True(dto.SecondsPerCv >= floor, $"{dto.SecondsPerCv} seconds/CV is below the {floor} second floor.");
+        Assert.True(dto.EstimatedSeconds >= Math.Ceiling(500 * floor));
     }
 
     [Theory]
