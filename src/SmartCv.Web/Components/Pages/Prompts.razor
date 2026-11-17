@@ -72,7 +72,8 @@
         }
         <div class="prompt-workspace">
             <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(activatingId is not null || synchronizingActivation || pendingId is not null || pendingLocation is not null)"
-                          Error="@error" OnSave="SaveAsync" OnDirtyChanged="DraftChanged" />
+                          Error="@error" OnSave="SaveAsync" OnDirtyChanged="DraftChanged"
+                          EvaluationSetId="evaluationSetId" LabelsVersion="setsRefresh" OnEvaluationSetChanged="SelectEvaluationSet" />@* B39 *@
             <PromptHistory Versions="versions" SelectedId="draft.Source?.PromptVersionId" CreatedId="createdId" Disabled="Busy"
                            ActivatingId="activatingId" ActivationBlocked="@(activationNeedsRefresh || pendingId is not null || pendingLocation is not null)"
                            OnSelect="SelectVersion" OnActivate="ActivateAsync" />

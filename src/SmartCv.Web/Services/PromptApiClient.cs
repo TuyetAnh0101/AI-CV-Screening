@@ -1,4 +1,5 @@
 using SmartCv.Core.Contracts;
+using SmartCv.Web.Helpers;
 
 namespace SmartCv.Web.Services;
 
@@ -32,4 +33,29 @@ public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> lo
 
     public Task<ApiResult<PromptVersionDto>> ActivateAsync(int promptVersionId, CancellationToken ct = default) =>
         PostJsonAsync<PromptVersionDto>($"api/prompts/{promptVersionId}/activate", new { }, ct);
+
+    // ----- B39 (A41): "Thử với hồ sơ…". Hai API dưới KHÔNG gọi Gemini, KHÔNG tốn lượt, KHÔNG ghi database. -----
+
+    /// <summary>GET /api/applications/ai-preview/quota: số lượt chấm thử còn lại (giới hạn và cửa sổ lấy từ API).</summary>
+    public Task<ApiResult<PreviewQuotaDto>> GetPreviewQuotaAsync(CancellationToken ct = default) =>
+        GetAsync<PreviewQuotaDto>("api/applications/ai-preview/quota", ct);
+
+    /// <summary>
+    /// POST /api/prompts/assembled-preview: nội dung SẼ gửi Gemini (CV đã che). Chỉ gửi đúng MỘT nguồn prompt;
+    /// yêu cầu thiếu/thừa nguồn bị chặn tại đây, không gửi đi (không bao giờ rơi về "bản đang kích hoạt").
+    /// </summary>
+    public Task<ApiResult<AssembledPromptDto>> GetAssembledPromptAsync(AssembledPreviewRequest request, CancellationToken ct = default)
+    {
+        if (request.ApplicationId <= 0)
+            return Task.FromResult(ApiResult<AssembledPromptDto>.Failure("Hãy chọn hồ sơ trước khi xem nội dung gửi Gemini."));
+        object? body = PlaygroundRules.SingleSource(request.SystemPrompt, request.PromptVersionId) switch
+        {
+            { SystemPrompt: { } draft } => new { applicationId = request.ApplicationId, systemPrompt = draft },
+            { PromptVersionId: { } id } => new { applicationId = request.ApplicationId, promptVersionId = id },
+            _ => null
+        };
+        return body is null
+            ? Task.FromResult(ApiResult<AssembledPromptDto>.Failure(PlaygroundRules.InvalidSourceMessage))
+            : PostJsonAsync<AssembledPromptDto>("api/prompts/assembled-preview", body, ct);
+    }
 }

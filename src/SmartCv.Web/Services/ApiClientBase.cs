@@ -40,9 +40,9 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
                     : ApiResult<T>.Success(data);
             }
 
-            var message = await ReadErrorMessageAsync(response, ct);
+            var (message, code) = await ReadErrorMessageAsync(response, ct);
             logger.LogWarning("Gọi API {Url} lỗi {Status}: {Message}", url, (int)response.StatusCode, message);
-            return ApiResult<T>.Failure(message, (int)response.StatusCode);
+            return ApiResult<T>.Failure(message, (int)response.StatusCode, code, RetryAfter(response));
         }
         catch (HttpRequestException ex)
         {
@@ -61,21 +61,35 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
         }
     }
 
-    /// <summary>Đọc thông báo lỗi. API trả lỗi theo chuẩn ProblemDetails (title, detail).</summary>
-    private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response, CancellationToken ct)
+    /// <summary>B39: Retry-After dạng số giây hoặc thời điểm; giá trị âm/không đọc được → null.</summary>
+    private static TimeSpan? RetryAfter(HttpResponseMessage response)
     {
+        var header = response.Headers.RetryAfter;
+        var delay = header?.Delta ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        return delay is { } value && value >= TimeSpan.Zero ? value : null;
+    }
+
+    /// <summary>Đọc thông báo lỗi. API trả lỗi theo chuẩn ProblemDetails (title, detail, và "code" nếu có).</summary>
+    private static async Task<(string Message, string? Code)> ReadErrorMessageAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        string? code = null;
         try
         {
             var problem = await response.Content.ReadFromJsonAsync<ApiProblem>(ct);
-            if (!string.IsNullOrWhiteSpace(problem?.Detail)) return problem.Detail!;
-            if (!string.IsNullOrWhiteSpace(problem?.Title)) return problem.Title!;
+            code = string.IsNullOrWhiteSpace(problem?.Code) ? null : problem.Code;
+            if (!string.IsNullOrWhiteSpace(problem?.Detail)) return (problem.Detail!, code);
+            if (!string.IsNullOrWhiteSpace(problem?.Title)) return (problem.Title!, code);
         }
         catch
         {
             // Nội dung lỗi không phải JSON: dùng thông báo mặc định bên dưới
         }
 
-        return response.StatusCode switch
+        return (DefaultMessage(response), code);
+    }
+
+    private static string DefaultMessage(HttpResponseMessage response) =>
+        response.StatusCode switch
         {
             HttpStatusCode.NotFound => "Không tìm thấy dữ liệu hoặc API chưa có đường dẫn này.",
             HttpStatusCode.BadRequest => "Dữ liệu gửi lên không hợp lệ.",
@@ -85,7 +99,6 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
             HttpStatusCode.InternalServerError => "Máy chủ API gặp lỗi. Xem log ở terminal đang chạy API.",
             _ => $"Gọi API thất bại (mã {(int)response.StatusCode})."
         };
-    }
 
-    private sealed record ApiProblem(string? Title, string? Detail, int? Status);
+    private sealed record ApiProblem(string? Title, string? Detail, int? Status, string? Code);
 }
