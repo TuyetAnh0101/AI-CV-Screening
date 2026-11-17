@@ -1,0 +1,859 @@
+@*
+    B39 "Thử với hồ sơ…": chấm THỬ nội dung đang soạn trên một hồ sơ thật, đặt cạnh kết quả đã lưu, và xem đúng nội dung
+    (đã che thông tin cá nhân) sẽ gửi Gemini. Không lưu gì, không tạo phiên bản prompt, không kích hoạt phiên bản.
+      - Chấm thử:        POST /api/applications/{id}/ai-preview  { systemPrompt } (nháp) HOẶC { promptVersionId } (A41)
+      - Lượt thử:        GET  /api/applications/ai-preview/quota
+      - Nội dung gửi đi: POST /api/prompts/assembled-preview      (không gọi Gemini, không tốn lượt)
+      - Hồ sơ:           GET  /api/evaluation-sets/{id}/applications (bộ CV đang chọn của trang)
+    Nội dung CV/prompt chỉ hiển thị bằng text Razor (tự escape), không MarkupString, không lưu vào trình duyệt.
+*@
+@implements IDisposable
+@inject PromptApiClient PromptApi
+@inject AiPreviewApiClient PreviewApi
+@inject AnonymityState Anonymity
+
+<section id="prompt-playground" class="playground" aria-labelledby="playground-title" aria-busy="@(running ? "true" : "false")">
+    <header class="pg-head">
+        <div class="pg-title">
+            <span class="pg-mark" aria-hidden="true">✦</span>
+            <div>
+                <h3 id="playground-title" tabindex="-1" @ref="titleRef">Thử với hồ sơ</h3>
+                <p>Chấm thử nội dung đang soạn trên một hồ sơ thật. Kết quả <strong>không được lưu</strong> và không tạo phiên bản mới.</p>
+            </div>
+        </div>
+        <div class="pg-tools">
+            <div class="pg-quota-slot" role="status" aria-live="polite" aria-atomic="true">
+                @if (quota is { } q)
+                {
+                    <span class="pg-quota tone-@PlaygroundRules.QuotaTone(q.Remaining)" title="Mỗi lần chấm thử dùng 1 lượt AI. Xem nội dung gửi Gemini không tốn lượt.">
+                        <span class="pg-quota-dot" aria-hidden="true"></span>@PlaygroundRules.QuotaText(q.Remaining, q.Limit, q.WindowMinutes)
+                    </span>
+                    @if (q.AiSimulated)
+                    {
+                        <span class="pg-sim" title="Máy chủ đang dùng AI giả lập (Gemini:UseFake): lượt vẫn được đếm nhưng không tốn hạn mức Gemini.">AI giả lập</span>
+                    }
+                }
+                else if (quotaError is not null)
+                {
+                    <span class="pg-quota tone-unknown">Chưa đọc được số lượt thử</span>
+                }
+                else
+                {
+                    <span class="pg-quota is-loading">Đang kiểm tra lượt thử…</span>
+                }
+            </div>
+            @if (quotaError is not null || quota is { Remaining: <= 0 })
+            {
+                <button type="button" class="pg-link" disabled="@quotaLoading" @onclick="RefreshQuotaAsync">@(quotaLoading ? "Đang kiểm tra…" : "Kiểm tra lại lượt")</button>
+            }
+        </div>
+        <button type="button" class="pg-close" aria-label="Đóng khung thử với hồ sơ" title="Đóng" @onclick="CloseAsync"><span aria-hidden="true">×</span></button>
+    </header>
+
+    <div class="pg-source @(plan.IsDraft ? "is-draft" : "is-version")">
+        <span class="pg-source-kind">@(plan.IsDraft ? "Bản nháp · chưa lưu" : "Phiên bản đã lưu")</span>
+        <span class="pg-source-text">
+            @if (plan.IsDraft)
+            {
+                @(Draft.Source is null ? "Chưa có phiên bản nào: nội dung đang soạn được chấm dạng nháp." : $"Nội dung đang soạn khác {Draft.Source.VersionName}: chấm dạng nháp, không lưu.")
+            }
+            else
+            {
+                <span>Nội dung giống <b class="mono">@plan.Label</b>: chấm đúng theo phiên bản này.</span>
+            }
+        </span>
+    </div>
+
+    @if (setsError is not null)
+    {
+        <div class="pg-alert tone-error" role="alert">
+            <div><strong>Không tải được bộ CV đánh giá</strong><p>@setsError</p></div>
+            <button type="button" class="btn sc-btn-secondary" disabled="@setsLoading" @onclick="ReloadAllAsync">Tải lại</button>
+        </div>
+    }
+    else if (sets is { Count: 0 })
+    {
+        <div class="pg-empty" role="status">
+            <strong>Chưa có bộ CV đánh giá</strong>
+            <p>Hồ sơ để thử được lấy từ bộ CV đánh giá đang chọn của trang. Hãy tạo bộ ở mục “Bộ CV đánh giá” bên dưới.</p>
+            <a href="#evaluation-set-manager">Tạo bộ CV đánh giá</a>
+        </div>
+    }
+    else
+    {
+        <div class="pg-picker">
+            <div class="pg-field">
+                <label for="pg-set">Bộ CV đánh giá</label>
+                <select id="pg-set" class="form-select" value="@setId" @onchange="ChangeSetAsync" disabled="@(running || sets is null)">
+                    @if (sets is null)
+                    {
+                        <option value="0">Đang tải…</option>
+                    }
+                    else
+                    {
+                        @foreach (var s in sets)
+                        {
+                            <option value="@s.EvaluationSetId">@s.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="pg-field">
+                <label for="pg-job">Công việc</label>
+                <select id="pg-job" class="form-select" value="@jobId" @onchange="ChangeJob" disabled="@(running || candidates is null || jobs.Count == 0)">
+                    <option value="0">@(candidates is null ? "Đang tải hồ sơ…" : jobs.Count == 0 ? "Chưa có công việc" : "Chọn công việc")</option>
+                    @foreach (var j in jobs)
+                    {
+                        <option value="@j.JobId">@PlaygroundRules.JobOptionText(j)</option>
+                    }
+                </select>
+            </div>
+            <div class="pg-field is-wide">
+                <label for="pg-app">Hồ sơ</label>
+                <select id="pg-app" class="form-select" value="@applicationId" @onchange="ChangeApplicationAsync" disabled="@(running || jobId == 0)" aria-describedby="pg-run-hint">
+                    <option value="0">@(jobId == 0 ? "Chọn công việc trước" : "Chọn hồ sơ")</option>
+                    @foreach (var c in AppsOfJob)
+                    {
+                        <option value="@c.ApplicationId" disabled="@(PlaygroundRules.Unavailable(c) is not null)">@PlaygroundRules.OptionText(c, Anonymity.Enabled)</option>
+                    }
+                </select>
+            </div>
+            <div class="pg-run">
+                <button type="button" class="btn sc-btn-primary pg-run-btn" disabled="@(!CanRun)" aria-describedby="pg-run-hint" title="@plan.ActionText" @onclick="RunAsync">
+                    @if (running)
+                    {
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Đang chấm thử…</span>
+                    }
+                    else
+                    {
+                        <span class="pg-run-mark" aria-hidden="true">✦</span><span class="pg-run-text">@plan.ActionText</span>
+                    }
+                </button>
+                @if (running)
+                {
+                    <button type="button" class="pg-link" @onclick="CancelRun">Dừng chờ</button>
+                }
+            </div>
+        </div>
+        <p id="pg-run-hint" class="pg-hint @(RunBlockedIsProblem ? "is-blocked" : null)">@(RunBlocked ?? "Mỗi lần chấm thử dùng 1 lượt AI. Kết quả không ghi vào kết quả tuyển dụng và không đổi phiên bản đang dùng.")</p>
+        @if (candidatesError is not null)
+        {
+            <div class="pg-alert tone-error" role="alert">
+                <div><strong>Không tải được danh sách hồ sơ</strong><p>@candidatesError</p></div>
+                <button type="button" class="btn sc-btn-secondary" disabled="@candidatesLoading" @onclick="ReloadCandidatesAsync">Tải lại</button>
+            </div>
+        }
+        else if (candidates is { Count: 0 })
+        {
+            <div class="pg-empty" role="status">
+                <strong>Chưa có hồ sơ để thử</strong>
+                <p>Hãy tải CV và gán vào một công việc ở trang Tải CV, rồi quay lại đây.</p>
+                <a href="/upload">Đi tới Tải CV</a>
+            </div>
+        }
+    }
+
+    <div class="pg-views">
+        <div class="pg-tabs" role="group" aria-label="Chế độ xem">
+            <button type="button" class="pg-tab @(tab == 0 ? "is-active" : null)" aria-pressed="@(tab == 0 ? "true" : "false")" aria-controls="pg-panel-result" @onclick="() => ShowTabAsync(0)">
+<span>Kết quả</span>@if (result is not null && ResultStale) { <span class="pg-tab-flag">chưa cập nhật</span> }
+            </button>
+            <button type="button" class="pg-tab @(tab == 1 ? "is-active" : null)" aria-pressed="@(tab == 1 ? "true" : "false")" aria-controls="pg-panel-payload" @onclick="() => ShowTabAsync(1)">
+<span>Nội dung gửi Gemini</span><span class="pg-tab-free">không tốn lượt</span>
+            </button>
+        </div>
+        <div class="pg-privacy"><AnonymousToggle /></div>
+    </div>
+
+    <div id="pg-panel-result" class="pg-panel" role="region" aria-label="Kết quả chấm thử" hidden="@(tab != 0)">
+        @if (tab == 0)
+        {
+            <div aria-live="polite">
+                @if (runNotice is not null)
+                {
+                    <p class="pg-note" role="status">@runNotice</p>
+                }
+                @if (runError is { } e)
+                {
+                    <div class="pg-alert tone-@(e.QuotaExhausted ? "warn" : "error")" role="alert">
+                        <div><strong>@e.Title</strong><p>@e.Message</p></div>
+                        @if (e.CanRetry && CanRun)
+                        {
+                            <button type="button" class="btn sc-btn-secondary" @onclick="RunAsync">Thử lại</button>
+                        }
+                    </div>
+                }
+            </div>
+            @if (running && result is null)
+            {
+                <div class="pg-compare" aria-hidden="true">
+                    <div class="pg-card is-skeleton"><span class="sk sk-title"></span><span class="sk sk-score"></span><span class="sk"></span><span class="sk sk-short"></span></div>
+                    <div class="pg-card is-skeleton"><span class="sk sk-title"></span><span class="sk sk-score"></span><span class="sk"></span><span class="sk sk-short"></span></div>
+                </div>
+                <p class="visually-hidden" role="status">Đang chấm thử hồ sơ, vui lòng chờ.</p>
+            }
+            else if (result is { } r)
+            {
+                var trial = PlaygroundRules.TrialView(r.Data);
+                var saved = r.Data.CurrentEvaluation;
+                var savedView = saved is null ? null : PlaygroundRules.SavedView(saved, trial.Skills);
+                var compare = PlaygroundRules.Compare(r.Data, saved);
+                @if (ResultStale)
+                {
+                    <div class="pg-alert tone-warn" role="status">
+                        <div><strong>Kết quả của nội dung trước</strong><p>Prompt đã thay đổi sau lần chấm này nên điểm bên dưới chưa phản ánh nội dung đang soạn. Bấm “@plan.ActionText” để cập nhật.</p></div>
+                    </div>
+                }
+                @if (running)
+                {
+                    <p class="pg-note" role="status">Đang chấm lại… kết quả bên dưới là của lần trước.</p>
+                }
+                <div class="pg-compare">
+                    <article class="pg-card is-trial @(ResultStale ? "is-stale" : null)" aria-labelledby="pg-trial-title">
+                        <header class="pg-card-head">
+                            <div>
+                                <span class="pg-kicker">Chấm thử · không lưu</span>
+                                <h4 id="pg-trial-title">@(r.Data.IsDraft ? "Bản nháp" : r.Data.PromptVersion)@(ResultStale ? " (nội dung trước)" : "")</h4>
+                            </div>
+                            @if (compare.Delta is { } delta)
+                            {
+                                <span class="pg-delta @(delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat")">@PlaygroundRules.DeltaText(delta)</span>
+                            }
+                        </header>
+                        @ScoreBody(trial)
+                        <footer class="pg-card-meta">
+                            <span>Model <span class="mono">@r.Data.Model</span></span>
+                            <span>Trọng số @Display.Weight(r.Data.KeywordWeight) từ khóa · @Display.Weight(r.Data.AiWeight) AI · ngưỡng Đạt @Display.Score(r.Data.PassThreshold)</span>
+                            <span>@(r.Data.TryCounted ? "Đã tính 1 lượt thử" : "Không tính lượt (chưa gửi tới AI)")</span>
+                        </footer>
+                    </article>
+
+                    <article class="pg-card is-saved" aria-labelledby="pg-saved-title">
+                        @if (saved is not null && savedView is not null)
+                        {
+                            <header class="pg-card-head">
+                                <div>
+                                    <span class="pg-kicker">Đã lưu · @PlaygroundRules.RunTypeText(saved.RunType)</span>
+                                    <h4 id="pg-saved-title">Đã lưu · <span class="mono">@saved.PromptVersionName</span></h4>
+                                </div>
+                            </header>
+                            @ScoreBody(savedView)
+                            <footer class="pg-card-meta">
+                                <span>Lượt #@saved.RunId · @Display.VnTime(saved.CreatedAt)</span>
+                                @if (!string.IsNullOrWhiteSpace(saved.ModelName))
+                                {
+                                    <span>Model <span class="mono">@saved.ModelName</span></span>
+                                }
+                            </footer>
+                        }
+                        else
+                        {
+                            <header class="pg-card-head"><div><span class="pg-kicker">Kết quả đã lưu</span><h4 id="pg-saved-title">Đã lưu</h4></div></header>
+                            <div class="pg-saved-empty">
+                                <strong>Hồ sơ chưa có kết quả đã lưu để so</strong>
+                                <p>Hồ sơ này chưa được chấm trong lượt sàng lọc hay lượt đánh giá prompt nào hoàn thành.</p>
+                            </div>
+                        }
+                    </article>
+                </div>
+                @if (saved is not null && compare.Reason is { } reason)
+                {
+                    <p class="pg-note">@reason</p>
+                }
+                @if (savedView is not null && compare.Delta is not null)
+                {
+                    var changes = PlaygroundRules.SkillChanges(trial, savedView);
+                    @if (changes.Gained.Count + changes.Lost.Count > 0)
+                    {
+                        <p class="pg-changes">
+                            <span class="pg-changes-title">Kỹ năng khác bản đã lưu:</span>
+                            @if (changes.Gained.Count > 0) { <span class="pg-gain">+ đạt thêm: @string.Join(", ", changes.Gained)</span> }
+                            @if (changes.Lost.Count > 0) { <span class="pg-loss">− không còn đạt: @string.Join(", ", changes.Lost)</span> }
+                        </p>
+                    }
+                }
+            }
+            else if (runError is null)
+            {
+                <div class="pg-empty is-soft" role="status">
+                    <strong>Chưa chấm thử</strong>
+                    <p>Chọn công việc, hồ sơ rồi bấm “@plan.ActionText” để xem điểm, mức phù hợp, kỹ năng và nhận xét AI đặt cạnh kết quả đã lưu của đúng hồ sơ đó.</p>
+                </div>
+            }
+        }
+    </div>
+
+    <div id="pg-panel-payload" class="pg-panel" role="region" aria-label="Nội dung gửi Gemini" hidden="@(tab != 1)">
+        @if (tab == 1)
+        {
+            @if (SelectedCandidate is not { } selected)
+            {
+                <div class="pg-empty is-soft" role="status"><strong>Chọn hồ sơ để xem nội dung gửi Gemini</strong><p>Xem trước không gọi Gemini, không tốn lượt và không lưu gì.</p></div>
+            }
+            else if (PlaygroundRules.Unavailable(selected) is { } why)
+            {
+                <div class="pg-empty is-soft" role="status"><strong>Hồ sơ này chưa xem được</strong><p>Lý do: @why.</p></div>
+            }
+            else if (!plan.CanSend)
+            {
+                <div class="pg-empty is-soft" role="status"><strong>Chưa có nội dung để ghép</strong><p>@plan.BlockedReason</p></div>
+            }
+            else if (maskingDisabled)
+            {
+                <div class="pg-alert tone-error" role="alert">
+                    <div>
+                        <strong>Máy chủ đang tắt che thông tin cá nhân</strong>
+                        <p>@(maskingMessage ?? "Gemini:MaskPersonalData đang tắt.") Nội dung gửi Gemini không được hiển thị. Hãy đề nghị quản trị viên bật lại <span class="mono">Gemini:MaskPersonalData = true</span> trước khi chấm thử với dữ liệu thật.</p>
+                    </div>
+                </div>
+            }
+            else if (payloadError is { } pe)
+            {
+                <div class="pg-alert tone-error" role="alert">
+                    <div><strong>@pe.Title</strong><p>@pe.Message</p></div>
+                    @if (pe.CanRetry)
+                    {
+                        <button type="button" class="btn sc-btn-secondary" disabled="@(payloadLoadingKey is not null)" @onclick="RetryPayloadAsync">Thử lại</button>
+                    }
+                </div>
+            }
+            else if (payload is not { } a)
+            {
+                <div class="pg-code-skeleton" aria-hidden="true"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></div>
+                <p class="visually-hidden" role="status">Đang ghép nội dung gửi Gemini.</p>
+            }
+            else
+            {
+                <div class="pg-mask-line" role="status" aria-live="polite">
+                    <span class="pg-shield" aria-hidden="true">✓</span>
+                    <strong>Đã che thông tin cá nhân</strong>
+                    <span>· @PlaygroundRules.MaskSummary(a)</span>
+                </div>
+                @if (PayloadStale)
+                {
+                    <p class="pg-note is-updating" role="status">@(payloadLoadingKey is not null ? "Đang cập nhật theo nội dung prompt mới…" : "Nội dung prompt đã đổi: sẽ cập nhật khi bạn ngừng gõ.")</p>
+                }
+                <dl class="pg-mask-table" aria-label="Số mục đã che">
+                    @foreach (var (label, count) in PlaygroundRules.MaskTable(a))
+                    {
+                        <div class="@(count > 0 ? "has-mask" : null)"><dt>@label</dt><dd>@count</dd></div>
+                    }
+                </dl>
+                <ul class="pg-facts">
+                    <li>Nguồn: <b>@(a.IsDraft ? "Bản nháp (chưa lưu)" : a.PromptVersion)</b></li>
+                    <li>CV @a.CvCharacters.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) ký tự@(a.Truncated ? $" · đã cắt còn {a.CvCharactersSent.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))}" : "")</li>
+                    <li>Model <span class="mono">@a.Model</span></li>
+                    <li>Temperature @Display.Score(a.Temperature)</li>
+                    @if (a.AiSimulated) { <li class="is-sim">AI giả lập: thực tế chưa gửi tới Gemini</li> }
+                </ul>
+                @if (a.NameMaskSource == "None")
+                {
+                    <p class="pg-warn">Không xác định được họ tên ứng viên để che. Hãy kiểm tra kỹ phần CV bên dưới trước khi dùng prompt với dữ liệu thật.</p>
+                }
+                <p class="pg-sensitive">Nội dung nhạy cảm: chỉ hiển thị tại đây, không lưu vào trình duyệt. Đây đúng là nội dung máy chủ sẽ gửi Gemini (cùng hàm ghép với lượt chấm thật).</p>
+                <section class="pg-code @(PayloadStale ? "is-stale" : null)" aria-labelledby="pg-system-title">
+                    <header><h5 id="pg-system-title">System prompt</h5><span>@a.SystemPrompt.Length.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) ký tự</span></header>
+                    <pre tabindex="0" aria-labelledby="pg-system-title">@a.SystemPrompt</pre>
+                </section>
+                <section class="pg-code @(PayloadStale ? "is-stale" : null)" aria-labelledby="pg-user-title">
+                    <header><h5 id="pg-user-title">Nội dung “user” · thông tin công việc + CV đã che</h5><span>@a.UserPrompt.Length.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) ký tự</span></header>
+                    <pre tabindex="0" class="is-tall" aria-labelledby="pg-user-title">@foreach (var seg in PlaygroundRules.SplitMasked(a.UserPrompt)){if (seg.IsMask){<mark class="pg-mask">@seg.Text</mark>}else{<text>@seg.Text</text>}}</pre>
+                </section>
+                @if (a.AllowedSkillCodes is { Count: > 0 } codes)
+                {
+                    <p class="pg-allowed"><span>Gemini chỉ được trả các mã kỹ năng:</span>@foreach (var skillCode in codes) { <code>@skillCode</code> }</p>
+                }
+            }
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>Bản nháp dùng chung với ô soạn (B12). Khung thử chỉ ĐỌC, không bao giờ sửa nội dung/tên/ghi chú.</summary>
+    [Parameter, EditorRequired] public PromptDraft Draft { get; set; } = default!;
+    /// <summary>Bộ CV đánh giá đang chọn của trang (dùng chung với Chạy đánh giá / So sánh tỷ lệ đúng).</summary>
+    [Parameter] public int? EvaluationSetId { get; set; }
+    /// <summary>Tăng khi nhãn HR được lưu: tải lại nhãn "· HR: Đạt" của danh sách hồ sơ.</summary>
+    [Parameter] public int LabelsVersion { get; set; }
+    [Parameter] public EventCallback<int> OnEvaluationSetChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public PlaygroundSelection Selection { get; set; } = new();
+
+    private const int PayloadDebounceMs = 600;
+    private static readonly System.Globalization.CultureInfo Vi = System.Globalization.CultureInfo.GetCultureInfo("vi-VN");
+
+    private sealed record TrialResult(AiPreviewDto Data, string Signature, int ApplicationId);
+    private sealed record PayloadKey(int ApplicationId, string Signature);
+
+    private readonly CancellationTokenSource lifetime = new();
+    private bool disposed;
+    private ElementReference titleRef;
+
+    private PlaygroundRules.SourcePlan plan = PlaygroundRules.Plan(null, null);
+    private int? sourceId;
+
+    private List<EvaluationSetDto>? sets;
+    private string? setsError;
+    private bool setsLoading;
+    private int setId, lastParamSetId, lastLabelsVersion;
+
+    private List<LabelCandidateDto>? candidates;
+    private List<PlaygroundRules.JobGroup> jobs = [];
+    private string? candidatesError;
+    private bool candidatesLoading;
+    private int candidatesSetId;
+    private CancellationTokenSource? candidatesCts;
+    private int jobId, applicationId, tab;
+
+    private PreviewQuotaDto? quota;
+    private string? quotaError;
+    private bool quotaLoading;
+    private int quotaVersion;
+
+    private TrialResult? result;
+    private PlaygroundRules.PlaygroundError? runError;
+    private string? runNotice;
+    private bool running;
+    private CancellationTokenSource? runCts;
+
+    private AssembledPromptDto? payload;
+    private PayloadKey? payloadKey, payloadLoadingKey, payloadErrorKey, pendingPayloadKey;
+    private PlaygroundRules.PlaygroundError? payloadError;
+    private bool maskingDisabled;
+    private string? maskingMessage;
+    private CancellationTokenSource? payloadCts, debounceCts;
+
+    private IEnumerable<LabelCandidateDto> AppsOfJob => (candidates ?? []).Where(c => c.JobId == jobId);
+    private LabelCandidateDto? SelectedCandidate => applicationId <= 0 ? null
+        : candidates?.FirstOrDefault(c => c.ApplicationId == applicationId && c.JobId == jobId);
+    private bool ResultStale => result is not null && result.Signature != plan.Signature;
+    private PayloadKey? CurrentPayloadKey => SelectedCandidate is { } c && PlaygroundRules.Unavailable(c) is null && plan.CanSend
+        ? new PayloadKey(c.ApplicationId, plan.Signature) : null;
+    private bool PayloadStale => payload is not null && payloadKey != CurrentPayloadKey;
+
+    private string? RunBlocked =>
+        running ? "Đang chờ kết quả chấm thử. Có thể tiếp tục soạn prompt; kết quả sẽ được ghi rõ nếu nội dung đã đổi." :
+        sets is { Count: 0 } ? "Cần một bộ CV đánh giá để chọn hồ sơ." :
+        SelectedCandidate is null ? "Chọn công việc và hồ sơ để chấm thử." :
+        PlaygroundRules.Unavailable(SelectedCandidate) is { } why ? $"Hồ sơ này chưa chấm thử được: {why}." :
+        !plan.CanSend ? plan.BlockedReason :
+        quota is { Remaining: <= 0 } q ? "Đã hết lượt thử. " + (PlaygroundRules.ResetText(q.ResetsAt) is { } at ? at + "." : "Hãy chờ rồi kiểm tra lại số lượt.") :
+        null;
+
+    private bool CanRun => !running && !disposed && RunBlocked is null && PlaygroundRules.PreviewRequest(plan) is not null;
+
+    /// <summary>Tô màu cảnh báo chỉ khi có trở ngại thật (hồ sơ không dùng được, prompt không hợp lệ, hết lượt), không khi chỉ chưa chọn.</summary>
+    private bool RunBlockedIsProblem => !running && RunBlocked is not null && SelectedCandidate is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Anonymity.Changed += PrivacyChanged;
+        (jobId, applicationId, tab) = (Selection.JobId, Selection.ApplicationId, Selection.Tab is 1 ? 1 : 0);
+        plan = PlaygroundRules.Plan(Draft.Content, Draft.Source);
+        sourceId = Draft.Source?.PromptVersionId;
+        setId = lastParamSetId = EvaluationSetId ?? 0;
+        lastLabelsVersion = LabelsVersion;
+        var quotaTask = RefreshQuotaAsync();
+        await LoadSetsAsync();
+        await quotaTask;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (disposed) return;
+        plan = PlaygroundRules.Plan(Draft.Content, Draft.Source);
+        var source = Draft.Source?.PromptVersionId;
+        if (source != sourceId)
+        {
+            // Chọn phiên bản khác / vừa lưu bản mới: kết quả và nội dung gửi đi cũ thuộc nguồn khác → xóa, hủy request đang chờ.
+            sourceId = source;
+            await ResetOutputsAsync();
+        }
+        if (EvaluationSetId is > 0 && EvaluationSetId.Value != lastParamSetId)
+        {
+            lastParamSetId = EvaluationSetId.Value;
+            // Bộ đổi từ khu vực khác của trang (kể cả khi đang chấm thử): xóa kết quả, hủy request cũ, tải nhãn của bộ mới.
+            if (setId != lastParamSetId && sets is not null)
+            {
+                setId = lastParamSetId;
+                await ResetOutputsAsync();
+                await LoadCandidatesAsync(setId);
+            }
+        }
+        if (LabelsVersion != lastLabelsVersion)
+        {
+            lastLabelsVersion = LabelsVersion;
+            if (sets is not null) await ReloadAllAsync();   // chỉ làm mới nhãn; giữ lựa chọn và kết quả
+        }
+        SchedulePayloadIfStale();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || disposed) return;
+        try { await titleRef.FocusAsync(); }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException) { }
+    }
+
+    // ---------------- Tải dữ liệu ----------------
+
+    private async Task LoadSetsAsync()
+    {
+        if (disposed) return;
+        setsLoading = true;
+        setsError = null;
+        try
+        {
+            var r = await PromptApi.GetEvaluationSetsAsync(lifetime.Token);
+            if (disposed) return;
+            if (!r.IsSuccess) { setsError = r.ErrorMessage; return; }
+            sets = r.Data!;
+            // Theo bộ đang chọn của trang; chưa chọn (hoặc bộ không còn) → bộ đầu tiên theo thứ tự API, cùng quy tắc với So sánh tỷ lệ đúng.
+            if (EvaluationSetId is > 0 && sets.Any(s => s.EvaluationSetId == EvaluationSetId)) setId = EvaluationSetId.Value;
+            else if (!sets.Any(s => s.EvaluationSetId == setId)) setId = sets.FirstOrDefault()?.EvaluationSetId ?? 0;
+            if (setId <= 0) { candidates = null; jobs = []; return; }
+            lastParamSetId = setId;
+            if (EvaluationSetId != setId && OnEvaluationSetChanged.HasDelegate) await OnEvaluationSetChanged.InvokeAsync(setId);
+            await LoadCandidatesAsync(setId);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) setsLoading = false; }
+    }
+
+    private async Task LoadCandidatesAsync(int id)
+    {
+        if (disposed || id <= 0) return;
+        candidatesCts?.Cancel();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        candidatesCts = cts;
+        candidatesSetId = id;
+        candidatesLoading = true;
+        candidatesError = null;
+        try
+        {
+            var r = await PromptApi.GetLabelCandidatesAsync(id, cts.Token);
+            if (disposed || cts.IsCancellationRequested || id != setId) return;   // phản hồi muộn của bộ cũ: bỏ
+            if (!r.IsSuccess) { candidatesError = r.ErrorMessage; candidates = null; jobs = []; return; }
+            candidates = r.Data!;
+            jobs = PlaygroundRules.Jobs(candidates);
+            await ReconcileSelectionAsync();
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
+        finally
+        {
+            if (ReferenceEquals(candidatesCts, cts)) { candidatesCts = null; if (!disposed) candidatesLoading = false; }
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>Giữ lựa chọn nếu còn đúng Job/hồ sơ theo MÃ; không còn → bỏ chọn. Hồ sơ đổi trạng thái vẫn chọn nhưng nút bị khóa kèm lý do.</summary>
+    private async Task ReconcileSelectionAsync()
+    {
+        var before = applicationId;
+        if (!jobs.Any(j => j.JobId == jobId)) { jobId = jobs.Count == 1 ? jobs[0].JobId : 0; applicationId = 0; }
+        if (applicationId > 0 && SelectedCandidate is null) applicationId = 0;
+        if (before != applicationId) await ResetOutputsAsync();
+        SaveSelection();
+        if (tab == 1) await LoadPayloadAsync();   // đang xem thẻ nội dung gửi đi: tải theo danh sách mới (không trùng request)
+    }
+
+    private async Task ReloadAllAsync()
+    {
+        await LoadSetsAsync();
+        if (sets is not null && setId > 0 && candidatesSetId != setId) await LoadCandidatesAsync(setId);
+    }
+
+    private Task ReloadCandidatesAsync() => LoadCandidatesAsync(setId);
+
+    private async Task RefreshQuotaAsync()
+    {
+        if (disposed) return;
+        var version = ++quotaVersion;
+        quotaLoading = true;
+        try
+        {
+            var r = await PromptApi.GetPreviewQuotaAsync(lifetime.Token);
+            if (disposed || version != quotaVersion) return;   // đã có số mới hơn (từ lần chấm thử vừa xong)
+            if (r.IsSuccess) { quota = r.Data; quotaError = null; }
+            else quotaError = r.ErrorMessage;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed && version == quotaVersion) quotaLoading = false; }
+    }
+
+    // ---------------- Chọn bộ / công việc / hồ sơ / thẻ ----------------
+
+    private async Task ChangeSetAsync(ChangeEventArgs e)
+    {
+        if (running || disposed) return;
+        var id = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        if (id <= 0 || id == setId) return;
+        setId = lastParamSetId = id;
+        await ResetOutputsAsync();
+        if (OnEvaluationSetChanged.HasDelegate) await OnEvaluationSetChanged.InvokeAsync(id);
+        await LoadCandidatesAsync(id);
+    }
+
+    private async Task ChangeJob(ChangeEventArgs e)
+    {
+        if (running || disposed) return;
+        var id = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        if (id == jobId) return;
+        jobId = id;
+        applicationId = 0;   // đổi Job → chọn lại hồ sơ
+        await ResetOutputsAsync();
+        SaveSelection();
+    }
+
+    private async Task ChangeApplicationAsync(ChangeEventArgs e)
+    {
+        if (running || disposed) return;
+        var id = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        if (id == applicationId) return;
+        applicationId = id;
+        await ResetOutputsAsync();
+        SaveSelection();
+        if (tab == 1) await LoadPayloadAsync();
+    }
+
+    private async Task ShowTabAsync(int value)
+    {
+        if (disposed) return;
+        tab = value;
+        SaveSelection();
+        if (tab == 1) await LoadPayloadAsync();
+    }
+
+    private void SaveSelection()
+    {
+        Selection.JobId = jobId;
+        Selection.ApplicationId = applicationId;
+        Selection.Tab = tab;
+    }
+
+    /// <summary>Xóa kết quả + nội dung gửi đi (dữ liệu nhạy cảm) và hủy mọi request đang chờ để phản hồi muộn không áp vào lựa chọn mới.</summary>
+    private async Task ResetOutputsAsync()
+    {
+        var wasRunning = running;
+        runCts?.Cancel();
+        runCts = null;
+        running = false;
+        payloadCts?.Cancel();
+        payloadCts = null;
+        debounceCts?.Cancel();
+        debounceCts = null;
+        payloadLoadingKey = pendingPayloadKey = payloadErrorKey = null;
+        result = null;
+        runError = null;
+        runNotice = null;
+        payload = null;
+        payloadKey = null;
+        payloadError = null;
+        maskingDisabled = false;
+        maskingMessage = null;
+        // Lượt chấm thử bị hủy giữa chừng có thể đã được tính: đọc lại số lượt từ API, không tự trừ.
+        if (wasRunning) await RefreshQuotaAsync();
+    }
+
+    // ---------------- Chấm thử ----------------
+
+    private async Task RunAsync()
+    {
+        if (!CanRun) return;
+        var candidate = SelectedCandidate!;
+        var request = PlaygroundRules.PreviewRequest(plan)!;
+        var signature = plan.Signature;
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        runCts = cts;
+        running = true;
+        runError = null;
+        runNotice = null;
+        tab = 0;
+        SaveSelection();
+        var cancelled = false;
+        try
+        {
+            var r = await PreviewApi.PreviewAsync(candidate.ApplicationId, request, cts.Token);
+            if (cts.IsCancellationRequested || disposed) cancelled = !disposed;
+            else if (r.IsSuccess && r.Data is { } data)
+            {
+                result = new TrialResult(data, signature, candidate.ApplicationId);
+                if (quota is not null)
+                {
+                    ++quotaVersion;   // số lượt trong phản hồi mới hơn mọi lần đọc quota đang chờ
+                    quota = PlaygroundRules.QuotaAfterPreview(quota, data);
+                    quotaLoading = false;
+                }
+                else await RefreshQuotaAsync();
+            }
+            else
+            {
+                runError = PlaygroundRules.DescribePreviewError(r.StatusCode, r.ErrorCode, r.ErrorMessage, r.RetryAfter);
+                // Kể cả khi lỗi, số lượt có thể đã đổi: lấy lại từ API (không giả định 429 chỉ trừ 1).
+                await RefreshQuotaAsync();
+                if (runError.ReloadCandidates && !disposed) await LoadCandidatesAsync(setId);
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { cancelled = !disposed; }
+        finally
+        {
+            if (ReferenceEquals(runCts, cts)) { runCts = null; running = false; }
+            cts.Dispose();
+        }
+        if (cancelled && !disposed) await RefreshQuotaAsync();
+    }
+
+    private void CancelRun()
+    {
+        if (runCts is null) return;
+        runCts.Cancel();
+        runNotice = "Đã dừng chờ kết quả. Lượt thử có thể đã được tính nếu máy chủ đã gửi yêu cầu tới AI; số lượt bên trên được đọc lại từ máy chủ.";
+    }
+
+    // ---------------- Nội dung gửi Gemini ----------------
+
+    /// <summary>Đổi nội dung prompt khi đang xem thẻ này: chờ người dùng ngừng gõ rồi mới gọi lại (không gọi theo từng lần render).</summary>
+    private void SchedulePayloadIfStale()
+    {
+        if (tab != 1 || disposed) return;
+        var key = CurrentPayloadKey;
+        if (key is null || key == payloadKey || key == payloadLoadingKey || key == payloadErrorKey || key == pendingPayloadKey) return;
+        debounceCts?.Cancel();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        debounceCts = cts;
+        pendingPayloadKey = key;
+        _ = DebouncePayloadAsync(cts);
+    }
+
+    private async Task DebouncePayloadAsync(CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(PayloadDebounceMs, cts.Token);
+            await InvokeAsync(async () =>
+            {
+                if (disposed || cts.IsCancellationRequested) return;
+                await LoadPayloadAsync();
+                if (!disposed) StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (!disposed) { await DispatchExceptionAsync(ex); }
+        finally
+        {
+            if (ReferenceEquals(debounceCts, cts)) { debounceCts = null; pendingPayloadKey = null; }
+            cts.Dispose();
+        }
+    }
+
+    private Task RetryPayloadAsync()
+    {
+        payloadErrorKey = null;
+        payloadError = null;
+        return LoadPayloadAsync();
+    }
+
+    private async Task LoadPayloadAsync()
+    {
+        debounceCts?.Cancel();
+        debounceCts = null;
+        pendingPayloadKey = null;
+        var key = CurrentPayloadKey;
+        if (disposed || tab != 1 || key is null) return;
+        if (key == payloadLoadingKey || key == payloadErrorKey) return;
+        if (key == payloadKey && (payload is not null || maskingDisabled)) return;
+        var request = PlaygroundRules.AssembledRequest(key.ApplicationId, plan);
+        if (request is null) return;
+
+        payloadCts?.Cancel();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        payloadCts = cts;
+        payloadLoadingKey = key;
+        payloadError = null;
+        try
+        {
+            var r = await PromptApi.GetAssembledPromptAsync(request, cts.Token);
+            if (disposed || cts.IsCancellationRequested) return;
+            if (r.IsSuccess && r.Data is { PersonalDataMasked: true } data && data.ApplicationId == key.ApplicationId)
+            {
+                payload = data;
+                payloadKey = key;
+                maskingDisabled = false;
+                return;
+            }
+            // Mọi lỗi: không giữ nội dung cũ (fail closed), không tự gọi lại cùng nội dung.
+            payload = null;
+            payloadKey = null;
+            if (r.IsSuccess)
+            {
+                payloadErrorKey = key;
+                payloadError = new("Không hiển thị nội dung", "API trả nội dung chưa được xác nhận là đã che thông tin cá nhân nên không hiển thị.", false);
+            }
+            else if (r.StatusCode == 409 && r.ErrorCode == PlaygroundRules.MaskingDisabledCode)
+            {
+                maskingDisabled = true;
+                maskingMessage = r.ErrorMessage;
+                payloadKey = key;
+            }
+            else
+            {
+                payloadErrorKey = key;
+                payloadError = PlaygroundRules.DescribeAssembledError(r.StatusCode, r.ErrorMessage);
+                if (payloadError.ReloadCandidates) await LoadCandidatesAsync(setId);
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
+        finally
+        {
+            if (ReferenceEquals(payloadCts, cts)) { payloadCts = null; payloadLoadingKey = null; }
+            cts.Dispose();
+        }
+    }
+
+    // ---------------- Hiển thị ----------------
+
+    private RenderFragment ScoreBody(PlaygroundRules.ScoreView v) => @<div class="pg-card-body">
+        <div class="pg-score-row">
+            <p class="pg-score"><span class="visually-hidden">Điểm cuối </span><span class="pg-score-value">@Display.Score(v.FinalScore)</span><span class="pg-score-max">/100</span></p>
+            <div class="pg-badges">
+                <FitBadge FitLabel="@v.FitLabel" FinalScore="v.FinalScore" ScoreSource="@v.ScoreSource" />
+                <span class="pg-pass @(v.PredictedPass == true ? "is-pass" : v.PredictedPass == false ? "is-fail" : "is-none")">@PlaygroundRules.PassText(v.PredictedPass)</span>
+            </div>
+        </div>
+        <dl class="pg-sub">
+            <div><dt>Từ khóa</dt><dd>@Display.Score(v.KeywordScore)</dd></div>
+            <div><dt>AI</dt><dd>@Display.Score(v.AiScore)</dd></div>
+        </dl>
+        @if (v.Skills.Count > 0)
+        {
+            <ul class="pg-skills" aria-label="Kỹ năng">
+                @foreach (var s in v.Skills.OrderByDescending(s => s.Matched).ThenByDescending(s => s.MustHave).ThenBy(s => s.Name, StringComparer.Create(Vi, true)))
+                {
+                    <li class="pg-skill @(s.Matched ? "is-ok" : s.MustHave ? "is-miss-must" : "is-miss")"><span aria-hidden="true">@(s.Matched ? "✓" : "–")</span>@(s.Matched ? s.Name : $"Thiếu {s.Name}")@(s.MustHave && !s.Matched ? " (bắt buộc)" : "")</li>
+                }
+            </ul>
+        }
+        <p class="pg-reason">@(string.IsNullOrWhiteSpace(v.Reasoning) ? "Chưa có nhận xét AI." : Anonymity.Text(v.Reasoning))</p>
+        @foreach (var note in v.Notes)
+        {
+            <p class="pg-warn">@note</p>
+        }
+    </div>;
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        Anonymity.Changed -= PrivacyChanged;
+        lifetime.Cancel();
+        lifetime.Dispose();
+        // Không giữ tham chiếu tới dữ liệu nhạy cảm sau khi đóng khung.
+        payload = null;
+        result = null;
+        candidates = null;
+    }
+}

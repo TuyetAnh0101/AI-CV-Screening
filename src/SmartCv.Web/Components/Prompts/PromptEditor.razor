@@ -54,6 +54,11 @@
     <footer class="editor-actions">
         <span class="immutable-note">Mỗi lần lưu tạo một phiên bản riêng.</span>
         <div class="editor-buttons">
+            @* B39: mở/đóng khung chấm thử ngay dưới ô soạn; không đụng tới nội dung, tên hay ghi chú đang soạn. *@
+            <button type="button" class="btn sc-btn-secondary try-btn @(showPlayground ? "is-open" : null)" @ref="tryButton" @onclick="TogglePlayground"
+                    aria-expanded="@(showPlayground ? "true" : "false")" aria-controls="@(showPlayground ? "prompt-playground" : null)">
+                <span class="try-mark" aria-hidden="true">✦</span><span>Thử với hồ sơ…</span><span class="try-chevron" aria-hidden="true"></span>
+            </button>
             <button type="button" class="btn sc-btn-secondary" @onclick="ResetAsync" disabled="@(Locked || !Draft.IsDirty)">Hoàn tác</button>
             <button type="button" class="btn sc-btn-primary" @onclick="SaveAsync" disabled="@Locked">
                 @if (Saving) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
@@ -61,6 +66,11 @@
             </button>
         </div>
     </footer>
+    @if (showPlayground)
+    {
+        <PromptPlayground Draft="Draft" EvaluationSetId="EvaluationSetId" LabelsVersion="LabelsVersion" Selection="playgroundSelection"
+                          OnEvaluationSetChanged="OnEvaluationSetChanged" OnClose="ClosePlayground" />
+    }
 </section>
 
 @code {
@@ -71,6 +81,13 @@
     [Parameter] public string? Error { get; set; }
     [Parameter] public EventCallback<CreatePromptVersionRequest> OnSave { get; set; }
     [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
+    // B39: bộ CV đánh giá đang chọn của trang (để chọn hồ sơ chấm thử) và số lần lưu nhãn HR.
+    [Parameter] public int? EvaluationSetId { get; set; }
+    [Parameter] public int LabelsVersion { get; set; }
+    [Parameter] public EventCallback<int> OnEvaluationSetChanged { get; set; }
+    private bool showPlayground, focusTryButton;
+    private ElementReference tryButton;
+    private readonly PlaygroundSelection playgroundSelection = new();
     private string? validation;
     private int? loadedId;
     private bool submitting;
@@ -89,6 +106,15 @@
     private Task NoteInput(ChangeEventArgs e) { Draft.ChangeNote = e.Value?.ToString() ?? ""; return ChangedAsync(); }
     private Task ChangedAsync() { validation = null; return OnDirtyChanged.InvokeAsync(Draft.IsDirty); }
     private Task ResetAsync() { Draft.Reset(); return ChangedAsync(); }
+    private void TogglePlayground() => showPlayground = !showPlayground;
+    private void ClosePlayground() { showPlayground = false; focusTryButton = true; }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusTryButton) return;
+        focusTryButton = false;
+        try { await tryButton.FocusAsync(); }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException) { }
+    }
     private async Task SaveAsync()
     {
         if (Locked) return;
