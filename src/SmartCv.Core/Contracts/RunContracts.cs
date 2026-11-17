@@ -12,6 +12,10 @@ public sealed record RunProgressDto(
     DateTime CreatedAt, DateTime? CompletedAt)
 {
     public List<RunItemDto> Items { get; init; } = [];
+    public string SystemPrompt { get; init; } = string.Empty;
+    public int? EvaluationSetId { get; init; }
+    public string? EvaluationSetName { get; init; }
+    public decimal? AccuracyPercent { get; init; }
 }
 
 public sealed class RunItemDto
