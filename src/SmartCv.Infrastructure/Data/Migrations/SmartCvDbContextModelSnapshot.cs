@@ -607,8 +607,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasKey("JobId")
                         .HasName("PK_Jobs");
 
-                    b.HasAlternateKey("Title")
-                        .HasName("UQ_Jobs_Title");
+                    b.HasIndex("Title")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_Jobs_Title");
 
                     b.ToTable("Jobs", null, t =>
                         {
