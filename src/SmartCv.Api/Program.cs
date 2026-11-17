@@ -98,6 +98,7 @@ app.MapDashboardEndpoints(); // A19: chỉ số nội bộ, cùng chốt Develop
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
 app.MapAiPreviewEndpoints();   // A10/A41: POST /api/applications/{id}/ai-preview, GET .../ai-preview/quota (chỉ Development, có giới hạn tần suất)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
+app.MapJobSkillEndpoints(); // A22: internal skill/alias writes share the A21 Development gate.
 app.MapPromptEndpoints(); // A14
 app.MapEvaluationSetEndpoints(); // A15: HR labels and CSV import.
 app.MapPromptTestEndpoints(); // A15: queue and inspect persisted prompt-test results.
