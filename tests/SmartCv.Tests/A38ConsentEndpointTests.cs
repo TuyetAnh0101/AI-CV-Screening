@@ -234,15 +234,18 @@ public class A38ConsentEndpointTests
     }
 
     [Fact]
-    public async Task Current_Web_upload_without_B38_gets_400_and_saves_nothing_no_consent_is_fabricated()
+    public async Task Web_client_never_fabricates_consent_and_api_still_rejects_requests_without_it()
     {
+        // B38: Web gửi nguồn + đồng ý do HR chọn; chưa đồng ý thì client không gửi gì (không tự điền consentConfirmed = true).
+        // Request kiểu cũ không có đồng ý (client trước B38 / gọi tay) vẫn bị API A38 trả 400 và không lưu file nào.
         using var f = Factory();
         using var http = f.CreateClient();
         var client = new CvApiClient(http, Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance);
-        var result = await client.UploadAsync([new BrowserFile()]);
-        Assert.False(result.IsSuccess);
-        Assert.Equal(400, result.StatusCode);
-        Assert.Contains("consentConfirmed", result.ErrorMessage);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UploadAsync([new BrowserFile()], "Email", consentConfirmed: false));
+        using var legacy = new MultipartFormDataContent { { new ByteArrayContent(TestSupport.Pdf("current-Web-without-B38")), "files", "legacy-client.pdf" } };
+        using var response = await http.PostAsync("api/cvs/upload", legacy);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("consentConfirmed", await response.Content.ReadAsStringAsync());
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         await db.Database.EnsureCreatedAsync();

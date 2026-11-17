@@ -54,9 +54,16 @@ public class JobSelectionUiTests
                 RenderTreeFrameType.Markup => System.Text.RegularExpressions.Regex.Replace(f.MarkupContent, "<[^>]+>", " "),
                 _ => " "
             }))), @"\s+", " ");
-        public Task ChangeJobAsync(string value) => Dispatcher.InvokeAsync(() => DispatchEventAsync(
-            Frames().First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onchange").AttributeEventHandlerId,
-            null, new ChangeEventArgs { Value = value }));
+        // B38: trang có thêm ô chọn nguồn CV / xác nhận đồng ý trước ô chọn công việc → tìm đúng phần tử theo id
+        public Task ChangeJobAsync(string value) => ChangeAsync("job", value);
+
+        public Task ChangeAsync(string id, object? value) => Dispatcher.InvokeAsync(() =>
+        {
+            var frames = Frames();
+            var index = frames.FindIndex(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "id" && Equals(f.AttributeValue, id));
+            var handler = frames.Skip(index).First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onchange");
+            return DispatchEventAsync(handler.AttributeEventHandlerId, null, new ChangeEventArgs { Value = value });
+        });
     }
 
     private static ServiceProvider Services(Func<Task<HttpResponseMessage>> respond)
@@ -73,6 +80,7 @@ public class JobSelectionUiTests
         services.AddSingleton(new ApplicationApiClient(new HttpClient(), NullLogger<ApplicationApiClient>.Instance));
         services.AddSingleton(new RunApiClient(new HttpClient(), NullLogger<RunApiClient>.Instance));
         services.AddSingleton<NavigationManager>(new TestNavigationManager());
+        services.AddSingleton(B36PrivacyTests.NormalView());   // B38: trang đọc trạng thái Ẩn danh (B36)
         return services.BuildServiceProvider();
     }
 
@@ -124,6 +132,10 @@ public class JobSelectionUiTests
         await using var renderer = new TestRenderer(services);
         await renderer.StartAsync();
         Assert.Contains("Chưa có công việc đang tuyển.", renderer.Text);
+        // B38: không có job vẫn tải CV được, chỉ cần nguồn CV + xác nhận đồng ý (A38)
+        Assert.Contains("Chưa mở tải lên", renderer.Text);
+        await renderer.ChangeAsync("cv-source", "Email");
+        await renderer.ChangeAsync("cv-consent", true);
         Assert.Contains("Tải CV lên để phân tích", renderer.Text);
     }
 

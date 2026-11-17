@@ -2,27 +2,89 @@
     B3: ô kéo thả (Component Dropzone trong Figma).
     <InputFile> TRONG SUỐT phủ kín ô: kéo file vào ô là thả vào InputFile, bấm vào ô là mở hộp chọn file. Không cần JavaScript.
     Khi đang tải lên, InputFile bị khóa để người dùng không chọn lại file: chọn lại sẽ làm các IBrowserFile cũ không đọc được nữa.
+    B38: khóa THẬT khi chưa đủ nguồn CV + xác nhận đồng ý (Disabled, DisabledTitle, DisabledReason):
+         input bị disabled nên không mở hộp chọn file và không nhận file thả vào; ô chặn hành vi mặc định khi thả
+         (không chặn thì trình duyệt mở file vừa thả và rời trang, mất danh sách CV). Bố cục giữ nguyên giữa các trạng thái.
 *@
 
-<div class="dropzone @(dragging ? "is-dragging" : null) @(Disabled ? "is-disabled" : null)"
-     @ondragenter="() => dragging = true"
-     @ondragleave="() => dragging = false"
-     @ondrop="() => dragging = false">
+<div class="dropzone @StateClass" role="group" aria-labelledby="@titleId"
+     @ondragenter="OnDragEnter" @ondragleave="() => dragging = false" @ondrop="() => dragging = false"
+     @ondragover:preventDefault="Disabled" @ondrop:preventDefault="Disabled">
 
-    <img src="images/icons/upload-cloud.svg" width="40" height="40" alt="" class="dz-icon" />
-    <p class="dz-title">@(Disabled ? "Đang tải lên..." : "Tải CV lên để phân tích")</p>
-    <p class="dz-hint">Kéo thả file vào đây hoặc <span>bấm để chọn file</span></p>
+    <span class="dz-icon" aria-hidden="true">
+        @if (Busy)
+        {
+            <span class="dz-spinner"></span>
+        }
+        else if (Disabled)
+        {
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+                <path d="M12 14.5v2" />
+            </svg>
+        }
+        else
+        {
+            <img src="images/icons/upload-cloud.svg" width="32" height="32" alt="" />
+        }
+    </span>
+
+    <p class="dz-title" id="@titleId">@Title</p>
+    <p class="dz-hint" id="@hintId">
+        @if (Disabled)
+        {
+            @if (!string.IsNullOrWhiteSpace(DisabledReason))
+            {
+                <span class="dz-reason">
+                    @if (!Busy) { <span class="dz-reason-icon" aria-hidden="true">!</span> }
+                    <span>@DisabledReason</span>
+                </span>
+            }
+        }
+        else
+        {
+            <span>Kéo thả file vào đây hoặc <span class="dz-link">bấm để chọn file</span></span>
+        }
+    </p>
 
     <InputFile OnChange="OnFilesSelected" multiple accept="@Accept" disabled="@Disabled"
-               class="dz-input" title="" aria-label="Chọn file CV" />
+               class="dz-input" title="" aria-label="Chọn file CV" aria-describedby="@($"{hintId} {captionId}")" />
 </div>
-<p class="dz-caption">@Caption</p>
+<p class="dz-caption" id="@captionId">@Caption</p>
 
 @code {
     private bool dragging;
+    private readonly string idPrefix = "dz-" + Guid.NewGuid().ToString("N")[..8];
+    private string titleId => idPrefix + "-title";
+    private string hintId => idPrefix + "-hint";
+    private string captionId => idPrefix + "-caption";
 
     [Parameter, EditorRequired] public EventCallback<InputFileChangeEventArgs> OnFilesSelected { get; set; }
     [Parameter] public bool Disabled { get; set; }
+    /// <summary>B38: tiêu đề khi ô bị khóa, ví dụ "Chưa mở tải lên"; mặc định "Đang tải lên...".</summary>
+    [Parameter] public string? DisabledTitle { get; set; }
+    /// <summary>B38: dòng nói rõ vì sao ô đang khóa (còn thiếu nguồn / đồng ý) hoặc tiến độ đang gửi.</summary>
+    [Parameter] public string? DisabledReason { get; set; }
+    /// <summary>Đang gửi file: biểu tượng chờ thay cho ổ khóa.</summary>
+    [Parameter] public bool Busy { get; set; }
     [Parameter] public string Accept { get; set; } = ".pdf,.png,.jpg,.jpeg";
     [Parameter] public string? Caption { get; set; }
+
+    private string Title => Disabled ? DisabledTitle ?? "Đang tải lên..."
+        : dragging ? "Thả file để tải lên" : "Tải CV lên để phân tích";
+
+    private string StateClass => Busy ? "is-disabled is-busy"
+        : Disabled ? "is-disabled is-locked"
+        : dragging ? "is-dragging" : "is-open";
+
+    private void OnDragEnter()
+    {
+        if (!Disabled) dragging = true;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Disabled) dragging = false;
+    }
 }

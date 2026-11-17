@@ -6,6 +6,13 @@
     B5: kiểm tra file trên giao diện (UploadValidator), hiện lỗi từng dòng, tổng kết, xóa file lỗi, báo mất kết nối API.
     B6: nút "Phân tích hồ sơ" → POST /api/applications (A8) → POST /api/runs → /upload?runId=N;
         thẻ "Phân tích hồ sơ" hỏi GET /api/runs/{id} mỗi 2 giây tới khi Completed/Failed (RunProgressPanel).
+    B38: luồng theo thực tế "Nguồn & đồng ý → Tải CV → Kiểm tra chữ → Chọn công việc → Phân tích".
+        - Nguồn CV (5 mã A38) + xác nhận đồng ý: thiếu thì ô kéo thả khóa thật, không gửi request; đủ thì mọi nhóm gửi kèm
+          sourceChannel + consentConfirmed (chốt một lần cho cả lần chọn file, ô chọn bị khóa khi đang gửi).
+        - Sau khi lưu: hỏi GET /api/cvs/{id} mỗi 2 giây, tối đa 2 phút (vòng hỏi + CTS RIÊNG, không đụng pollCts của tiến độ phân tích),
+          cảnh báo vàng khi A42 báo maybeMisread, hộp "Chữ đã đọc" tải GET /api/cvs/{id}/text khi mở.
+        - CV trùng: dùng đúng existingCvId (A42) → "Đã có sẵn", vẫn chọn được để phân tích cho công việc mới.
+        - "N CV · khoảng X phút": GET /api/runs/estimate?count=N khi số CV được chọn đổi (gộp lần bấm liên tiếp, bỏ phản hồi cũ).
 *@
 @implements IAsyncDisposable
 @using Microsoft.Extensions.Options
@@ -18,13 +25,28 @@
 @inject IOptions<CvUploadOptions> UploadOptions
 @inject IConfiguration Configuration
 @inject ILogger<Upload> Logger
+@inject AnonymityState Anonymity
 
 <PageTitle>Tải lên & Phân tích CV · SCApp</PageTitle>
 
-@* ---------- Banner tiêu đề (Figma: nền chuyển màu #E6FFFB → #E0F2FE) ---------- *@
-<section class="page-banner">
-    <h1>Tải lên &amp; Phân tích CV</h1>
-    <p>Quản lý hồ sơ, gán công việc và đánh giá mức độ phù hợp bằng AI</p>
+@* ---------- Đầu trang: tiêu đề + các bước của quy trình ---------- *@
+<section class="page-banner" aria-labelledby="upload-title">
+    <div class="banner-text">
+        <h1 id="upload-title">Tải lên &amp; Phân tích CV</h1>
+        <p>Quản lý hồ sơ, gán công việc và đánh giá mức độ phù hợp bằng AI</p>
+    </div>
+    <ol class="flow" aria-label="Các bước tải và phân tích CV">
+        @foreach (var step in Steps)
+        {
+            <li class="flow-step @(step.Done ? "is-done" : null) @(step.Attention ? "is-attention" : null) @(step.Current ? "is-current" : null)"
+                aria-current="@(step.Current ? "step" : null)">
+                <span class="flow-dot" aria-hidden="true">@(step.Done ? "✓" : step.Attention ? "!" : step.Number.ToString())</span>
+                <span class="flow-label">@step.Label</span>
+                @if (step.Done) { <span class="visually-hidden">(đã xong)</span> }
+                else if (step.Attention) { <span class="visually-hidden">(cần xem lại)</span> }
+            </li>
+        }
+    </ol>
 </section>
 
 @* ---------- 2 thẻ: Tải nhiều hồ sơ | Phân tích hồ sơ ---------- *@
@@ -48,87 +70,84 @@
 <section class="page-card">
     @if (tab == Tab.Upload)
     {
-        @* B5: lỗi của cả lần tải (mất kết nối API, máy chủ lỗi) – khác lỗi từng file hiện trong bảng *@
-        <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" />
-
-        @* B6: không phân tích được (chưa chọn job / CV, API gắn CV hoặc tạo lượt lỗi) *@
-        <ErrorAlert Title="@(analyzeError?.Title ?? string.Empty)" Message="@analyzeError?.Message" />
-
-        @* B5: thông báo tổng kết sau mỗi lần tải *@
-        @if (notice is not null)
-        {
-            <div class="alert d-flex justify-content-between align-items-start gap-2 sc-notice @(noticeHasErrors ? "is-warn" : "is-ok")"
-                 role="status" aria-live="polite">
-                <span class="sc-notice-text">
-                    <span class="sc-notice-icon" aria-hidden="true">@(noticeHasErrors ? "!" : "✓")</span>
-                    <span>@notice</span>
-                </span>
-                <button type="button" class="btn-close" aria-label="Đóng thông báo" @onclick="() => notice = null"></button>
-            </div>
-        }
-
-        @* ---------- B4: Chọn công việc và yêu cầu tuyển dụng ---------- *@
-        <div class="field">
-            <label for="job" class="field-label">Chọn công việc</label>
-            <select id="job" class="sc-select @(jobInvalid ? "is-invalid" : null)" @bind="selectedJobId" @bind:after="OnJobChanged"
-                    disabled="@(loadingJobs || jobs.Count == 0 || analyzing)"
-                    aria-invalid="@(jobInvalid ? "true" : "false")"
-                    aria-describedby="job-details" aria-busy="@(loadingJobs ? "true" : "false")">
-                <option value="">@(loadingJobs ? "Đang tải công việc..." : "Chọn công việc")</option>
-                @foreach (var job in jobs)
-                {
-                    <option value="@job.JobId">@job.Title</option>
-                }
-            </select>
-            <div id="job-details" aria-live="polite">
-                @if (jobInvalid)
-                {
-                    <div class="field-error">Hãy chọn công việc trước khi phân tích.</div>
-                }
-                @if (jobsError is not null)
-                {
-                    <div class="field-error" role="alert">
-                        @jobsError
-                        <button type="button" class="btn btn-link btn-sm" @onclick="LoadJobsAsync">Thử lại</button>
+        @* ================= Bước 1–2: nguồn + đồng ý, ô kéo thả ================= *@
+        <section class="intake" aria-labelledby="consent-title">
+            <div class="consent-card @(CanUpload ? "is-ready" : null)">
+                <div class="consent-head">
+                    <span class="consent-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6Z" /><path d="m9 12 2 2 4-4" />
+                        </svg>
+                    </span>
+                    <div class="consent-title">
+                        <h2 id="consent-title" class="section-title">Nguồn hồ sơ và sự đồng ý</h2>
+                        <p class="section-sub">Bắt buộc trước khi tải lên, áp dụng cho mọi CV bạn tải trên trang này.</p>
                     </div>
-                }
-                else if (!loadingJobs && jobs.Count == 0)
-                {
-                    <div class="job-hint">Chưa có công việc đang tuyển.</div>
-                }
-                else if (SelectedJob is { } selectedJob)
-                {
-                    <div class="job-hint">
-                        <span>Kỹ năng bắt buộc:</span>
-                        @foreach (var skill in selectedJob.Skills.Where(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                    <span class="consent-state @(CanUpload ? "is-ok" : null)" aria-live="polite">
+                        @if (CanUpload)
                         {
-                            <span class="skill-chip">@skill.DisplayName</span>
+                            <span aria-hidden="true">✓</span> <span>Đã đủ điều kiện</span>
                         }
-                        @if (!selectedJob.Skills.Any(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                        else
                         {
-                            <span>Không yêu cầu</span>
+                            <span>Còn thiếu @UploadRules.MissingCount(sourceChannel, consentConfirmed) mục</span>
                         }
-                        <span>• @(selectedJob.MinGpa is { } gpa ? $"GPA tối thiểu {gpa.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}" : "Không yêu cầu GPA")</span>
-                        <span>• Kinh nghiệm từ @selectedJob.MinYearsExperience.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) năm</span>
+                    </span>
+                </div>
+
+                <div class="consent-grid">
+                    <div class="consent-field">
+                        <label for="cv-source" class="field-label">Nguồn CV <span class="req" aria-hidden="true">*</span></label>
+                        <select id="cv-source" class="sc-select" @bind="sourceChannel" @bind:after="OnUploadConditionChanged"
+                                disabled="@busy" aria-required="true" aria-describedby="consent-help">
+                            <option value="">Chọn nguồn CV…</option>
+                            @foreach (var (channel, label) in UploadRules.SourceOptions)
+                            {
+                                <option value="@channel">@label</option>
+                            }
+                        </select>
                     </div>
-                }
+                    <div class="consent-field">
+                        <span class="field-label" aria-hidden="true">Xác nhận đồng ý <span class="req">*</span></span>
+                        <label class="consent-check @(consentConfirmed ? "is-checked" : null)" for="cv-consent">
+                            <input id="cv-consent" type="checkbox" class="sc-check" @bind="consentConfirmed" @bind:after="OnUploadConditionChanged"
+                                   disabled="@busy" aria-required="true" aria-describedby="consent-help" />
+                            <span class="consent-text">
+                                <strong>@UploadRules.ConsentText</strong>
+                                <small>Bạn xác nhận thay cho các ứng viên trong lần tải; hệ thống ghi lại nguồn và thời điểm xác nhận cùng CV.</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <p id="consent-help" class="privacy-note">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+                    <span>Dữ liệu chỉ dùng cho tuyển dụng. Hồ sơ bị loại hoặc để dự phòng chỉ được giữ có thời hạn, sau đó tự ẩn danh hóa.</span>
+                </p>
             </div>
-        </div>
 
-        @* ---------- B3: Ô kéo thả ---------- *@
-        <div class="field">
-            <CvDropzone OnFilesSelected="OnFilesSelectedAsync" Disabled="busy" Accept="@AcceptAttr" Caption="@Caption" />
-        </div>
+            <CvDropzone OnFilesSelected="OnFilesSelectedAsync" Disabled="@(busy || !CanUpload)" Busy="busy" Accept="@AcceptAttr"
+                        DisabledTitle="@(busy ? "Đang tải lên..." : UploadRules.LockedTitle)"
+                        DisabledReason="@(busy ? uploadProgress : UploadRules.LockReason(sourceChannel, consentConfirmed))"
+                        Caption="@Caption" />
 
-        @* ---------- B3: Danh sách CV ---------- *@
-        <div class="field">
-            <div class="field-label d-flex justify-content-between flex-wrap gap-2">
-                <span>Danh sách CV</span>
+            @* B5: lỗi của cả lần tải (mất kết nối API, máy chủ lỗi, A38 từ chối) – khác lỗi từng file hiện trong bảng *@
+            <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" />
+        </section>
+
+        @* ================= Bước 3: danh sách CV + kiểm tra chữ ================= *@
+        <section class="list-section" aria-labelledby="cv-list-title">
+            <div class="list-head">
+                <h2 id="cv-list-title" class="section-title" tabindex="-1">Danh sách CV</h2>
                 @if (items.Count > 0)
                 {
                     <span class="list-summary" aria-live="polite">
                         Sẵn sàng <strong>@items.Count(i => i.CanAnalyze)</strong>
                         • Đã chọn <strong>@SelectedCount</strong>
+                        @if (ReviewCount > 0)
+                        {
+                            <span class="summary-review"> • Cần xem lại <strong>@ReviewCount</strong></span>
+                        }
                         @if (ErrorCount > 0)
                         {
                             <span class="summary-error"> • Lỗi <strong>@ErrorCount</strong></span>
@@ -136,8 +155,38 @@
                     </span>
                 }
             </div>
-            <CvFileTable Items="items" ApiBaseUrl="@apiBaseUrl"
-                         OnRemove="RemoveItem" OnToggle="ToggleItem" OnToggleAll="ToggleAll" />
+
+            @* B5: thông báo tổng kết sau mỗi lần tải *@
+            @if (notice is not null)
+            {
+                <div class="alert d-flex justify-content-between align-items-start gap-2 sc-notice @(noticeHasErrors ? "is-warn" : "is-ok")"
+                     role="status" aria-live="polite">
+                    <span class="sc-notice-text">
+                        <span class="sc-notice-icon" aria-hidden="true">@(noticeHasErrors ? "!" : "✓")</span>
+                        <span>@notice</span>
+                    </span>
+                    <button type="button" class="btn-close" aria-label="Đóng thông báo" @onclick="() => notice = null"></button>
+                </div>
+            }
+
+            <CvFileTable Items="items" ApiBaseUrl="@apiBaseUrl" Anonymous="Anonymity.Enabled"
+                         OnRemove="RemoveItem" OnToggle="ToggleItem" OnToggleAll="ToggleAll" OnViewText="OpenText" />
+
+            @if (ReviewCount > 0)
+            {
+                <div class="quality-note" role="note">
+                    <span class="quality-icon" aria-hidden="true">⚠</span>
+                    <div class="quality-text">
+                        <strong>@ReviewCount CV có thể bị đọc sai hoặc không đọc được chữ.</strong>
+                        <span>AI chấm dựa trên chữ đã đọc: hãy bấm "Xem chữ đã đọc" và đối chiếu file gốc trước khi phân tích. Bạn vẫn có thể giữ các CV này nếu đã kiểm tra.</span>
+                    </div>
+                    @if (SelectedReviewCount > 0)
+                    {
+                        <button type="button" class="btn btn-sm quality-skip" @onclick="DeselectNeedsReview">Bỏ chọn @SelectedReviewCount CV cần xem lại</button>
+                    }
+                </div>
+            }
+
             @if (ErrorCount > 0)
             {
                 @* B5: chỉ bỏ các dòng lỗi khỏi màn hình; không gọi API, không xóa gì trên máy chủ *@
@@ -145,27 +194,106 @@
                     <span aria-hidden="true">✕</span> Xóa @ErrorCount file lỗi khỏi danh sách
                 </button>
             }
-        </div>
+        </section>
 
-        @* ---------- Nút (Figma: Hủy | Phân tích hồ sơ) ---------- *@
-        <div class="page-actions">
-            <button type="button" class="btn sc-btn-secondary" @onclick="Reset" disabled="@(items.Count == 0 || analyzing)">Hủy</button>
-            @* B6: khóa trong lúc tải lên / đang phân tích để không tạo request trùng *@
-            <button type="button" class="btn sc-btn-primary sc-btn-analyze" @onclick="AnalyzeAsync"
-                    disabled="@(busy || analyzing)" aria-busy="@(analyzing ? "true" : "false")"
-                    title="@(busy ? "Đang tải CV lên, vui lòng chờ" : null)">
-                @if (analyzing)
-                {
-                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                    <span role="status">@analyzeStep</span>
-                }
-                else
-                {
-                    <span>Phân tích hồ sơ</span>
-                    @if (SelectedCount > 0) { <span class="analyze-count">@SelectedCount</span> }
-                }
-            </button>
-        </div>
+        @* ================= Bước 4–5: chọn công việc + phân tích ================= *@
+        <section class="analyze-panel" aria-labelledby="analyze-title">
+            <h2 id="analyze-title" class="visually-hidden">Phân tích CV đã chọn</h2>
+            <div class="field job-field">
+                <label for="job" class="field-label">Chọn công việc</label>
+                <select id="job" class="sc-select @(jobInvalid ? "is-invalid" : null)" @bind="selectedJobId" @bind:after="OnJobChanged"
+                        disabled="@(loadingJobs || jobs.Count == 0 || analyzing)"
+                        aria-invalid="@(jobInvalid ? "true" : "false")"
+                        aria-describedby="job-details" aria-busy="@(loadingJobs ? "true" : "false")">
+                    <option value="">@(loadingJobs ? "Đang tải công việc..." : "Chọn công việc")</option>
+                    @foreach (var job in jobs)
+                    {
+                        <option value="@job.JobId">@job.Title</option>
+                    }
+                </select>
+                <div id="job-details" aria-live="polite">
+                    @if (jobInvalid)
+                    {
+                        <div class="field-error">Hãy chọn công việc trước khi phân tích.</div>
+                    }
+                    @if (jobsError is not null)
+                    {
+                        <div class="field-error" role="alert">
+                            @jobsError
+                            <button type="button" class="btn btn-link btn-sm" @onclick="LoadJobsAsync">Thử lại</button>
+                        </div>
+                    }
+                    else if (!loadingJobs && jobs.Count == 0)
+                    {
+                        <div class="job-hint">Chưa có công việc đang tuyển.</div>
+                    }
+                    else if (SelectedJob is { } selectedJob)
+                    {
+                        <div class="job-hint">
+                            <span>Kỹ năng bắt buộc:</span>
+                            @foreach (var skill in selectedJob.Skills.Where(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                            {
+                                <span class="skill-chip">@skill.DisplayName</span>
+                            }
+                            @if (!selectedJob.Skills.Any(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
+                            {
+                                <span>Không yêu cầu</span>
+                            }
+                            <span>• @(selectedJob.MinGpa is { } gpa ? $"GPA tối thiểu {gpa.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}" : "Không yêu cầu GPA")</span>
+                            <span>• Kinh nghiệm từ @selectedJob.MinYearsExperience.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) năm</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* B6: không phân tích được (chưa chọn job / CV, API gắn CV hoặc tạo lượt lỗi) – hiện ngay cạnh nút *@
+            <ErrorAlert Title="@(analyzeError?.Title ?? string.Empty)" Message="@analyzeError?.Message" />
+
+            @if (ReadingSelectedCount > 0)
+            {
+                <p class="analyze-info" role="status">
+                    <span class="info-dot" aria-hidden="true"></span>
+                    @ReadingSelectedCount CV đã chọn chưa đọc chữ xong. Bạn vẫn phân tích được; hệ thống chờ đọc xong rồi mới chấm các CV này.
+                </p>
+            }
+
+            <div class="page-actions">
+                <div class="estimate" aria-live="polite">
+                    <span class="estimate-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5" /><path d="M10 2h4" /></svg>
+                    </span>
+                    <span class="estimate-text">
+                        <strong class="estimate-line">@UploadRules.EstimateLine(SelectedCount, EstimateForSelection)</strong>
+                        @if (UploadRules.EstimateNote(SelectedCount, EstimateForSelection, estimating, estimateFailed) is { } note)
+                        {
+                            <small>@note</small>
+                        }
+                        @if (SelectedJob is { } analyzeJob && SelectedCount > 0)
+                        {
+                            <small class="estimate-job">Cho công việc: @analyzeJob.Title</small>
+                        }
+                    </span>
+                </div>
+                <div class="action-buttons">
+                    <button type="button" class="btn sc-btn-secondary" @onclick="Reset" disabled="@(items.Count == 0 || analyzing)">Hủy</button>
+                    @* B6: khóa trong lúc tải lên / đang phân tích để không tạo request trùng *@
+                    <button type="button" class="btn sc-btn-primary sc-btn-analyze" @onclick="AnalyzeAsync"
+                            disabled="@(busy || analyzing)" aria-busy="@(analyzing ? "true" : "false")"
+                            title="@(busy ? "Đang tải CV lên, vui lòng chờ" : null)">
+                        @if (analyzing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                            <span role="status">@analyzeStep</span>
+                        }
+                        else
+                        {
+                            <span>Phân tích hồ sơ</span>
+                            @if (SelectedCount > 0) { <span class="analyze-count">@SelectedCount</span> }
+                        }
+                    </button>
+                </div>
+            </div>
+        </section>
     }
     else
     {
@@ -175,6 +303,14 @@
                           OnRetry="RetryRunAsync" OnBackToUpload="() => tab = Tab.Upload" />
     }
 </section>
+
+@* B38: hộp "Chữ đã đọc" — một hộp mỗi lúc; @key: mỗi lần mở là component mới, không dùng lại dữ liệu cũ *@
+@if (textItem is { CvId: { } textCvId })
+{
+    <ExtractedTextDialog @key="textItem.LocalId" CvId="textCvId" FileName="@textItem.FileName"
+                         FileUrl="@(apiBaseUrl is null ? null : $"{apiBaseUrl}api/cvs/{textCvId}/file")"
+                         ReturnFocusIds="textReturnFocus" OnClose="CloseText" OnLoaded="TextLoaded" />
+}
 
 @code {
     private enum Tab { Upload, Analyze }
@@ -191,6 +327,7 @@
     private int? selectedJobId;
     private bool loadingJobs = true;
     private string? jobsError;
+    private bool disposed;
     private JobDto? SelectedJob => jobs.FirstOrDefault(j => j.JobId == selectedJobId);
 
     // ---------- B6: phân tích hồ sơ ----------
@@ -212,8 +349,41 @@
     private DateTime? runUpdatedAt;
     private CancellationTokenSource? pollCts;               // mỗi lượt theo dõi một CTS; đổi lượt / rời trang thì hủy
 
+    // ---------- B38: nguồn CV + xác nhận đồng ý (A38) ----------
+    private string? sourceChannel;
+    private bool consentConfirmed;                          // KHÔNG tích sẵn: HR phải tự xác nhận
+    private string? uploadProgress;                         // "Đang gửi nhóm 1/2 · 20 CV…"
+    private bool CanUpload => UploadRules.CanUpload(sourceChannel, consentConfirmed);
+
+    // ---------- B38: theo dõi đọc chữ (A7 + A42) — vòng hỏi + CTS riêng, tách khỏi pollCts ----------
+    private sealed class TextWatch(UploadItem item, DateTime deadline)
+    {
+        public UploadItem Item { get; } = item;
+        public DateTime Deadline { get; } = deadline;
+        public int Failures { get; set; }
+    }
+    private readonly Dictionary<Guid, TextWatch> textWatches = [];   // theo LocalId
+    private CancellationTokenSource? textCts;               // CTS của vòng hỏi ĐANG chạy (null: không có vòng nào)
+
+    // ---------- B38: hộp "Chữ đã đọc" ----------
+    private UploadItem? textItem;
+    private IReadOnlyList<string> textReturnFocus = [];
+
+    // ---------- B38: ước tính thời gian (A42) ----------
+    private readonly Dictionary<int, RunEstimateDto> estimates = [];   // theo số CV (ước tính chỉ phụ thuộc N); xóa khi có lượt chấm mới
+    private int estimateFor = -1;                           // số CV của lần ước tính gần nhất
+    private bool estimating;
+    private bool estimateFailed;
+    private CancellationTokenSource? estimateCts;
+    private RunEstimateDto? EstimateForSelection => estimates.GetValueOrDefault(SelectedCount);
+
     // Mặc định 2 giây. Khóa "RunProgress:PollIntervalMs" chỉ để test chạy nhanh, không cần đặt trong appsettings.
     private TimeSpan PollInterval => TimeSpan.FromMilliseconds(Math.Clamp(Configuration.GetValue("RunProgress:PollIntervalMs", 2000), 20, 60_000));
+    // B38: hỏi trạng thái đọc chữ mỗi 2 giây, tối đa 2 phút; ước tính gộp các lần tích liên tiếp trong 250 ms. Các khóa chỉ để test.
+    private TimeSpan TextPollInterval => TimeSpan.FromMilliseconds(Math.Clamp(Configuration.GetValue("TextCheck:PollIntervalMs", 2000), 20, 60_000));
+    private TimeSpan TextPollTimeout => TimeSpan.FromMilliseconds(Math.Clamp(Configuration.GetValue("TextCheck:TimeoutMs", 120_000), 50, 600_000));
+    private TimeSpan EstimateDebounce => TimeSpan.FromMilliseconds(Math.Clamp(Configuration.GetValue("RunEstimate:DebounceMs", 250), 0, 2_000));
+    private static readonly TimeSpan SideRequestTimeout = TimeSpan.FromSeconds(15);
 
     private CvUploadOptions Limits => UploadOptions.Value;
     private int MaxFilesPerSelection => Math.Max(1, Configuration.GetValue("CvUpload:MaxFilesPerSelection", Limits.MaxFilesPerRequest));
@@ -222,11 +392,32 @@
     private string AcceptAttr => string.Join(",", Extensions);
     private int SelectedCount => items.Count(i => i.CanAnalyze && i.Selected);
     private int ErrorCount => items.Count(i => i.IsError);
+    private int ReviewCount => UploadRules.ReviewCount(items);
+    private int SelectedReviewCount => items.Count(i => i.CanAnalyze && i.Selected && i.NeedsTextReview);
+    private int ReadingSelectedCount => UploadRules.ReadingSelectedCount(items);
 
     // Figma: "PDF, JPG, PNG • Tối đa 25 CV/lần • Tối đa 2 MB/tệp". Số lấy từ cấu hình CvUpload, không viết cứng.
     private string Caption =>
         $"{string.Join(", ", Extensions.Select(e => e.TrimStart('.').ToUpperInvariant()).Where(e => e != "JPEG"))}"
         + $"  •  Tối đa {MaxFilesPerSelection} CV/lần  •  Tối đa {Limits.MaxFileSizeMB} MB/tệp";
+
+    // ---------- B38: các bước của quy trình (chỉ hiển thị, không chặn thao tác) ----------
+    private sealed record FlowStep(int Number, string Label, bool Done, bool Attention, bool Current);
+    private IReadOnlyList<FlowStep> Steps
+    {
+        get
+        {
+            var saved = items.Any(i => i.CanAnalyze);
+            var checkedText = saved && items.Where(i => i.CanAnalyze).All(i => i.TextCheck is not TextCheck.Reading);
+            var done = new[] { CanUpload || saved, saved, checkedText && ReviewCount == 0, SelectedJob is not null, false };
+            var attention = new[] { false, false, saved && ReviewCount > 0, false, false };
+            var labels = new[] { "Nguồn & đồng ý", "Tải CV", "Kiểm tra chữ", "Chọn công việc", "Phân tích" };
+            var current = Array.FindIndex(done, d => !d);
+            return labels.Select((l, i) => new FlowStep(i + 1, l, done[i], attention[i], i == current)).ToList();
+        }
+    }
+
+    protected override void OnInitialized() => Anonymity.Changed += AnonymityChanged;
 
     protected override async Task OnInitializedAsync()
     {
@@ -234,6 +425,16 @@
         apiBaseUrl = string.IsNullOrWhiteSpace(url) ? null : url.EndsWith('/') ? url : url + "/";
         await LoadJobsAsync();
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // B36: đọc lựa chọn Ẩn danh đã lưu (trước khi đọc xong: coi như đang bật, không mở file gốc / toàn văn)
+        if (!firstRender) return;
+        try { await Anonymity.EnsureLoadedAsync(); }
+        catch (Exception ex) when (ex is JSDisconnectedException or OperationCanceledException) { }   // rời trang / mất kết nối: vẫn che
+    }
+
+    private void AnonymityChanged() => _ = InvokeAsync(StateHasChanged);
 
     private async Task LoadJobsAsync()
     {
@@ -252,9 +453,26 @@
         }
     }
 
+    // B38: chọn nguồn / tích đồng ý → mở khóa ô kéo thả; bỏ lỗi "Chưa mở tải lên" cũ khi đã đủ
+    private void OnUploadConditionChanged()
+    {
+        if (CanUpload && uploadError?.Title == UploadRules.LockedTitle) uploadError = null;
+    }
+
     private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
     {
         if (busy) return;   // ô đã bị khóa; chặn thêm một lần cho chắc
+
+        // B38 (A38): chốt nguồn + đồng ý MỘT lần cho cả lần chọn; mọi nhóm gửi đúng giá trị này.
+        // Ô kéo thả đã khóa khi chưa đủ; kiểm tra lại vì sự kiện có thể tới ngay trước khi khóa. Chưa đủ: không tạo dòng, không gửi.
+        var source = sourceChannel;
+        var consent = consentConfirmed;
+        if (!UploadRules.CanUpload(source, consent))
+        {
+            uploadError = (UploadRules.LockedTitle, UploadRules.LockReason(source, consent)!);
+            return;
+        }
+
         notice = null;
         uploadError = null;
 
@@ -300,14 +518,23 @@
             var batches = UploadFlow.SplitIntoBatches(toUpload, x => x.File.Size,
                 Math.Max(1, Limits.MaxFilesPerRequest), Limits.MaxRequestBytes - 1024 * 1024);
 
-            foreach (var batch in batches)
+            for (var b = 0; b < batches.Count; b++)
             {
+                // B38: bấm Hủy / rời trang giữa chừng → không gửi tiếp các nhóm còn lại (nhóm đang gửi vẫn hoàn tất trên máy chủ)
+                if (myGeneration != generation || disposed) break;
+
+                var batch = batches[b];
+                uploadProgress = batches.Count > 1
+                    ? $"Đang gửi nhóm {b + 1}/{batches.Count} · {batch.Count} CV. Giữ trang mở tới khi xong."
+                    : $"Đang gửi {batch.Count} CV. Giữ trang mở tới khi xong.";
+                StateHasChanged();
+
                 ApiResult<CvUploadResponse> result;
                 (string Title, string Message)? batchError;
                 try
                 {
-                    result = await CvApi.UploadAsync(batch.Select(b => b.File).ToList());
-                    batchError = UploadFlow.DescribeBatchFailure(result);
+                    result = await CvApi.UploadAsync(batch.Select(x => x.File).ToList(), source!, consent);
+                    batchError = UploadRules.DescribeUploadFailure(result);
                 }
                 catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException
                                                or TimeoutException or Microsoft.JSInterop.JSException)
@@ -322,13 +549,35 @@
 
                 // B5: chỉ giữ lỗi đầu tiên trên khung đầu thẻ; lý do từng file vẫn hiện trong bảng.
                 if (batchError is not null && uploadError is null && myGeneration == generation) uploadError = batchError;
-                UploadFlow.ApplyResult(batch.Select(b => b.Item).ToList(), result);
+                var batchItems = batch.Select(x => x.Item).ToList();
+                UploadFlow.ApplyResult(batchItems, result);
+                UploadRules.ApplyDuplicateDetails(batchItems, result);   // B38 (A42): trùng CV cũ → "Đã có sẵn" với existingCvId
+                UploadRules.ApplyRequestFailure(batchItems, result);     // B38: 400 / 429 → câu dễ hiểu, không lộ tên trường kỹ thuật
+
+                if (myGeneration == generation && !disposed)
+                {
+                    WatchText(batchItems);   // B38: bắt đầu theo dõi đọc chữ của các CV vừa có CvId
+                    SelectionChanged();      // B38: số CV được chọn đổi → cập nhật ước tính
+                }
                 StateHasChanged();   // cập nhật từng nhóm, nhóm đã xong không bị mất khi nhóm sau lỗi
+
+                if (UploadRules.StopsRemainingBatches(result.StatusCode))
+                {
+                    // B38: máy chủ từ chối cả request (nguồn / đồng ý / tần suất): các nhóm sau cũng sẽ bị từ chối → dừng, không tự gửi lại
+                    foreach (var rest in batches.Skip(b + 1).SelectMany(x => x))
+                    {
+                        rest.Item.State = UploadItemState.Rejected;
+                        rest.Item.Selected = false;
+                        rest.Item.Message = UploadRules.NotSentMessage;
+                    }
+                    break;
+                }
             }
         }
         finally
         {
             busy = false;
+            uploadProgress = null;
         }
 
         if (myGeneration == generation)
@@ -342,6 +591,7 @@
     {
         items.RemoveAll(i => i.IsError);
         uploadError = null;
+        SelectionChanged();
     }
 
     private static void Invalidate(UploadItem item, string message)
@@ -356,28 +606,270 @@
     {
         if (item.State == UploadItemState.Uploading) return;   // tránh lệch trạng thái khi request đang chạy
         items.Remove(item);
+        textWatches.Remove(item.LocalId);                      // B38: thôi hỏi trạng thái đọc chữ của dòng đã bỏ
+        if (ReferenceEquals(textItem, item)) textItem = null;
+        SelectionChanged();
     }
 
     private void ToggleItem((UploadItem Item, bool Selected) e)
     {
         if (e.Item.CanAnalyze) e.Item.Selected = e.Selected;
+        SelectionChanged();
     }
 
     private void ToggleAll(bool selected)
     {
         foreach (var item in items.Where(i => i.CanAnalyze)) item.Selected = selected;
+        SelectionChanged();
+    }
+
+    // B38: gợi ý (không bắt buộc) bỏ chọn các CV có thể đọc sai / không đọc được chữ
+    private void DeselectNeedsReview()
+    {
+        foreach (var item in items.Where(i => i.CanAnalyze && i.NeedsTextReview)) item.Selected = false;
+        SelectionChanged();
     }
 
     // "Hủy": xóa danh sách trên giao diện. Không gọi API xóa, không hủy request đang chạy
     // (request đó vẫn hoàn tất trên máy chủ; kết quả chỉ cập nhật vào các dòng đã bị bỏ, không hiện lại).
+    // B38: các nhóm chưa gửi thì không gửi nữa; dừng hỏi trạng thái đọc chữ; nguồn + đồng ý giữ nguyên lựa chọn của HR.
     private void Reset()
     {
         generation++;
         items.Clear();
+        StopTextWatch();
+        textItem = null;
         notice = null;
         uploadError = null;
         analyzeError = null;
         jobInvalid = false;
+        SelectionChanged();
+    }
+
+    // =====================================================================
+    // B38: theo dõi đọc chữ (A7 đọc nền, A42 textQuality)
+    // =====================================================================
+
+    /// <summary>Đưa các dòng vừa có CvId vào vòng hỏi chung (một vòng cho cả trang, không mỗi dòng một task).</summary>
+    private void WatchText(IEnumerable<UploadItem> batch)
+    {
+        if (disposed) return;
+        var deadline = DateTime.UtcNow + TextPollTimeout;
+        foreach (var item in batch.Where(i => i.CanAnalyze && i.CvId is not null && i.TextCheck != TextCheck.Done))
+        {
+            item.TextCheck = TextCheck.Reading;
+            textWatches[item.LocalId] = new TextWatch(item, deadline);
+        }
+        if (textWatches.Count == 0 || textCts is { IsCancellationRequested: false }) return;   // vòng đang chạy sẽ thấy dòng mới ở lượt sau
+
+        // Vòng cũ đã bị hủy (Hủy) nhưng có thể chưa kịp thoát: vẫn mở vòng mới; vòng cũ tự dừng vì token của nó đã hủy.
+        var cts = new CancellationTokenSource();
+        textCts = cts;
+        _ = TextLoopAsync(cts);
+    }
+
+    private void StopTextWatch()
+    {
+        textCts?.Cancel();
+        textCts = null;
+        textWatches.Clear();
+    }
+
+    /// <summary>
+    /// Hỏi GET /api/cvs/{id} lần lượt từng CV (mỗi lúc một request), mỗi lượt cách nhau 2 giây, tới khi Completed/Failed
+    /// hoặc quá 2 phút. Chạy trên dispatcher của circuit; phản hồi về muộn của dòng đã xóa / đã Hủy / sau khi rời trang bị bỏ.
+    /// Không giữ chữ đã đọc, không ghi log nội dung CV.
+    /// </summary>
+    private async Task TextLoopAsync(CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        try
+        {
+            while (!ct.IsCancellationRequested && textWatches.Count > 0)
+            {
+                await Task.Delay(TextPollInterval, ct);   // A7 đọc nền: hỏi sau một nhịp, không dồn request ngay khi vừa lưu
+
+                foreach (var (localId, watch) in textWatches.ToList())
+                {
+                    if (ct.IsCancellationRequested) return;
+                    if (!textWatches.TryGetValue(localId, out var current) || !ReferenceEquals(current, watch)) continue;
+
+                    var result = await GetDetailAsync(watch.Item.CvId!.Value, ct);
+                    if (ct.IsCancellationRequested) return;
+                    // Dòng đã bị xóa / Hủy / được theo dõi lại trong lúc chờ: bỏ phản hồi cũ
+                    if (!textWatches.TryGetValue(localId, out current) || !ReferenceEquals(current, watch) || !items.Contains(watch.Item)) continue;
+
+                    var finished = false;
+                    if (result.IsSuccess && result.Data is { } detail)
+                    {
+                        watch.Failures = 0;
+                        finished = UploadRules.ApplyDetail(watch.Item, detail);
+                    }
+                    else if (result.StatusCode == 404)
+                    {
+                        watch.Item.TextCheck = TextCheck.NotFound;
+                        finished = true;
+                    }
+                    else if (result.StatusCode == 410)
+                    {
+                        finished = UploadRules.MarkAnonymized(watch.Item);
+                    }
+                    else if (result.StatusCode is 400 or 401 or 403)
+                    {
+                        watch.Item.TextCheck = TextCheck.Unavailable;
+                        finished = true;
+                    }
+                    else
+                    {
+                        watch.Failures++;   // mất kết nối / máy chủ lỗi / quá lâu: thử lại ở lượt sau
+                    }
+
+                    if (!finished && DateTime.UtcNow >= watch.Deadline)
+                    {
+                        watch.Item.TextCheck = watch.Failures > 0 ? TextCheck.Unavailable : TextCheck.TimedOut;
+                        finished = true;
+                    }
+                    if (finished) textWatches.Remove(localId);
+                }
+
+                await InvokeAsync(StateHasChanged);   // một lần mỗi lượt cho cả danh sách
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Hủy / rời trang
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dừng theo dõi đọc chữ do lỗi không mong muốn");
+            if (!ct.IsCancellationRequested && !disposed)
+            {
+                foreach (var watch in textWatches.Values) watch.Item.TextCheck = TextCheck.Unavailable;
+                textWatches.Clear();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(textCts, cts)) textCts = null;   // chỉ xóa dấu của CHÍNH vòng này, không đụng vòng mới hơn
+        }
+    }
+
+    private async Task<ApiResult<CvDetailDto>> GetDetailAsync(Guid cvId, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(SideRequestTimeout);
+        try
+        {
+            return await CvApi.GetCvAsync(cvId, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return ApiResult<CvDetailDto>.Failure("Máy chủ phản hồi quá lâu.");
+        }
+    }
+
+    // ---------- B38: hộp "Chữ đã đọc" ----------
+    private void OpenText((UploadItem Item, string ReturnFocusId) request)
+    {
+        if (textItem is not null || request.Item.CvId is null || !items.Contains(request.Item)) return;   // một hộp mỗi lúc
+        textItem = request.Item;
+        textReturnFocus = [request.ReturnFocusId, $"cv-menu-{request.Item.LocalId:N}", "cv-list-title"];
+    }
+
+    private void CloseText() => textItem = null;
+
+    /// <summary>Hộp đã tải /text: cập nhật trạng thái + chất lượng của dòng (không nhận chữ). Còn đang đọc → theo dõi lại 2 phút.</summary>
+    private void TextLoaded((CvTextDto? Text, int? StatusCode) loaded)
+    {
+        var item = textItem;
+        if (item is null || !items.Contains(item)) return;
+        if (loaded.StatusCode == 410) { UploadRules.MarkAnonymized(item); textWatches.Remove(item.LocalId); return; }
+        if (loaded.StatusCode == 404) { item.TextCheck = TextCheck.NotFound; textWatches.Remove(item.LocalId); return; }
+        if (loaded.Text is not { } text) return;
+
+        if (UploadRules.ApplyText(item, text)) textWatches.Remove(item.LocalId);
+        else if (!textWatches.ContainsKey(item.LocalId)) WatchText([item]);
+    }
+
+    // =====================================================================
+    // B38: ước tính thời gian phân tích (A42 GET /api/runs/estimate)
+    // =====================================================================
+
+    /// <summary>
+    /// Số CV được chọn đổi → hỏi lại ước tính. Gộp các lần tích liên tiếp (250 ms), hủy request cũ; phản hồi về muộn không ghi đè
+    /// kết quả mới. 0 CV hoặc quá 500: không gọi API. Lỗi: chỉ hiện "N CV", không khóa nút phân tích.
+    /// </summary>
+    private void SelectionChanged()
+    {
+        var count = SelectedCount;
+        if (count == estimateFor && estimating) return;   // đang hỏi đúng số này
+
+        estimateCts?.Cancel();
+        estimateCts = null;
+        estimateFor = count;
+        estimateFailed = false;
+        if (estimates.ContainsKey(count))
+        {
+            estimating = false;   // đã có ước tính API trả cho đúng số CV này: dùng lại, không gọi thêm
+            return;
+        }
+        if (!UploadRules.ShouldEstimate(count) || disposed)
+        {
+            estimating = false;
+            return;
+        }
+
+        estimating = true;
+        var cts = new CancellationTokenSource();
+        estimateCts = cts;
+        _ = EstimateAsync(count, cts);
+    }
+
+    private async Task EstimateAsync(int count, CancellationTokenSource cts)
+    {
+        var ct = cts.Token;
+        try
+        {
+            await Task.Delay(EstimateDebounce, ct);
+            ApiResult<RunEstimateDto> result;
+            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                timeout.CancelAfter(SideRequestTimeout);
+                try { result = await RunApi.EstimateAsync(count, timeout.Token); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    result = ApiResult<RunEstimateDto>.Failure("Máy chủ phản hồi quá lâu.");
+                }
+            }
+
+            if (ct.IsCancellationRequested || !ReferenceEquals(estimateCts, cts) || disposed) return;   // đã có lần chọn mới
+            estimating = false;
+            if (result.IsSuccess && result.Data is { } data && data.Count == count)
+            {
+                estimates[count] = data;
+                estimateFailed = false;
+            }
+            else
+            {
+                estimateFailed = true;
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // có lần chọn mới / rời trang
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Không lấy được ước tính thời gian phân tích");
+            if (ReferenceEquals(estimateCts, cts) && !disposed)
+            {
+                estimating = false;
+                estimateFailed = true;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
     }
 
     // =====================================================================
@@ -438,6 +930,8 @@
 
             // 3. Ghi runId lên địa chỉ: OnParametersSet sẽ mở thẻ tiến độ và bắt đầu hỏi API
             run = start.Data;
+            estimates.Clear();   // B38: lịch sử chấm thay đổi → ước tính cũ không còn đúng
+            estimateFor = -1;
             runUpdatedAt = DateTime.UtcNow; // POST đã xác nhận lượt mới, không dùng thời gian của lượt trước.
             runNotice = notFound > 0
                 ? $"{notFound} CV không còn trên máy chủ nên không được đưa vào lượt phân tích."
@@ -583,7 +1077,11 @@
 
     public ValueTask DisposeAsync()
     {
+        disposed = true;
+        Anonymity.Changed -= AnonymityChanged;
         StopTracking();
+        StopTextWatch();          // B38: vòng hỏi đọc chữ không sống sau khi rời trang
+        estimateCts?.Cancel();    // B38: bỏ ước tính đang chờ
         return ValueTask.CompletedTask;
     }
 }

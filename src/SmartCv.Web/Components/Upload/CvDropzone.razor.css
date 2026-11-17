@@ -1,51 +1,132 @@
-/* Giữ nguyên bố cục ô tải lên, đồng bộ viền và bề mặt với khung ứng dụng. */
+/* B3 + B38: ô tải lên. Cùng một khung cho mọi trạng thái (mở / kéo vào / khóa / đang gửi) để bố cục không giật khi mở khóa.
+   Trạng thái không chỉ dựa vào màu: biểu tượng (đám mây / ổ khóa / vòng chờ) và tiêu đề đổi theo. */
 .dropzone {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 24px;
-    background: var(--surface-soft);
-    border: 1px dashed var(--sc-line-300);
+    gap: 6px;
+    min-height: 196px;
+    padding: 28px 24px;
+    background: var(--sc-surface-0);
+    border: 1.5px dashed var(--sc-line-300);
     border-radius: var(--sc-radius-card);
     text-align: center;
-    transition: background-color .15s, border-color .15s, box-shadow .15s;
+    transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 
-.dropzone:hover,
-.dropzone.is-dragging {
-    background: #e6fffb;
-    border-color: var(--brand-accent);
-    border-style: dashed;
-    box-shadow: 0 0 0 4px rgba(20, 184, 166, .15);
+.dz-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 6px;
+    border-radius: 16px;
+    background: var(--sc-brand-50);
+    color: var(--brand);
+    transition: transform .18s ease, background-color .18s ease;
 }
-
-.dropzone.is-disabled { opacity: .65; }
-
-.dz-icon { display: block; }
 
 .dz-title {
     margin: 0;
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--brand-hover);
+    font-size: 20px;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--sc-brand-800);
 }
 
 .dz-hint {
+    display: flex;
+    justify-content: center;
+    min-height: 28px;
     margin: 0;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-muted);
 }
 
-.dz-hint span {
+.dz-link {
     color: var(--brand);
     font-weight: 600;
     text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
-/* InputFile phủ kín ô, trong suốt. InputFile là component con nên cần ::deep */
+/* ---------- Mở: hover / kéo file vào ---------- */
+.dropzone.is-open:hover,
+.dropzone.is-dragging {
+    background: var(--sc-brand-50);
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, .14);
+}
+.dropzone.is-open:hover .dz-icon,
+.dropzone.is-dragging .dz-icon { transform: translateY(-2px); background: var(--sc-brand-100); }
+.dropzone.is-dragging { border-style: solid; }
+
+/* Bàn phím: InputFile trong suốt nhận focus, hiện viền trên cả ô */
+.dropzone:focus-within {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, .28);
+}
+
+/* ---------- Khóa (chưa đủ nguồn + đồng ý) ---------- */
+.dropzone.is-locked {
+    background: repeating-linear-gradient(135deg, var(--sc-surface-50) 0 12px, #f1f5f5 12px 24px);
+    border-color: var(--sc-line-200);
+    cursor: not-allowed;
+}
+.dropzone.is-locked .dz-icon { background: var(--sc-surface-100); color: var(--sc-ink-500); }
+.dropzone.is-locked .dz-title { color: var(--sc-ink-700); }
+
+.dz-reason {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 4px 12px 4px 6px;
+    border: 1px solid var(--sc-line-200);
+    border-radius: 999px;
+    background: var(--sc-surface-0);
+    color: var(--sc-ink-700);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+    text-align: left;
+}
+.dz-reason-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+/* ---------- Đang gửi ---------- */
+.dropzone.is-busy {
+    background: var(--sc-brand-50);
+    border-style: solid;
+    border-color: var(--sc-brand-100);
+    cursor: progress;
+}
+.dropzone.is-busy .dz-reason { padding-left: 12px; border-color: var(--sc-brand-100); }
+
+.dz-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--sc-brand-100);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: dz-spin .9s linear infinite;
+}
+@keyframes dz-spin { to { transform: rotate(360deg); } }
+
+/* InputFile phủ kín ô, trong suốt. InputFile là component con nên cần ::deep.
+   Khi khóa: không nhận chuột/thả, để sự kiện thả rơi vào ô (ô chặn mặc định của trình duyệt). */
 .dropzone ::deep .dz-input {
     position: absolute;
     inset: 0;
@@ -54,26 +135,25 @@
     opacity: 0;
     cursor: pointer;
 }
-
-.dropzone.is-disabled ::deep .dz-input { cursor: progress; }
+.dropzone.is-disabled ::deep .dz-input { pointer-events: none; }
 
 .dz-caption {
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     font-size: 13px;
     color: var(--text-muted);
     white-space: pre-wrap;
+    text-align: center;
 }
 
 @media (max-width: 767.98px) {
-    .dz-title { font-size: 20px; }
-}
-
-/* Bàn phím: InputFile trong suốt nhận focus, hiện viền trên cả ô */
-.dropzone:focus-within {
-    border-color: var(--brand-accent);
-    box-shadow: 0 0 0 4px rgba(20, 184, 166, .25);
+    .dropzone { min-height: 176px; padding: 22px 16px; }
+    .dz-title { font-size: 18px; }
+    .dz-hint { font-size: 13px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .dropzone { transition: none; }
+    .dropzone, .dz-icon { transition: none; }
+    .dz-spinner { animation-duration: 2.4s; }
+    .dropzone.is-open:hover .dz-icon,
+    .dropzone.is-dragging .dz-icon { transform: none; }
 }

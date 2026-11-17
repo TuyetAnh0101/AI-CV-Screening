@@ -35,4 +35,15 @@ public sealed class RunApiClient(HttpClient http, ILogger<RunApiClient> logger) 
     /// </summary>
     public Task<ApiResult<RankingResponse>> GetRankingAsync(int runId, int? jobId = null, CancellationToken ct = default) =>
         GetAsync<RankingResponse>(jobId is null ? $"api/runs/{runId}/ranking" : $"api/runs/{runId}/ranking?jobId={jobId}", ct);
+
+    /// <summary>
+    /// B38 (A42): GET /api/runs/estimate?count=N — "10 CV · khoảng 2 phút". Chỉ đọc, không gọi Gemini.
+    /// API nhận 0–500; ngoài khoảng đó trang không gọi (xem UploadRules.ShouldEstimate).
+    /// </summary>
+    public Task<ApiResult<RunEstimateDto>> EstimateAsync(int count, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, SmartCv.Core.Scoring.RunTimeEstimator.MaxCount);
+        return GetAsync<RunEstimateDto>($"api/runs/estimate?count={count.ToString(System.Globalization.CultureInfo.InvariantCulture)}", ct);
+    }
 }

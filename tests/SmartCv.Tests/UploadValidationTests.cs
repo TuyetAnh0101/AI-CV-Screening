@@ -178,18 +178,28 @@ public class UploadValidationTests
             new MemoryStream(new byte[Math.Min(size, 64)]);   // nội dung không quan trọng: API là giả lập
     }
 
-    /// <summary>API giả: /api/jobs trả rỗng; /api/cvs/upload ghi lại tên file nhận được và trả kết quả do test quyết định.</summary>
+    /// <summary>API giả: /api/jobs trả rỗng; /api/cvs/upload ghi lại tên file nhận được và trả kết quả do test quyết định.
+    /// B38: mỗi request tải lên phải kèm nguồn + đồng ý (A38); trang còn hỏi trạng thái đọc chữ và ước tính (trả "đang đọc").</summary>
     private sealed class FakeApi(Func<IReadOnlyList<string>, HttpResponseMessage> upload) : HttpMessageHandler
     {
         public List<string> UploadedNames { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            if (request.RequestUri!.AbsolutePath == "/api/jobs")
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/jobs")
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Array.Empty<JobDto>()) });
+            if (request.Method == HttpMethod.Get && path.StartsWith("/api/cvs/", StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new CvDetailDto
+                    { CvId = Guid.Parse(path["/api/cvs/".Length..]), ExtractionStatus = "Pending" }) });
+            if (path == "/api/runs/estimate")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new RunEstimateDto { Count = 1, Text = "1 CV" }) });
 
-            Assert.Equal("/api/cvs/upload", request.RequestUri.AbsolutePath);
-            var names = ((MultipartFormDataContent)request.Content!)
+            Assert.Equal("/api/cvs/upload", path);
+            var parts = ((MultipartFormDataContent)request.Content!).ToList();
+            Assert.Equal(["Email", "true"], parts.Where(p => p.Headers.ContentDisposition!.FileName is null)
+                .Select(p => p.ReadAsStringAsync(ct).GetAwaiter().GetResult()));   // sourceChannel, consentConfirmed
+            var names = parts.Where(p => p.Headers.ContentDisposition!.FileName is not null)
                 .Select(p => p.Headers.ContentDisposition!.FileName!.Trim('"')).ToList();
             UploadedNames.AddRange(names);
             return Task.FromResult(upload(names));
@@ -221,13 +231,27 @@ public class UploadValidationTests
                 ? new[] { f }.Concat(Frames(f.ComponentId)) : [f]).ToList();
         }
 
-        public string Text => System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(string.Concat(
+        // B38: trang có vòng hỏi chạy nền (đọc chữ, ước tính) → đọc cây render trên dispatcher như RunProgressUiTests
+        public string Text => Dispatcher.InvokeAsync(() => System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(string.Concat(
             Frames().Select(f => f.FrameType switch
             {
                 RenderTreeFrameType.Text => f.TextContent,
                 RenderTreeFrameType.Markup => System.Text.RegularExpressions.Regex.Replace(f.MarkupContent, "<[^>]+>", " "),
                 _ => " "
-            }))), @"\s+", " ");
+            }))), @"\s+", " ")).Result;
+
+        /// <summary>B38: chọn nguồn CV và tích xác nhận đồng ý (A38) để mở ô kéo thả.</summary>
+        public Task EnableUploadAsync() => Dispatcher.InvokeAsync(async () =>
+        {
+            ulong Change(string id)
+            {
+                var frames = Frames();
+                var index = frames.FindIndex(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "id" && Equals(f.AttributeValue, id));
+                return frames.Skip(index).First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onchange").AttributeEventHandlerId;
+            }
+            await DispatchEventAsync(Change("cv-source"), null, new ChangeEventArgs { Value = "Email" });
+            await DispatchEventAsync(Change("cv-consent"), null, new ChangeEventArgs { Value = true });
+        });
 
         public Task DropAsync(params IBrowserFile[] files) => Dispatcher.InvokeAsync(() =>
         {
@@ -237,7 +261,7 @@ public class UploadValidationTests
         });
 
         /// <summary>Các thuộc tính của thẻ input có aria-label cho trước (ô tích của một dòng).</summary>
-        public Dictionary<string, object?> InputAttributes(string ariaLabel)
+        public Dictionary<string, object?> InputAttributes(string ariaLabel) => Dispatcher.InvokeAsync(() =>
         {
             var frames = Frames();
             var label = frames.FindIndex(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "aria-label"
@@ -246,7 +270,7 @@ public class UploadValidationTests
             var element = frames.Take(label).ToList().FindLastIndex(f => f.FrameType == RenderTreeFrameType.Element);
             return frames.Skip(element + 1).TakeWhile(f => f.FrameType == RenderTreeFrameType.Attribute)
                 .GroupBy(f => f.AttributeName).ToDictionary(g => g.Key, g => (object?)g.Last().AttributeValue);
-        }
+        }).Result;
 
         public Task ClickButtonWithTextAsync(string text) => Dispatcher.InvokeAsync(async () =>
         {
@@ -292,6 +316,7 @@ public class UploadValidationTests
         services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
         services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));
         services.AddSingleton<NavigationManager>(new TestNavigationManager());
+        services.AddSingleton(B36PrivacyTests.NormalView());   // B38: trang đọc trạng thái Ẩn danh (B36)
         return services.BuildServiceProvider();
     }
 
@@ -302,6 +327,7 @@ public class UploadValidationTests
         using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.StartAsync();
+        await renderer.EnableUploadAsync();   // B38: nguồn CV + đồng ý trước khi tải
 
         await renderer.DropAsync(
             new FakeFile("cv-word.docx", 2000),
@@ -339,6 +365,7 @@ public class UploadValidationTests
         using var services = Services(api, maxFilesPerSelection: 2);
         await using var renderer = new TestRenderer(services);
         await renderer.StartAsync();
+        await renderer.EnableUploadAsync();   // B38: nguồn CV + đồng ý trước khi tải
 
         await renderer.DropAsync(new FakeFile("a.pdf", 10), new FakeFile("b.pdf", 10), new FakeFile("c.pdf", 10));
 
@@ -361,6 +388,7 @@ public class UploadValidationTests
         using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.StartAsync();
+        await renderer.EnableUploadAsync();   // B38: nguồn CV + đồng ý trước khi tải
 
         await renderer.DropAsync(new FakeFile("gia-mao-pdf.pdf", 10), new FakeFile("cv-mau-1.pdf", 10),
                                  new FakeFile("cv-mau-3.pdf", 10), new FakeFile("moi.pdf", 10));
@@ -391,6 +419,7 @@ public class UploadValidationTests
         using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.StartAsync();
+        await renderer.EnableUploadAsync();   // B38: nguồn CV + đồng ý trước khi tải
 
         await renderer.DropAsync(new FakeFile("a.pdf", 10));
 
