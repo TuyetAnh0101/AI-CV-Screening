@@ -1,8 +1,8 @@
-.mismatch-analysis { margin-top:24px; min-width:0; padding:24px; background:var(--surface,#fff); border:1px solid var(--border); border-radius:18px; box-shadow:0 3px 12px #123c3b05; }
+.mismatch-analysis { margin-top:24px; min-width:0; padding:20px; background:var(--surface,#fff); border:1px solid var(--border); border-radius:16px; box-shadow:0 3px 12px #123c3b05; }
 .mismatch-head { display:flex; flex-wrap:wrap; align-items:start; justify-content:space-between; gap:16px; }
 .mismatch-head>div { min-width:0; flex:1 1 300px; }
-.eyebrow { margin:0 0 6px; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--brand); font-weight:700; }
-h2 { margin:0 0 8px; font:600 22px var(--sc-font-display); }
+.eyebrow { margin:0 0 6px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--brand); font-weight:600; }
+h2 { margin:0 0 8px; font:600 19px var(--sc-font-display); }
 .mismatch-head p:not(.eyebrow),.muted { color:var(--text-muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
 .mono { font-family:var(--sc-font-mono); }
 .mismatch-head button { font-size:12px; min-width:145px; }
@@ -29,15 +29,15 @@ h2 { margin:0 0 8px; font:600 22px var(--sc-font-display); }
 .mismatch-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:22px 0 14px; }
 h3 { margin:0; font-size:14px; } h3>span { color:var(--text-muted); margin-left:6px; }
 .mismatch-filters { display:flex; flex-wrap:wrap; gap:4px; background:var(--surface-soft,#f0f6f5); border-radius:10px; padding:4px; }
-.filter-button { border:1px solid transparent; border-radius:7px; background:transparent; padding:8px 10px; color:var(--text-muted); font-size:12px; font-weight:600; }
+.filter-button { border:1px solid transparent; border-radius:7px; background:transparent; padding:8px 10px; min-height:44px; color:var(--text-muted); font-size:12px; font-weight:600; }
 .filter-button span { display:inline-block; margin-left:5px; padding:1px 5px; border-radius:4px; background:#e1ebea; font-variant-numeric:tabular-nums; }
 .filter-button:hover { color:var(--brand); background:#fff9; }
 .filter-button.is-selected { color:var(--brand); background:#fff; border-color:var(--border); box-shadow:0 1px 3px #123c3b0a; }
 .filter-button.is-selected span { color:#fff; background:var(--brand); }
 .mismatch-scroll { max-width:100%; overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
-.mismatch-list { width:100%; min-width:990px; table-layout:fixed; border-collapse:collapse; font-size:12px; }
+.mismatch-list { width:100%; min-width:990px; table-layout:fixed; border-collapse:collapse; font-size:13px; }
 .mismatch-list th,.mismatch-list td { padding:16px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
-.mismatch-list thead th { background:var(--surface-soft); font-size:10px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.04em; }
+.mismatch-list thead th { background:var(--surface-soft); font-size:12px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.04em; }
 .mismatch-list th:nth-child(1) { width:20%; } .mismatch-list th:nth-child(2) { width:10%; } .mismatch-list th:nth-child(3) { width:12%; } .mismatch-list th:nth-child(4) { width:11%; } .mismatch-list th:nth-child(5) { width:35%; } .mismatch-list th:nth-child(6) { width:12%; }
 .mismatch-list tbody th { font-weight:400; } .mismatch-list tbody strong { font-size:13px; }
 .mismatch-list tbody tr:last-child>* { border-bottom:0; } .mismatch-list tbody tr:hover { background:#f8fcfb; }

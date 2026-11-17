@@ -1,0 +1,75 @@
+@*
+    B41: ma trận nhầm lẫn 2×2 của MỘT lượt đánh giá, lấy nguyên PromptTestRunDto.Matrix (A41), không tự tính.
+    Hàng = quyết định của HR, cột = dự đoán của AI. "Bỏ sót" (HR Đạt, AI Không đạt) là lỗi đắt nhất với HR nên nổi bật nhất.
+    CV chưa có dự đoán hợp lệ (Unscored) nằm NGOÀI 4 ô nhưng vẫn ở mẫu số tỷ lệ đúng theo API.
+*@
+
+@if (Matrix is null)
+{
+    <p class="cm-empty" role="note">@(EmptyText ?? "Chưa có ma trận 2×2 cho lượt này. Không dựng ma trận bằng số 0.")</p>
+}
+else
+{
+    <figure class="cm" aria-labelledby="@($"{id}-title")">
+        <figcaption>
+            <span class="cm-eyebrow">Ma trận 2×2 · HR × AI</span>
+            <strong id="@($"{id}-title")">@(string.IsNullOrWhiteSpace(Caption) ? "Lượt đánh giá" : Caption)</strong>
+            @if (Matrix.Missed > 0) { <span class="cm-priority">Bỏ sót: ưu tiên xem lại CV mà HR đánh giá Đạt.</span> }
+        </figcaption>
+        <table class="cm-grid">
+            <caption class="visually-hidden">Hàng là quyết định của HR, cột là dự đoán của AI. Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
+            <colgroup><col class="cm-col-head" /><col /><col /></colgroup>
+            <thead>
+                <tr>
+                    <td class="cm-corner"><span>HR <span aria-hidden="true">↓</span></span><span>AI <span aria-hidden="true">→</span></span></td>
+                    <th scope="col"><span class="cm-axis">AI dự đoán</span><b>Đạt</b></th>
+                    <th scope="col"><span class="cm-axis">AI dự đoán</span><b>Không đạt</b></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row"><span class="cm-axis">HR quyết định</span><b>Đạt</b></th>
+                    <td class="cell ok"><span class="cell-value">@Matrix.TruePass</span><span class="cell-label"><span aria-hidden="true">✓</span> Đúng</span><span class="cell-hint">Cả hai Đạt</span></td>
+                    <td class="cell missed">
+                        <span class="cell-value">@Matrix.Missed</span>
+                        <span class="cell-label"><span aria-hidden="true">⚠</span> Bỏ sót</span>
+                        <span class="cell-hint">HR Đạt · AI Không đạt</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><span class="cm-axis">HR quyết định</span><b>Không đạt</b></th>
+                    <td class="cell wrong"><span class="cell-value">@Matrix.WrongPick</span><span class="cell-label">Chọn nhầm</span><span class="cell-hint">HR Không đạt · AI Đạt</span></td>
+                    <td class="cell ok"><span class="cell-value">@Matrix.TrueFail</span><span class="cell-label"><span aria-hidden="true">✓</span> Đúng</span><span class="cell-hint">Cả hai Không đạt</span></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="cm-foot">
+            <p class="cm-unscored @(Matrix.Unscored > 0 ? "has-unscored" : null)">
+                @if (Matrix.Unscored > 0)
+                {
+                    <span><b>+ @Matrix.Unscored CV chưa có dự đoán hợp lệ</b>: nằm ngoài 4 ô, vẫn ở mẫu số tỷ lệ đúng theo API nên được tính là chưa đúng.</span>
+                }
+                else
+                {
+                    <span>Không có CV nào nằm ngoài ma trận.</span>
+                }
+            </p>
+            <p class="cm-total">4 ô: @(Matrix.TruePass + Matrix.Missed + Matrix.WrongPick + Matrix.TrueFail) CV · ngoài ma trận: @Matrix.Unscored · mẫu số: @(Denominator ?? Matrix.Total) CV có nhãn</p>
+            @if (KeywordOnly > 0)
+            {
+                <p class="cm-total">@KeywordOnly CV chỉ có điểm Keyword trong lượt này. Đây là thông tin về nguồn điểm, không cộng thêm vào ma trận hoặc mẫu số.</p>
+            }
+        </div>
+    </figure>
+}
+
+@code {
+    [Parameter] public ConfusionMatrixDto? Matrix { get; set; }
+    [Parameter] public string? Caption { get; set; }
+    /// <summary>Mẫu số tỷ lệ đúng của lượt (TotalLabeledCount); mặc định = tổng của ma trận.</summary>
+    [Parameter] public int? Denominator { get; set; }
+    [Parameter] public int KeywordOnly { get; set; }
+    [Parameter] public string? EmptyText { get; set; }
+
+    private readonly string id = "cm-" + Guid.NewGuid().ToString("N")[..8];
+}

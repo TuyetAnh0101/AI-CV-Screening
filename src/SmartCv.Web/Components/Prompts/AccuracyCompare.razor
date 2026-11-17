@@ -7,7 +7,16 @@
         <div><h2>So sánh tỷ lệ đúng</h2><p>Lượt Completed hợp lệ gần nhất của mỗi phiên bản trong cùng bộ CV.</p></div>
         @if (best is not null)
         {
-            <aside class="best-card" aria-label="Phiên bản cao nhất"><span>CAO NHẤT · NHÓM ĐÃ XÁC MINH</span><strong>@Pct(best.AccuracyPercent)</strong><span class="mono">@best.PromptVersionName</span></aside>
+            <aside class="best-card" aria-label="Phiên bản cao nhất">
+                <span>CAO NHẤT · NHÓM ĐÃ XÁC MINH</span>
+                <strong>@Pct(best.AccuracyPercent)</strong>
+                @if (AccuracyText.HasRange(best.AccuracyPercent, best.AccuracyLow, best.AccuracyHigh))
+                {
+                    <span class="best-ci">Khoảng tin cậy 95%: <b>@AccuracyText.Range(best.AccuracyLow, best.AccuracyHigh)</b></span>
+                }
+                <span class="mono">@best.PromptVersionName</span>
+                <small class="best-note">Cao nhất theo tỷ lệ quan sát, chưa phải kết luận vượt trội về thống kê. Xem khung kết luận bên dưới.</small>
+            </aside>
         }
     </header>
     <div class="compare-controls">
@@ -18,28 +27,43 @@
         </select>
         <button type="button" class="btn sc-btn-secondary" @onclick="ReloadAsync" disabled="@loading">@(loading ? "Đang tải..." : "Làm mới so sánh")</button>
     </div>
-    @if (error is not null) { <p class="compare-error" role="alert">@error</p> }
-    else if (loading) { <p role="status">Đang tải kết quả đánh giá...</p> }
-    else if (rows.Count == 0) { <div class="empty" role="status"><strong>Chưa có dữ liệu để so sánh</strong><p>Chưa có lần đánh giá nào hoàn thành. Hãy chọn bộ CV và chạy đánh giá một phiên bản Prompt để xem kết quả. Để so sánh cải thiện, chạy cả hai phiên bản trên cùng bộ CV và cấu hình.</p><a href="@(sets.Count == 0 ? "#evaluation-set-manager" : "#prompt-test-panel")">@(sets.Count == 0 ? "Tạo bộ CV đánh giá" : "Đi tới Chạy đánh giá")</a></div> }
-    else
+    @if (error is not null) { <p class="compare-error" role="alert">@error <button type="button" class="btn sc-btn-secondary" disabled="@loading" @onclick="ReloadAsync">Tải lại so sánh</button></p> }
+    @if (loading && rows.Count == 0) { <div class="compare-skeleton" role="status"><span>Đang tải kết quả đánh giá...</span><i></i><i></i></div> }
+    else if (rows.Count == 0 && error is null) { <div class="empty" role="status"><strong>Chưa có dữ liệu để so sánh</strong><p>Chưa có lần đánh giá nào hoàn thành. Hãy chọn bộ CV và chạy đánh giá một phiên bản Prompt để xem kết quả. Để so sánh cải thiện, chạy cả hai phiên bản trên cùng bộ CV và cấu hình.</p><a href="@(sets.Count == 0 ? "#evaluation-set-manager" : "#prompt-test-panel")">@(sets.Count == 0 ? "Tạo bộ CV đánh giá" : "Đi tới Chạy đánh giá")</a></div> }
+    else if (rows.Count > 0)
     {
         <p class="compare-note" role="note">@verification</p>
         @foreach (var explanation in explanations) { <p class="compare-note">@explanation</p> }
         <div class="table-scroll" tabindex="0" role="region" aria-label="Bảng tỷ lệ đúng, có thể cuộn ngang">
             <table>
-                <caption class="visually-hidden">Kết quả đối chiếu nhãn HR. Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
-                <thead><tr><th scope="col">Phiên bản</th><th scope="col">Tỷ lệ đúng</th><th scope="col" class="num">Đúng</th><th scope="col" class="num">Bỏ sót</th><th scope="col" class="num">Chọn nhầm</th><th scope="col">Lần chạy</th><th scope="col">Trạng thái</th><th scope="col">Phân tích</th></tr></thead>
+                <caption class="visually-hidden">Kết quả đối chiếu nhãn HR. Tỷ lệ đúng kèm khoảng tin cậy 95% (Wilson). Bỏ sót: HR Đạt, AI Không đạt. Chọn nhầm: HR Không đạt, AI Đạt.</caption>
+                <thead><tr><th scope="col">Phiên bản</th><th scope="col">Tỷ lệ đúng <span class="th-sub">(khoảng tin cậy 95%)</span></th><th scope="col" class="num">Đúng</th><th scope="col" class="num">Bỏ sót</th><th scope="col" class="num">Chọn nhầm</th><th scope="col">Lần chạy</th><th scope="col">Trạng thái</th><th scope="col">Phân tích</th></tr></thead>
                 <tbody>
                     @foreach (var r in rows)
                     {
-                        <tr class="@(r.RunId == best?.RunId ? "is-best" : "")" @key="r.RunId">
+                        var hasRange = AccuracyText.HasRange(r.AccuracyPercent, r.AccuracyLow, r.AccuracyHigh);
+                        <tr class="@(r.RunId == best?.RunId ? "is-best" : "") @(r.RunId == focus?.RunId ? "is-focus" : "")" @key="r.RunId">
                             <th scope="row"><span class="mono">@r.PromptVersionName</span>@if (r.RunId == best?.RunId) { <small>Cao nhất</small> }</th>
-                            <td><div class="accuracy-cell"><span class="accuracy-track" role="img" aria-label="@($"Tỷ lệ đúng {Pct(r.AccuracyPercent)}")"><span class="accuracy-fill @(r.RunId == best?.RunId ? "best-fill" : "")" style="width:@(r.AccuracyPercent!.Value.ToString(CultureInfo.InvariantCulture))%"></span></span><strong>@Pct(r.AccuracyPercent)</strong></div></td>
+                            <td>
+                                <div class="accuracy-cell">
+                                    <span class="accuracy-track" role="img" aria-label="@AccuracyText.Describe(r.AccuracyPercent, r.AccuracyLow, r.AccuracyHigh)">
+                                        <span class="accuracy-fill @(r.RunId == best?.RunId ? "best-fill" : "")" style="width:@(r.AccuracyPercent!.Value.ToString(CultureInfo.InvariantCulture))%"></span>
+                                        @if (hasRange)
+                                        {
+                                            <span class="ci-band" style="left:@AccuracyText.Css(r.AccuracyLow!.Value)%;width:@AccuracyText.Css(r.AccuracyHigh!.Value - r.AccuracyLow!.Value)%"></span>
+                                        }
+                                    </span>
+                                    <span class="accuracy-value"><strong>@Pct(r.AccuracyPercent)</strong>
+                                        @if (hasRange) { <span class="ci-text">(@AccuracyText.Range(r.AccuracyLow, r.AccuracyHigh))</span> }
+                                        else { <span class="ci-text is-missing">chưa có khoảng</span> }
+                                    </span>
+                                </div>
+                            </td>
                             <td class="num">@r.CorrectCount/@r.TotalLabeledCount</td><td class="num missed">@r.MissedCount</td><td class="num wrong">@r.WrongPickCount</td>
                             <td class="run-time">#@r.RunId<br />@RankingView.VnTime(r.CompletedAt!.Value)<small>@r.ModelName</small></td>
                             <td>@if (Versions.Any(v => v.PromptVersionId == r.PromptVersionId && v.IsActive)) { <span class="active-tag">Đang dùng</span> }
-                                @if (r.UnscoredCount > 0) { <small>@r.UnscoredCount chưa có dự đoán hợp lệ</small> }
-                                @if (r.KeywordOnlyCount > 0) { <small>@r.KeywordOnlyCount chỉ keyword</small> }
+                                <small>@r.UnscoredCount chưa chấm được</small>
+                                <small>@r.KeywordOnlyCount chỉ Keyword</small>
                             </td>
                             <td><button type="button" class="btn sc-btn-secondary mismatch-action" aria-label="@($"Xem CV lệch lượt #{r.RunId} · {r.PromptVersionName}")" aria-pressed="@(SelectedRunId == r.RunId ? "true" : "false")" @onclick="() => OnPick.InvokeAsync(r.RunId)">Xem CV lệch</button></td>
                         </tr>
@@ -48,6 +72,80 @@
             </table>
         </div>
         <p class="compare-note">Mẫu số là số CV còn nhãn HR của từng lượt (TotalLabeledCount), có thể khác tổng CV ban đầu. CV chưa chấm được vẫn ở mẫu số, được tính riêng và không gán thành Không đạt. Giờ hoàn thành: Việt Nam (UTC+7).</p>
+        <p class="compare-note ci-legend"><span class="legend-band" aria-hidden="true"></span>Khoảng tin cậy 95% (Wilson) do API tính từ số CV có nhãn, thể hiện độ bất định của tỷ lệ quan sát. Bộ càng nhiều CV có nhãn, khoảng thường càng hẹp. Kết luận trên bộ CV này dựa vào API; không bảo đảm kết quả với mọi CV tuyển dụng.</p>
+
+        @* B41: ma trận 2×2 và kết luận so sánh của lượt đang xem *@
+        <section id="prompt-accuracy-insight" class="insight" aria-labelledby="insight-title">
+            <header class="insight-head">
+                <div>
+                    <p class="eyebrow">Lượt đang xem</p>
+                    <h3 id="insight-title">@(focus is null ? "Chưa có lượt để xem" : $"{focus.PromptVersionName} · lượt #{focus.RunId}")</h3>
+                    @if (focus is not null && AccuracyComparisonView.Valid(focus))
+                    {
+                        <p class="insight-meta">@AccuracyText.WithRange(focus.AccuracyPercent, focus.AccuracyLow, focus.AccuracyHigh) · @focus.CorrectCount/@focus.TotalLabeledCount CV đúng · n = @focus.TotalLabeledCount CV có nhãn</p>
+                    }
+                </div>
+                @if (focus is not null)
+                {
+                    <span class="focus-chip @(SelectedRunId is null ? "is-default" : "is-picked")">@(SelectedRunId is null ? "Mặc định · lượt mới nhất của bản đang dùng" : "Đang chọn từ “Xem CV lệch”")</span>
+                }
+            </header>
+            <div class="insight-grid">
+                <div class="insight-matrix">
+                    @if (focus is null)
+                    {
+                        <p class="insight-empty" role="note">@(SelectedRunId is { } missing ? $"Lượt #{missing} không có trong bộ CV đang so sánh. Hãy chọn lại “Xem CV lệch” ở bảng." : "Chưa có lượt hoàn thành để hiển thị ma trận 2×2.")</p>
+                    }
+                    else if (!AccuracyComparisonView.Valid(focus))
+                    {
+                        <p class="insight-empty" role="note">Lượt #@focus.RunId chưa có thống kê hợp lệ nên chưa hiển thị ma trận 2×2.</p>
+                    }
+                    else
+                    {
+                        <ConfusionMatrix Matrix="@(AccuracyText.MatrixIssue(focus) is null ? focus.Matrix : null)" EmptyText="@AccuracyText.MatrixIssue(focus)"
+                                         Caption="@($"{focus.PromptVersionName} · lượt #{focus.RunId} · {AccuracyText.WithRange(focus.AccuracyPercent, focus.AccuracyLow, focus.AccuracyHigh)}")"
+                                         Denominator="focus.TotalLabeledCount" KeywordOnly="@(focus.KeywordOnlyCount ?? 0)" />
+                    }
+                </div>
+                @if (conclusion is { } c)
+                {
+                    <div class="verdict @VerdictClass(c.Kind)" role="status" aria-live="polite" aria-busy="@(c.Kind == ConclusionKind.Loading ? "true" : "false")">
+                        <p class="verdict-eyebrow">Kết luận so sánh@(pairBase is not null && pairCandidate is not null ? $" · {ComparisonConclusion.Name(pairCandidate)} so với {ComparisonConclusion.Name(pairBase)}, bản đang dùng" : "")</p>
+                        <h4><span class="verdict-icon" aria-hidden="true">@VerdictIcon(c.Kind)</span><span>@c.Title</span></h4>
+                        <p class="verdict-message">@c.Message</p>
+                        @if (pairCompare is { } cmp && c.Kind is ConclusionKind.Inconclusive or ConclusionKind.Conclusive
+                             && AccuracyText.HasRange(cmp.Base.AccuracyPercent, cmp.Base.AccuracyLow, cmp.Base.AccuracyHigh)
+                             && AccuracyText.HasRange(cmp.Candidate.AccuracyPercent, cmp.Candidate.AccuracyLow, cmp.Candidate.AccuracyHigh))
+                        {
+                            var overlapLow = Math.Max(cmp.Base.AccuracyLow!.Value, cmp.Candidate.AccuracyLow!.Value);
+                            var overlapHigh = Math.Min(cmp.Base.AccuracyHigh!.Value, cmp.Candidate.AccuracyHigh!.Value);
+                            <div class="ci-compare" aria-hidden="true">
+                                <p class="ci-compare-title">Khoảng tin cậy 95% trên thang 0–100%@(overlapLow <= overlapHigh ? " · vùng gạch là phần chồng nhau" : "")</p>
+                                @foreach (var (snapshot, role) in new[] { (cmp.Base, "is-base"), (cmp.Candidate, "is-candidate") })
+                                {
+                                    <div class="ci-row @role">
+                                        <span class="ci-name">@(role == "is-base" ? "Đang dùng" : "Đang xem")</span>
+                                        <span class="ci-lane">
+                                            @if (overlapLow <= overlapHigh) { <span class="ci-overlap" style="left:@AccuracyText.Css(overlapLow)%;width:@AccuracyText.Css(overlapHigh - overlapLow)%"></span> }
+                                            <span class="ci-range" style="left:@AccuracyText.Css(snapshot.AccuracyLow!.Value)%;width:@AccuracyText.Css(snapshot.AccuracyHigh!.Value - snapshot.AccuracyLow!.Value)%"></span>
+                                            <span class="ci-dot" style="left:@AccuracyText.Css(snapshot.AccuracyPercent!.Value)%"></span>
+                                        </span>
+                                        <span class="ci-value">@AccuracyText.WithRange(snapshot.AccuracyPercent, snapshot.AccuracyLow, snapshot.AccuracyHigh)</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (c.Notes.Count > 0)
+                        {
+                            <ul class="verdict-notes">@foreach (var note in c.Notes) { <li>@note</li> }</ul>
+                        }
+                        @if (c.Kind == ConclusionKind.Inconclusive) { <a class="verdict-link" href="#evaluation-set-manager">Thêm CV có nhãn từ quyết định HR</a> }
+                        else if (c.Kind == ConclusionKind.Error) { <button type="button" class="btn sc-btn-secondary verdict-action" @onclick="RetryConclusionAsync">Thử lại so sánh</button> }
+                        else if (c.Kind == ConclusionKind.Stale) { <button type="button" class="btn sc-btn-secondary verdict-action" disabled="@loading" @onclick="ReloadAsync">Làm mới so sánh</button> }
+                    </div>
+                }
+            </div>
+        </section>
     }
     @if (!loading && excluded > 0) { <p class="compare-note">@excluded lượt Completed không có thống kê hợp lệ đã được loại khỏi bảng. Không thay dữ liệu thiếu bằng 0%.</p> }
 </section>
@@ -69,17 +167,33 @@
     private string verification = "";
     private List<string> explanations = [];
     private CancellationTokenSource? request;
+    // B41: lượt đang xem (ma trận 2×2) và khung kết luận so với bản đang dùng.
+    private List<PromptTestRunDto> setRuns = [];
+    private readonly Dictionary<(int Base, int Candidate), PromptCompareDto> compared = [];
+    private PromptTestRunDto? focus, pairBase, pairCandidate;
+    private PromptCompareDto? pairCompare;
+    private ConclusionView? conclusion;
+    private CancellationTokenSource? conclusionRequest;
+    private int conclusionGeneration;
+    private int? lastSelected, lastActive;
+    private int loadedSetId;
+    private int? ActiveId => Versions.FirstOrDefault(v => v.IsActive)?.PromptVersionId;
     private static string Pct(decimal? percent) => percent is null ? "—" : percent.Value.ToString("0.##", CultureInfo.GetCultureInfo("vi-VN")) + "%";
     protected override async Task OnParametersSetAsync()
     {
-        if (lastRefresh == RefreshVersion && lastSet == EvaluationSetId) return;
+        if (lastRefresh == RefreshVersion && lastSet == EvaluationSetId)
+        {
+            // B41: chỉ đổi lượt đang xem/bản đang dùng → cập nhật ma trận và kết luận, không tải lại bảng.
+            if (!loading && (lastSelected != SelectedRunId || lastActive != ActiveId)) await UpdateFocusAsync();
+            return;
+        }
         lastSet = EvaluationSetId;
         if (EvaluationSetId is > 0) setId = EvaluationSetId.Value;
         lastRefresh = RefreshVersion;
         await ReloadAsync();
     }
     private async Task ChangeSetAsync(ChangeEventArgs e)
-    { setId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await OnSetChanged.InvokeAsync(setId); await LoadRowsAsync(); }
+    { setId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await OnSetChanged.InvokeAsync(setId); if (loadedSetId != setId) await LoadRowsAsync(); }
     private async Task ReloadAsync()
     {
         var (version, ct) = Begin();
@@ -97,36 +211,102 @@
         if (!Stale(version)) await LoadRowsAsync();
     }
     private (int, CancellationToken) Begin()
-    { request?.Cancel(); request?.Dispose(); request = new(); loading = true; error = null; rows = []; best = null; excluded = 0; explanations = []; return (++generation, request.Token); }
+    {
+        request?.Cancel(); request?.Dispose(); request = new(); loading = true; error = null; best = null; explanations = [];
+        if (loadedSetId != setId) { rows = []; excluded = 0; setRuns = []; focus = null; }
+        CancelConclusion(); compared.Clear(); conclusion = null;
+        return (++generation, request.Token);
+    }
     private bool Stale(int version) => disposed || version != generation;
     private async Task LoadRowsAsync()
     {
         var (version, ct) = Begin();
-        try
-        {
-            if (setId <= 0) return;
-            var data = await Api.GetAccuracyRunsAsync(setId, ct);
-            if (Stale(version)) return;
-            if (!data.IsSuccess) { error = data.ErrorMessage; return; }
-            rows = AccuracyComparisonView.Latest(data.Data!, setId);
-            excluded = data.Data!.Count(r => r.EvaluationSetId == setId && r.Status == "Completed" && !AccuracyComparisonView.Valid(r));
-            verification = "Chưa đủ dữ liệu tương đương để xác định bản cao nhất. Các số liệu chỉ mô tả từng lượt.";
-            if (rows.Count < 2) return;
-            var anchor = rows[0];
-            foreach (var candidate in rows.Skip(1))
-            {
-                var comparison = await Api.CompareAccuracyRunsAsync(anchor.RunId, candidate.RunId, ct);
-                if (Stale(version)) return;
-                if (!comparison.IsSuccess || !comparison.Data!.IsFairComparison || comparison.Data.Verdict == "NotComparable"
-                    || !AccuracyComparisonView.Matches(anchor, comparison.Data.Base) || !AccuracyComparisonView.Matches(candidate, comparison.Data.Candidate))
-                { explanations = comparison.Data?.Warnings.Take(3).ToList() ?? []; verification = "Chưa xác minh được cùng cấu hình, danh sách CV và nhãn HR cho toàn bộ bảng (hoặc dữ liệu vừa thay đổi). Không xếp hạng cao nhất. Hãy làm mới hoặc chọn bộ CV khác."; return; }
-                if (!string.IsNullOrWhiteSpace(comparison.Data.Summary)) explanations.Add(comparison.Data.Summary);
-            }
-            best = AccuracyComparisonView.Best(rows, true);
-            verification = best is null ? "Có CV chưa chấm được hoặc chỉ keyword; chưa kết luận bản cao nhất về AI." : "A17 đã xác minh cùng bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Đồng tỷ lệ: ưu tiên ít Bỏ sót, sau đó ID phiên bản tăng dần. Cao nhất chỉ trong các lượt hiển thị, không tự kích hoạt.";
-        }
+        try { await LoadRowsCoreAsync(version, ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         finally { if (!Stale(version)) loading = false; }
+        if (!Stale(version)) await UpdateFocusAsync();
     }
-    public void Dispose() { disposed = true; ++generation; request?.Cancel(); request?.Dispose(); }
+    private async Task LoadRowsCoreAsync(int version, CancellationToken ct)
+    {
+        if (setId <= 0) return;
+        var data = await Api.GetAccuracyRunsAsync(setId, ct);
+        if (Stale(version)) return;
+        if (!data.IsSuccess) { error = data.ErrorMessage; return; }
+        rows = AccuracyComparisonView.Latest(data.Data!, setId);
+        loadedSetId = setId;
+        setRuns = data.Data!.Where(r => r.EvaluationSetId == setId).ToList();
+        excluded = data.Data!.Count(r => r.EvaluationSetId == setId && r.Status == "Completed" && !AccuracyComparisonView.Valid(r));
+        verification = "Chưa đủ dữ liệu tương đương để xác định bản cao nhất. Các số liệu chỉ mô tả từng lượt.";
+        if (rows.Count < 2) return;
+        var anchor = rows[0];
+        foreach (var candidate in rows.Skip(1))
+        {
+            var comparison = await Api.CompareAccuracyRunsAsync(anchor.RunId, candidate.RunId, ct);
+            if (Stale(version)) return;
+            if (comparison.IsSuccess) compared[(anchor.RunId, candidate.RunId)] = comparison.Data!;   // B41: dùng lại cho khung kết luận
+            if (!comparison.IsSuccess || !comparison.Data!.IsFairComparison || comparison.Data.Verdict == "NotComparable"
+                || !AccuracyComparisonView.Matches(anchor, comparison.Data.Base) || !AccuracyComparisonView.Matches(candidate, comparison.Data.Candidate))
+            { explanations = comparison.Data?.Warnings.Take(3).ToList() ?? []; verification = "Chưa xác minh được cùng cấu hình, danh sách CV và nhãn HR cho toàn bộ bảng (hoặc dữ liệu vừa thay đổi). Không xếp hạng cao nhất. Hãy làm mới hoặc chọn bộ CV khác."; return; }
+            // Raw API summaries describe observed deltas; reserve conclusions for the explicit A41 panel.
+        }
+        best = AccuracyComparisonView.Best(rows, true);
+        verification = best is null ? "Có CV chưa chấm được hoặc chỉ keyword; chưa kết luận bản cao nhất về AI." : "A17 đã xác minh cùng bộ CV, nhãn HR, model, temperature, trọng số và ngưỡng. Đồng tỷ lệ: ưu tiên ít Bỏ sót, sau đó ID phiên bản tăng dần. Cao nhất chỉ trong các lượt hiển thị, không tự kích hoạt.";
+    }
+    // ---------- B41: lượt đang xem + kết luận (GET /api/prompt-tests/compare, không gọi Gemini) ----------
+    private async Task UpdateFocusAsync()
+    {
+        lastSelected = SelectedRunId; lastActive = ActiveId;
+        CancelConclusion();
+        var version = conclusionGeneration;
+        // Lượt đang chọn (kể cả khi không còn là lượt mới nhất); chưa chọn → cùng lượt mặc định với bảng CV lệch (B16).
+        focus = SelectedRunId is { } id ? setRuns.FirstOrDefault(r => r.RunId == id) : MismatchView.DefaultRun(setRuns, ActiveId);
+        if (error is not null || setId <= 0) { conclusion = null; return; }
+        if (SelectedRunId is { } missing && focus is null) { conclusion = ComparisonConclusion.Missing(missing); return; }
+        var (baseRun, candidate, reason) = ComparisonConclusion.Pair(rows, focus, ActiveId, setId);
+        if (reason is not null || baseRun is null || candidate is null) { conclusion = reason; return; }
+        pairBase = baseRun; pairCandidate = candidate;
+        if (compared.TryGetValue((baseRun.RunId, candidate.RunId), out var cached)) { ShowComparison(cached); return; }
+        conclusion = ComparisonConclusion.Loading(baseRun, candidate);
+        conclusionRequest = new();
+        var ct = conclusionRequest.Token;
+        try
+        {
+            var result = await Api.CompareAccuracyRunsAsync(baseRun.RunId, candidate.RunId, ct);
+            if (StaleConclusion(version)) return;
+            if (!result.IsSuccess) { conclusion = ComparisonConclusion.Failed(result.ErrorMessage); return; }
+            compared[(baseRun.RunId, candidate.RunId)] = result.Data!;
+            ShowComparison(result.Data!);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
+    private void ShowComparison(PromptCompareDto compare)
+    {
+        conclusion = ComparisonConclusion.Read(compare, pairBase!, pairCandidate!, setId);
+        pairCompare = compare;
+    }
+    private Task RetryConclusionAsync()
+    {
+        if (pairBase is not null && pairCandidate is not null) compared.Remove((pairBase.RunId, pairCandidate.RunId));
+        return UpdateFocusAsync();
+    }
+    private void CancelConclusion()
+    {
+        conclusionRequest?.Cancel(); conclusionRequest?.Dispose(); conclusionRequest = null;
+        ++conclusionGeneration; pairBase = pairCandidate = null; pairCompare = null;
+    }
+    private bool StaleConclusion(int version) => disposed || version != conclusionGeneration;
+    private static string VerdictClass(ConclusionKind kind) => kind switch
+    {
+        ConclusionKind.Conclusive => "is-ok",
+        ConclusionKind.Inconclusive or ConclusionKind.MissingInterval => "is-unsure",
+        ConclusionKind.Error or ConclusionKind.Stale => "is-error",
+        ConclusionKind.Loading => "is-loading",
+        _ => "is-neutral"
+    };
+    private static string VerdictIcon(ConclusionKind kind) => kind switch
+    {
+        ConclusionKind.Conclusive => "✓", ConclusionKind.Inconclusive or ConclusionKind.MissingInterval => "!",
+        ConclusionKind.Error or ConclusionKind.Stale => "×", ConclusionKind.Loading => "…", _ => "i"
+    };
+    public void Dispose() { disposed = true; ++generation; request?.Cancel(); request?.Dispose(); CancelConclusion(); }
 }

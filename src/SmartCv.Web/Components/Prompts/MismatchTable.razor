@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject PromptApiClient Api
+@inject IServiceProvider Services
 
 <section class="mismatch-analysis" aria-labelledby="mismatch-title" aria-busy="@(loading ? "true" : "false")">
     <header class="mismatch-head">
@@ -32,6 +33,8 @@
     }
     else if (view is not null)
     {
+        @if (ShowMatrix)
+        {
         <div class="analysis-overview">
             <table class="matrix">
                 <caption>Ma trận AI × HR <span>@view.Compared/@detail.TotalItems hồ sơ có đủ nhãn và dự đoán hợp lệ</span></caption>
@@ -48,6 +51,7 @@
                 <p class="muted">Ma trận giữ nguyên khi lọc. Nhãn HR được lấy theo dữ liệu API hiện tại.</p>
             </div>
         </div>
+        }
         @if (!view.Complete)
         {
             <div class="mismatch-notice" role="status">
@@ -86,15 +90,15 @@
                         @foreach (var item in view.Filter(filter))
                         {
                             <tr @key="item.ApplicationId">
-                                <th scope="row"><strong>@Text(item.CandidateName, "Chưa có tên ứng viên")</strong><span class="sub">@Text(item.FileName, "Chưa có tên file")</span><span class="sub">@Text(item.JobTitle, "Chưa có vị trí tuyển dụng")</span></th>
+                                <th scope="row"><strong>@Anonymity.Name(item.CandidateName, null, item.ApplicationId)</strong><span class="sub">@Anonymity.FileName(item.FileName)</span><span class="sub">@Text(item.JobTitle, "Chưa có vị trí tuyển dụng")</span></th>
                                 <td><span class="label-pill @(item.HrIsPass == true ? "pass" : "fail")">@PassLabel(item.HrIsPass)</span></td>
                                 <td><span class="label-pill prediction @(item.PredictedPass == true ? "pass" : "fail")">@PassLabel(item.PredictedPass)</span><span class="sub">@RankingView.Score(item.FinalScore) điểm</span>
-                                    @if (!string.IsNullOrWhiteSpace(item.FitLabel)) { <span class="sub">@item.FitLabel</span> }
+                                    @if (!string.IsNullOrWhiteSpace(item.FitLabel)) { <span class="sub">@Anonymity.Label(item.FitLabel)</span> }
                                     @if (item.ScoreSource == "KeywordOnly") { <span class="keyword-tag">Chỉ keyword</span> }
                                 </td>
                                 <td><span class="label-pill @(item.MismatchType == "Missed" ? "missed" : "wrong")">@(item.MismatchType == "Missed" ? "Bỏ sót" : "Chọn nhầm")</span></td>
-                                <td class="notes"><div><b>AI</b><p>@Text(item.Reasoning, "Chưa có nhận xét AI.")</p></div><div class="hr-note"><b>HR</b><p>@Text(item.HrNote, "Chưa có ghi chú HR.")</p></div></td>
-                                <td>@if (verifiedDetails.Contains(item.ApplicationId)) { <a class="detail-link" href="@($"/results/evaluations/{item.EvaluationId}")" aria-label="@($"Chi tiết kết quả của {Text(item.CandidateName, item.FileName)}")">Chi tiết <span aria-hidden="true">↗</span></a> }
+                                <td class="notes"><div><b>AI</b><p>@Text(Anonymity.Text(item.Reasoning), "Chưa có nhận xét AI.")</p></div><div class="hr-note"><b>HR</b><p>@Text(Anonymity.Text(item.HrNote), "Chưa có ghi chú HR.")</p></div></td>
+                                <td>@if (verifiedDetails.Contains(item.ApplicationId)) { <a class="detail-link" href="@($"/results/evaluations/{item.EvaluationId}")" aria-label="@($"Chi tiết hồ sơ #{item.ApplicationId}")">Chi tiết <span aria-hidden="true">↗</span></a> }
                                     else { <span class="sub">Chưa có chi tiết được xác minh</span> }
                                 </td>
                             </tr>
@@ -111,6 +115,10 @@
     [Parameter] public int? RunId { get; set; }
     [Parameter] public int RefreshVersion { get; set; }
     [Parameter] public int? EvaluationSetId { get; set; }
+    [Parameter] public bool ShowMatrix { get; set; } = true;
+    private AnonymityState Anonymity => anonymity ??= Services.GetService<AnonymityState>() ?? fallbackPrivacy;
+    private AnonymityState? anonymity;
+    private readonly AnonymityState fallbackPrivacy = new();
     private PromptTestProgressDto? detail;
     private MismatchView? view;
     private MismatchFilter filter;
@@ -122,6 +130,8 @@
     private string? error;
     private CancellationTokenSource? request;
     private int? ActiveId => Versions.FirstOrDefault(v => v.IsActive)?.PromptVersionId;
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
     protected override async Task OnParametersSetAsync()
     {
         if (initialized && lastRefresh == RefreshVersion && lastRunId == RunId && lastSet == EvaluationSetId && (RunId is not null || lastActive == ActiveId)) return;
@@ -182,5 +192,5 @@
     private static string Text(string? text, string fallback) => string.IsNullOrWhiteSpace(text) ? fallback : text;
     private static string PassLabel(bool? pass) => pass is null ? "Chưa có dự đoán" : pass.Value ? "Đạt" : "Không đạt";
     private static string StatusLabel(string status) => status switch { "Queued" => "Đang chờ", "Running" => "Đang xử lý", "Failed" => "Xử lý thất bại", _ => "Chưa hoàn thành" };
-    public void Dispose() { disposed = true; ++generation; request?.Cancel(); request?.Dispose(); }
+    public void Dispose() { Anonymity.Changed -= PrivacyChanged; disposed = true; ++generation; request?.Cancel(); request?.Dispose(); }
 }

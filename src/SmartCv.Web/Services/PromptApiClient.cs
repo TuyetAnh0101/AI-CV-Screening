@@ -24,6 +24,9 @@ public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> lo
     public Task<ApiResult<EvaluationSetDetailDto>> GetEvaluationSetAsync(int id, CancellationToken ct = default) => GetAsync<EvaluationSetDetailDto>($"api/evaluation-sets/{id}", ct);
     public Task<ApiResult<List<LabelCandidateDto>>> GetLabelCandidatesAsync(int id, CancellationToken ct = default) => GetAsync<List<LabelCandidateDto>>($"api/evaluation-sets/{id}/applications", ct);
     public Task<ApiResult<SaveHrLabelsResult>> SaveLabelsAsync(int id, SaveHrLabelsRequest request, CancellationToken ct = default) => PutJsonAsync<SaveHrLabelsResult>($"api/evaluation-sets/{id}/labels", request, ct);
+    /// <summary>B41 (A36): đề xuất nhãn từ quyết định HR. Chỉ đọc; nhãn chỉ được ghi qua SaveLabelsAsync khi HR bấm Lưu.</summary>
+    public Task<ApiResult<LabelSuggestionResponse>> GetLabelSuggestionsAsync(int id, int? jobId = null, CancellationToken ct = default) =>
+        GetAsync<LabelSuggestionResponse>(jobId is > 0 ? $"api/evaluation-sets/{id}/label-suggestions?jobId={jobId}" : $"api/evaluation-sets/{id}/label-suggestions", ct);
     public string EvaluationCvUrl(Guid cvId) => new Uri(Http.BaseAddress!, $"api/cvs/{cvId}/file").AbsoluteUri;
     public Task<ApiResult<List<PromptVersionDto>>> GetVersionsAsync(CancellationToken ct = default) =>
         GetAsync<List<PromptVersionDto>>("api/prompts", ct);

@@ -12,7 +12,10 @@ public sealed class EvaluationSetWorkspace(PromptApiClient api)
         public string Choice { get; set; } = label is null ? "" : label.IsPass ? "pass" : "fail";
         public string Note { get; set; } = label?.Note ?? "";
         public bool HadLabel { get; private set; } = label is not null;
-        public void MarkSaved() => HadLabel = true;
+        private string savedChoice = label is null ? "" : label.IsPass ? "pass" : "fail";
+        private string savedNote = label?.Note ?? "";
+        public bool IsDirty => Choice != savedChoice || Note != savedNote;
+        public void MarkSaved() { HadLabel = true; savedChoice = Choice; savedNote = Note; }
         public bool Eligible => Candidate.ApplicationId > 0 && Candidate.ExtractionStatus == "Completed" && Candidate.HasExtractedText;
     }
     public List<EvaluationSetDto> Sets { get; private set; } = [];
@@ -28,6 +31,33 @@ public sealed class EvaluationSetWorkspace(PromptApiClient api)
     public bool CreationUncertain { get; private set; }
     public bool CandidatesLoaded { get; private set; }
     public EvaluationSetDto? Selected => Sets.FirstOrDefault(s => s.EvaluationSetId == SetId);
+
+    /// <summary>Refresh only server metadata and untouched rows; preserve every manual edit.</summary>
+    public async Task RefreshLabelsPreservingDraftAsync(CancellationToken ct)
+    {
+        if (Busy || SetId <= 0) return;
+        Busy = true;
+        try
+        {
+            var list = await api.GetEvaluationSetsAsync(ct);
+            var detail = await api.GetEvaluationSetAsync(SetId, ct);
+            var candidates = await api.GetLabelCandidatesAsync(SetId, ct);
+            if (list.IsSuccess) Sets = list.Data!;
+            if (!detail.IsSuccess || detail.Data!.EvaluationSetId != SetId || !candidates.IsSuccess)
+            { Error = "Nhãn đã cập nhật nhưng chưa đồng bộ được bảng gán thủ công. Bản nháp vẫn được giữ; hãy tải lại khi sẵn sàng."; return; }
+            var labels = detail.Data.Labels.GroupBy(l => l.ApplicationId).ToDictionary(g => g.Key, g => g.First());
+            var old = Rows.ToDictionary(r => r.Candidate.ApplicationId);
+            Rows = candidates.Data!.GroupBy(c => c.ApplicationId).Select(g => g.First()).Select(c =>
+            {
+                var fresh = new Row(c, labels.GetValueOrDefault(c.ApplicationId));
+                if (old.TryGetValue(c.ApplicationId, out var previous) && previous.IsDirty)
+                { fresh.Choice = previous.Choice; fresh.Note = previous.Note; }
+                return fresh;
+            }).ToList();
+            CandidatesLoaded = true;
+        }
+        finally { Busy = false; }
+    }
 
     public async Task LoadAsync(CancellationToken ct)
     {
