@@ -578,6 +578,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobId"));
 
+                    b.Property<DateOnly?>("ClosingDate")
+                        .HasColumnType("date");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
@@ -585,6 +588,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("Headcount")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit")
@@ -613,6 +619,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     b.ToTable("Jobs", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Jobs_Headcount", "Headcount IS NULL OR Headcount BETWEEN 1 AND 1000");
+
                             t.HasCheckConstraint("CK_Jobs_MinGpa", "MinGpa BETWEEN 0 AND 4");
 
                             t.HasCheckConstraint("CK_Jobs_MinYearsExperience", "MinYearsExperience >= 0");

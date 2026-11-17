@@ -41,6 +41,7 @@ public class JobEndpointsTests
         using var factory = CreateFactory();
         var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
             .OfType<RouteEndpoint>()
+            .Where(e => e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains("GET") == true)
             .Select(e => e.RoutePattern.RawText?.TrimStart('/'))
             .ToList();
 

@@ -10,6 +10,8 @@ public class Job
     public decimal MinYearsExperience { get; set; } = 0;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
+    public int? Headcount { get; set; }
+    public DateOnly? ClosingDate { get; set; }
 
     public ICollection<JobSkill> Skills { get; set; } = new List<JobSkill>();
     public ICollection<Application> Applications { get; set; } = new List<Application>();

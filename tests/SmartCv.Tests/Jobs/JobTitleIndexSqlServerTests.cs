@@ -130,7 +130,9 @@ public class JobTitleIndexSqlServerTests
     {
         await using var db = env.Context();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        var job = await db.Jobs.OrderBy(j => j.JobId).FirstAsync();
+        // A20's migration target predates A21 columns; read only the fields this test exercises.
+        var job = await db.Jobs.OrderBy(j => j.JobId).Select(j => new Job { JobId = j.JobId, Title = j.Title }).FirstAsync();
+        db.Attach(job);
         var original = job.Title;
         job.Title = "Kỹ sư Backend A20 — đổi tên thử";
         await db.SaveChangesAsync();
@@ -145,7 +147,8 @@ public class JobTitleIndexSqlServerTests
     {
         await using var db = env.Context();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        var jobs = await db.Jobs.OrderBy(j => j.JobId).Take(2).ToListAsync();
+        var jobs = await db.Jobs.OrderBy(j => j.JobId).Take(2).Select(j => new Job { JobId = j.JobId, Title = j.Title }).ToListAsync();
+        db.AttachRange(jobs);
         jobs[1].Title = caseVariant ? jobs[0].Title.ToUpperInvariant() : jobs[0].Title;
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         var sql = Assert.IsType<SqlException>(error.InnerException);

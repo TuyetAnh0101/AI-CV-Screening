@@ -45,7 +45,7 @@ public class JobTitleIndexTests
         Assert.Equal(0m, job.FindProperty(nameof(Job.MinYearsExperience))!.GetDefaultValue());
         Assert.Equal("DF_Jobs_CreatedAt", job.FindProperty(nameof(Job.CreatedAt))!.FindAnnotation("Relational:DefaultConstraintName")!.Value);
         Assert.Equal("SYSUTCDATETIME()", job.FindProperty(nameof(Job.CreatedAt))!.GetDefaultValueSql());
-        Assert.Equal(new[] { "CK_Jobs_MinGpa", "CK_Jobs_MinYearsExperience" }, job.GetCheckConstraints().Select(c => c.Name).Order());
+        Assert.Equal(new[] { "CK_Jobs_Headcount", "CK_Jobs_MinGpa", "CK_Jobs_MinYearsExperience" }, job.GetCheckConstraints().Select(c => c.Name).Order());
         Assert.Equal(5, job.GetSeedData().Count());
         Assert.Equal(29, model.FindEntityType(typeof(JobSkill))!.GetSeedData().Count());
         Assert.Equal(52, model.FindEntityType(typeof(JobSkillAlias))!.GetSeedData().Count());
@@ -66,7 +66,7 @@ public class JobTitleIndexTests
             op => { var create = Assert.IsType<AddUniqueConstraintOperation>(op); Assert.Equal("Jobs", create.Table); Assert.Equal("UQ_Jobs_Title", create.Name); Assert.Equal(new[] { "Title" }, create.Columns); });
         using var db = ModelContext();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(MigrationId, db.Database.GetMigrations().Last());
+        Assert.Equal(MigrationId, db.Database.GetMigrations().Take(5).Last());
         var target = migration.TargetModel.FindEntityType(typeof(Job))!;
         Assert.DoesNotContain(target.GetKeys(), key => key.Properties.Any(p => p.Name == nameof(Job.Title)));
         Assert.Equal("UQ_Jobs_Title", Assert.Single(target.GetIndexes()).GetDatabaseName());
