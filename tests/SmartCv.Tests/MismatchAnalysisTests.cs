@@ -139,8 +139,13 @@ public class MismatchAnalysisTests
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(data) };
         }
     }
-    private static ServiceProvider Services(Server server) => new ServiceCollection().AddLogging()
-        .AddSingleton(new PromptApiClient(new HttpClient(server) { BaseAddress = new Uri("https://fixture.test/") }, NullLogger<PromptApiClient>.Instance)).BuildServiceProvider();
+    private static ServiceProvider Services(Server server)
+    {
+        // These B16 assertions deliberately inspect the named view. B41 separately verifies anonymous output.
+        var privacy = new AnonymityState(); privacy.SetAsync(false).GetAwaiter().GetResult();
+        return new ServiceCollection().AddLogging().AddSingleton(privacy)
+            .AddSingleton(new PromptApiClient(new HttpClient(server) { BaseAddress = new Uri("https://fixture.test/") }, NullLogger<PromptApiClient>.Instance)).BuildServiceProvider();
+    }
     private static async Task<string> Render(Server server, int? id = null, int? setId = null)
     {
         using var services = Services(server);

@@ -81,10 +81,10 @@
     }
 </div>
 
-<EvaluationSetManager OnSaved="EvaluationSetSaved" OnDirtyChanged="value => labelsDirty = value" />
+<EvaluationSetManager EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" OnSaved="EvaluationSetSaved" OnDirtyChanged="value => labelsDirty = value" />
 <PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" EvaluationSetId="evaluationSetId" SetsRefresh="setsRefresh" OnSetChanged="SelectEvaluationSet" />
 <AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" SelectedRunId="mismatchRunId" OnPick="SelectMismatchRun" EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" />
-<MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" EvaluationSetId="evaluationSetId" />
+<MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" EvaluationSetId="evaluationSetId" ShowMatrix="false" />
 @if (testHistoryWarning is not null)
 {
     <p role="status">@testHistoryWarning <button type="button" class="btn sc-btn-secondary" @onclick="RefreshTestVersionsAsync">Cập nhật lịch sử</button></p>
@@ -99,7 +99,14 @@
     private int setsRefresh;
     private bool labelsDirty;
     private void SelectEvaluationSet(int id) { evaluationSetId = id > 0 ? id : null; mismatchRunId = null; }
-    private void EvaluationSetSaved(int id) { SelectEvaluationSet(id); ++setsRefresh; ++accuracyRefresh; }
+    private async Task EvaluationSetSaved(int id)
+    {
+        if (evaluationSetId is null) SelectEvaluationSet(id);
+        ++setsRefresh;
+        // Refresh history/header accuracy through the same draft-preserving path used after a test completes.
+        try { await RefreshTestVersionsAsync(); }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
     private void SelectMismatchRun(int runId) => mismatchRunId = runId;
     private void UpdateTestToken(string token)
     {

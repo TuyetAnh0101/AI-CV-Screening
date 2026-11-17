@@ -1,0 +1,49 @@
+/* B41: ma trận 2×2. Màu chỉ hỗ trợ: mỗi ô luôn có số + chữ + gợi ý HR/AI. */
+.cm { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figcaption { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cm-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+figcaption strong { font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--text-main); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+.cm-grid { width: 100%; border-collapse: separate; border-spacing: 6px; table-layout: fixed; }
+.cm-col-head { width: 24%; }
+.cm-grid thead th, .cm-grid tbody th { padding: 2px 4px; color: var(--sc-ink-700); font-weight: 500; font-size: 12px; line-height: 1.35; }
+.cm-grid thead th { text-align: center; vertical-align: bottom; }
+.cm-grid tbody th { text-align: right; vertical-align: middle; }
+.cm-axis { display: block; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sc-ink-500); }
+.cm-grid th b { display: block; font-size: 13px; font-weight: 700; color: var(--text-main); }
+.cm-corner { padding: 2px 4px; vertical-align: bottom; text-align: right; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--sc-ink-500); }
+.cm-corner > span { display: block; white-space: nowrap; }
+
+.cell {
+    padding: 12px 8px; height: 140px; text-align: center; vertical-align: middle;
+    border-radius: 14px; border: 1px solid transparent; overflow-wrap: anywhere;
+}
+.cell-value { display: block; font-size: 26px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cell-label { display: block; margin-top: 4px; font-size: 12px; font-weight: 700; }
+.cell-hint { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--sc-ink-700); }
+
+.cell.ok { background: #ecfdf5; border-color: #bbf7d0; }
+.cell.ok .cell-value, .cell.ok .cell-label { color: var(--fit-excellent); }
+.cell.wrong { background: var(--fit-potential-bg); border-color: #fcd34d; }
+.cell.wrong .cell-value, .cell.wrong .cell-label { color: #92400e; }
+
+/* Bỏ sót: nền đỏ nhạt, viền đỏ đậm, số lớn và đậm nhất — lỗi đắt nhất với HR nhưng không gây hoảng. */
+.cell.missed { background: var(--fit-poor-bg); border: 2px solid var(--fit-poor); box-shadow: 0 0 0 4px rgba(190, 18, 60, .08); }
+.cell.missed .cell-value { color: var(--fit-poor); font-size: 28px; font-weight: 800; }
+.cell.missed .cell-label { color: var(--fit-poor); text-transform: uppercase; letter-spacing: .04em; }
+.cm-priority { margin-top:4px; font-size:12px; line-height:1.5; color:var(--fit-poor); }
+
+.cm-foot { display: grid; gap: 6px; }
+.cm-unscored { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--sc-line-300); background: var(--sc-surface-50); color: var(--sc-ink-700); font-size: 12px; line-height: 1.6; }
+.cm-unscored.has-unscored { border-color: #94a3b8; background: var(--sc-neutral-bg); }
+.cm-total { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cm-empty { margin: 0; padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--sc-line-300); background: var(--sc-surface-50); color: var(--sc-ink-700); font-size: 13px; line-height: 1.7; }
+
+@media (max-width: 480px) {
+    .cm-grid { border-spacing: 4px; }
+    .cell { height: 140px; padding: 10px 4px; border-radius: 12px; }
+    .cell-value { font-size: 24px; }
+    .cell.missed .cell-value { font-size: 28px; }
+    .cell-hint { font-size: 12px; }
+    .cm-grid th b { font-size: 12px; }
+}

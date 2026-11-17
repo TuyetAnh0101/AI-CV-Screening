@@ -1,0 +1,94 @@
+@implements IDisposable
+@inject IServiceProvider Services
+
+<section class="suggestions" aria-labelledby="suggestion-title" aria-busy="@(State.Busy ? "true" : "false")">
+    <header>
+        <div><p class="eyebrow">Nhãn từ quyết định tuyển dụng</p><h3 id="suggestion-title">Duyệt nhãn HR đề xuất</h3><p>Chỉ lấy từ quyết định của HR. Xem lại và bấm lưu để đưa nhãn vào bộ CV.</p></div>
+        <button type="button" class="btn sc-btn-secondary" disabled="@(State.Busy || Disabled)" @onclick="LoadAsync">@(State.Loading ? "Đang lấy đề xuất…" : State.Draft.Data is null ? "Lấy đề xuất từ quyết định" : "Lấy lại đề xuất")</button>
+    </header>
+    @if (State.Error is not null)
+    {
+        <div class="notice error" role="alert"><p>@State.Error</p><button type="button" class="btn sc-btn-secondary" disabled="@(State.Busy || Disabled)" @onclick="LoadAsync">@(State.NeedsVerification ? "Đọc lại trạng thái" : "Thử lại")</button></div>
+    }
+    @if (State.Message is not null) { <p class="notice @(State.Saved is not null ? "success" : "")" role="status">@State.Message</p> }
+    @if (State.Saved is { } saved)
+    {
+        @foreach (var warning in saved.Warnings) { <p class="notice" role="status">@Anonymity.Text(warning)</p> }
+    }
+    @if (State.Loading && State.Draft.Data is null)
+    { <div class="skeleton" role="status"><span>Đang đọc quyết định HR…</span><i></i><i></i><i></i></div> }
+    @if (State.Draft.Data is { } data)
+    {
+        @if (!State.Fresh && !State.Busy) { <p class="notice" role="status">Danh sách trước đó được giữ để tham khảo. Hãy lấy lại đề xuất để xác minh hồ sơ và tiếp tục duyệt nhãn.</p> }
+        <div class="counts" aria-label="Tổng hợp đề xuất"><span><b>@data.NewCount</b> mới</span><span><b>@data.SameCount</b> đã khớp</span><span class="conflict-count"><b>@data.ConflictCount</b> xung đột</span><span><b>@data.SkippedCount</b> không đề xuất</span></div>
+        @if (State.Draft.AmbiguousCount > 0) { <p class="notice" role="alert">Có hồ sơ trùng trong phản hồi. Các dòng đó bị khóa; hãy tải lại trước khi duyệt.</p> }
+        @if (data.Items.Count == 0)
+        { <div class="empty"><strong>Chưa có nhãn đề xuất</strong><p>HR cần có quyết định Qua vòng CV, Phỏng vấn hoặc Loại vì yêu cầu chuyên môn ở trang Kết quả.</p></div> }
+        else
+        {
+            <fieldset disabled="@(Disabled || State.Busy || !State.Fresh || State.NeedsVerification)">
+                <legend class="visually-hidden">Duyệt những nhãn đề xuất cần lưu</legend>
+                <div class="table-scroll" role="region" tabindex="0" aria-label="Nhãn đề xuất, có thể cuộn ngang">
+                    <table>
+                        <caption class="visually-hidden">New được tích sẵn. Same đã khớp và không thể chọn. Conflict cần HR xem lại và tự tích.</caption>
+                        <thead><tr><th scope="col" class="check"><label><input type="checkbox" aria-label="Chọn tất cả đề xuất mới" checked="@State.Draft.AllNewPicked" @onchange="ToggleAllAsync" /></label></th><th scope="col">Hồ sơ</th><th scope="col">Vị trí tuyển dụng</th><th scope="col">Giai đoạn &amp; lý do</th><th scope="col">Nhãn hiện tại</th><th scope="col">Đề xuất</th><th scope="col">Trạng thái</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in data.Items)
+                            {
+                                <tr class="@(s.Status == "Conflict" ? "conflict" : s.Status == "Same" ? "same" : "")">
+                                    <td class="check"><label><input type="checkbox" aria-label="@($"Chọn hồ sơ #{s.ApplicationId}")" checked="@State.Draft.IsPicked(s)" disabled="@(!State.Draft.Selectable(s))" @onchange="e => ToggleAsync(s, e.Value is true)" /></label></td>
+                                    <th scope="row"><strong>@Anonymity.Name(s.CandidateName, null, s.ApplicationId)</strong><small>@Anonymity.FileName(s.FileName)</small><small>Hồ sơ #@s.ApplicationId</small></th>
+                                    <td>@s.JobTitle</td><td>@LabelSuggestionSelection.Decision(s)</td>
+                                    <td>@LabelSuggestionSelection.LabelText(s.CurrentLabel)</td>
+                                    <td><span class="label-badge @(s.SuggestedIsPass ? "pass" : "fail")">@LabelSuggestionSelection.LabelText(s.SuggestedIsPass)</span></td>
+                                    <td><span class="status-badge">@s.Status · @LabelSuggestionSelection.StatusText(s.Status)</span>@if (s.Status == "Conflict") { <small class="conflict-text">@LabelSuggestionSelection.ConflictText</small> }@if (s.Status != "Same" && !State.Draft.Selectable(s)) { <small>Không thể chọn: hồ sơ chưa sẵn sàng hoặc dữ liệu không hợp lệ.</small> }</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="actions"><label class="actor">Người gán nhãn<input aria-label="Người lưu nhãn đề xuất" maxlength="100" @bind="State.Actor" @bind:event="oninput" placeholder="Nhập tên HR" /></label><button type="button" class="btn sc-btn-primary" disabled="@(!State.CanSave)" @onclick="SaveAsync">@(State.Saving ? "Đang lưu nhãn…" : $"Lưu {State.Draft.PickedCount} nhãn được chọn")</button></div>
+            </fieldset>
+            @if (State.Draft.PickedConflicts > 0) { <p class="notice">Bạn đã chủ động chọn @State.Draft.PickedConflicts nhãn xung đột. Lưu sẽ cập nhật nhãn hiện tại của các hồ sơ đó.</p> }
+            @if (LabelSuggestionSelection.ValidateActor(State.Actor) is { } actorError) { <p class="hint">@actorError</p> }
+        }
+    }
+    @if (ActorState.StorageWarning is { } storageWarning) { <p class="hint" role="status">@storageWarning</p> }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LabelSuggestionWorkspace State { get; set; } = default!;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<int> OnSaved { get; set; }
+    [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
+    private HrActorState ActorState => actorState ??= Services.GetService<HrActorState>() ?? new();
+    private AnonymityState Anonymity => anonymity ??= Services.GetService<AnonymityState>() ?? new();
+    private HrActorState? actorState;
+    private AnonymityState? anonymity;
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await ActorState.EnsureLoadedAsync();
+        if (string.IsNullOrWhiteSpace(State.Actor)) State.Actor = ActorState.Actor ?? "";
+        StateHasChanged();
+    }
+    private async Task LoadAsync()
+    {
+        var verifying = State.NeedsVerification;
+        if (await State.LoadAsync() && verifying) await OnSaved.InvokeAsync(State.SetId);
+        await ChangedAsync();
+    }
+    private async Task SaveAsync()
+    {
+        if (Disabled) return;
+        if (await State.SaveAsync())
+        { await ActorState.SetAsync(State.Actor); await OnSaved.InvokeAsync(State.SetId); }
+        await ChangedAsync();
+    }
+    private Task ToggleAsync(LabelSuggestionDto s, bool on) { State.Draft.Toggle(s, on); return ChangedAsync(); }
+    private Task ToggleAllAsync(ChangeEventArgs e) { State.Draft.ToggleAllNew(e.Value is true); return ChangedAsync(); }
+    private Task ChangedAsync() => OnDirtyChanged.InvokeAsync(State.Draft.HasPending || State.NeedsVerification);
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() { Anonymity.Changed -= PrivacyChanged; State.CancelRead(); }
+}
