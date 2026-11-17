@@ -1,7 +1,11 @@
 @*
     B3 + B5: "Danh sách CV" (Component Data trong Figma).
-    Cột: ô tích | Tên file (+ dòng phụ: loại file hoặc lý do lỗi) | Dung lượng | Trạng thái | Thao tác (menu ⋯: Xem file gốc, Xóa khỏi danh sách).
+    Cột: ô tích | Tên file (+ dòng phụ: loại file hoặc lý do lỗi) | Dung lượng | Trạng thái | Thao tác (menu ⋯).
     B5: dòng "Lỗi file" / "Bị từ chối" có viền trái đỏ, biểu tượng "!", lý do bằng chữ; ô tích bị khóa.
+    B38: dòng "chữ đã đọc" dưới tên file (đang đọc / đọc tốt / có thể đọc sai / không có chữ / đọc lỗi), nút
+         "⚠ Có thể đọc sai · Xem chữ đã đọc"; menu ⋯ có "Xem chữ đã đọc" cho mọi dòng có CvId (kể cả CV trùng);
+         CV trùng ghi "Đã có từ ngày …; đã ứng tuyển: …". Ẩn danh (B36): không mở file gốc, không hiện câu trùng có tên file cũ.
+         Màn hình hẹp: mỗi dòng thành một thẻ, không cuộn ngang. Giữ class cv-table-wrap / row-menu / menu-btn / menu-pop cho row-menus.js.
 *@
 
 <div class="cv-table-wrap">
@@ -13,7 +17,7 @@
                            checked="@AllSelected" disabled="@(!SelectableItems.Any())"
                            @onchange="e => OnToggleAll.InvokeAsync((bool)e.Value!)" />
                 </th>
-                <th>Tên file</th>
+                <th class="col-name-head">Tên file <span class="head-hint">· chọn để phân tích</span></th>
                 <th class="col-size">Dung lượng</th>
                 <th class="col-status">Trạng thái</th>
                 <th class="col-actions">Thao tác</th>
@@ -22,17 +26,24 @@
         <tbody>
             @if (Items.Count == 0)
             {
-                <tr>
-                    <td colspan="5" class="empty-row">Chưa có CV nào. Kéo thả file vào ô phía trên để bắt đầu.</td>
+                <tr class="empty">
+                    <td colspan="5" class="empty-row">
+                        <span class="empty-title">Chưa có CV nào</span>
+                        <span class="empty-sub">CV bạn tải lên sẽ hiện ở đây cùng trạng thái lưu và chất lượng chữ đã đọc.</span>
+                    </td>
                 </tr>
             }
             @for (var i = 0; i < Items.Count; i++)
             {
                 var item = Items[i];
-                var (text, variant) = StatusText.ForUpload(item.State);
+                var (badgeText, variant) = UploadRules.UploadBadge(item);
+                var textStatus = UploadRules.TextStatus(item);
+                var message = UploadRules.DisplayMessage(item, Anonymous);
                 // Hai dòng cuối mở menu lên trên để không bị cắt ở đáy bảng
                 var dropUp = Items.Count > 2 && i >= Items.Count - 2;
                 var subId = $"cv-sub-{item.LocalId:N}";
+                var menuId = $"cv-menu-{item.LocalId:N}";
+                var textButtonId = $"cv-text-{item.LocalId:N}";
                 var hint = UploadFlow.RejectedHint(item);
                 <tr class="@RowClass(item)" @key="item.LocalId">
                     <td class="col-check">
@@ -42,32 +53,60 @@
                                @onchange="e => OnToggle.InvokeAsync((item, (bool)e.Value!))" />
                     </td>
                     <td class="col-name">
-                        <div class="file-name" title="@item.FileName">@item.FileName</div>
-                        <div class="file-sub" id="@subId">
-                            @if (item.IsError)
-                            {
-                                @* B5: không chỉ dùng màu – có biểu tượng và chữ "Lý do" cho trình đọc màn hình *@
-                                <span class="sub-icon" aria-hidden="true">!</span>
-                                <span class="visually-hidden">Lý do lỗi: </span>
-                            }
-                            <span>@SubLine(item)</span>
+                        <div class="file-cell">
+                            <span class="file-type type-@TypeClass(item)" aria-hidden="true">@(item.Extension.Length is > 0 and <= 4 ? item.Extension : "FILE")</span>
+                            <div class="file-text">
+                                <div class="file-name" title="@item.FileName">@item.FileName</div>
+                                <div class="file-sub" id="@subId">
+                                    @if (item.IsError)
+                                    {
+                                        @* B5: không chỉ dùng màu – có biểu tượng và chữ "Lý do" cho trình đọc màn hình *@
+                                        <span class="sub-icon" aria-hidden="true">!</span>
+                                        <span class="visually-hidden">Lý do lỗi: </span>
+                                    }
+                                    <span>@SubLine(item, message)</span>
+                                </div>
+                                @if (hint is not null)
+                                {
+                                    <div class="file-hint">@hint</div>
+                                }
+                                @if (textStatus.Tone != TextTone.None)
+                                {
+                                    <div class="text-status tone-@textStatus.Tone.ToString().ToLowerInvariant()">
+                                        @if (textStatus.Tone is TextTone.Review or TextTone.Failed && textStatus.Action is { } warnAction)
+                                        {
+                                            @* A42 maybeMisread / đọc lỗi: nút vàng hổ phách mở hộp "Chữ đã đọc" ngay trên dòng *@
+                                            <button type="button" id="@textButtonId" class="text-action"
+                                                    @onclick="() => OnViewText.InvokeAsync((item, textButtonId))">@warnAction</button>
+                                            @if (textStatus.Detail is { } warnDetail) { <span class="text-detail">@warnDetail</span> }
+                                        }
+                                        else
+                                        {
+                                            @StatusIcon(textStatus.Tone)
+                                            <span class="text-label">@textStatus.Label</span>
+                                            @if (textStatus.Detail is { } detail) { <span class="text-detail">· @detail</span> }
+                                            @if (textStatus.Action is { } action)
+                                            {
+                                                <button type="button" id="@textButtonId" class="text-link"
+                                                        @onclick="() => OnViewText.InvokeAsync((item, textButtonId))">@action</button>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
                         </div>
-                        @if (hint is not null)
-                        {
-                            <div class="file-hint">@hint</div>
-                        }
                     </td>
-                    <td class="col-size">@StatusText.FileSize(item.SizeBytes)</td>
+                    <td class="col-size"><span class="cell-label">Dung lượng </span>@StatusText.FileSize(item.SizeBytes)</td>
                     <td class="col-status">
                         @if (item.State == UploadItemState.Uploading)
                         {
                             <span class="spinner-border spinner-border-sm text-secondary me-1" aria-hidden="true"></span>
                         }
-                        <StatusBadge Text="@text" Variant="variant" Title="@item.Message" />
+                        <StatusBadge Text="@badgeText" Variant="variant" Title="@message" />
                     </td>
                     <td class="col-actions">
                         <div class="row-menu">
-                            <button type="button" class="menu-btn" aria-label="Thao tác với @item.FileName"
+                            <button type="button" id="@menuId" class="menu-btn" aria-label="Thao tác với @item.FileName"
                                     aria-haspopup="menu" aria-expanded="@(openMenu == item.LocalId ? "true" : "false")"
                                     title="@(item.State == UploadItemState.Uploading ? "Đang tải lên, vui lòng chờ" : "Thao tác")"
                                     disabled="@(item.State == UploadItemState.Uploading)"
@@ -77,10 +116,20 @@
                             @if (openMenu == item.LocalId)
                             {
                                 <div class="menu-pop @(dropUp ? "drop-up" : null)" role="menu">
-                                    @if (item.CvId is not null && !string.IsNullOrEmpty(ApiBaseUrl))
+                                    @if (item.CvId is not null)
                                     {
-                                        <a class="menu-item" role="menuitem" href="@($"{ApiBaseUrl}api/cvs/{item.CvId}/file")"
-                                           target="_blank" rel="noopener" @onclick="() => openMenu = null">Xem file gốc</a>
+                                        <button type="button" class="menu-item" role="menuitem"
+                                                @onclick="async () => { openMenu = null; await OnViewText.InvokeAsync((item, menuId)); }">Xem chữ đã đọc</button>
+                                        @if (Anonymous)
+                                        {
+                                            @* B36: chế độ Ẩn danh không mở file gốc (giống trang Chi tiết) *@
+                                            <span class="menu-item is-disabled" role="menuitem" aria-disabled="true">Xem file gốc <small>Tắt Ẩn danh để mở</small></span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(ApiBaseUrl) && item.TextCheck is not (TextCheck.Anonymized or TextCheck.NotFound))
+                                        {
+                                            <a class="menu-item" role="menuitem" href="@($"{ApiBaseUrl}api/cvs/{item.CvId}/file")"
+                                               target="_blank" rel="noopener" @onclick="() => openMenu = null">Xem file gốc</a>
+                                        }
                                     }
                                     <button type="button" class="menu-item danger" role="menuitem"
                                             @onclick="async () => { openMenu = null; await OnRemove.InvokeAsync(item); }">Xóa khỏi danh sách</button>
@@ -102,24 +151,47 @@
     [Parameter] public EventCallback<(UploadItem Item, bool Selected)> OnToggle { get; set; }
     [Parameter] public EventCallback<bool> OnToggleAll { get; set; }
     [Parameter] public string? ApiBaseUrl { get; set; }   // mở file gốc (A6): {ApiBaseUrl}api/cvs/{cvId}/file
+    /// <summary>B38: mở hộp "Chữ đã đọc". Kèm id của nút đã bấm để trả focus về đó khi đóng hộp.</summary>
+    [Parameter] public EventCallback<(UploadItem Item, string ReturnFocusId)> OnViewText { get; set; }
+    /// <summary>B36: chế độ Ẩn danh đang bật (hoặc chưa đọc được lựa chọn).</summary>
+    [Parameter] public bool Anonymous { get; set; }
 
     private IEnumerable<UploadItem> SelectableItems => Items.Where(i => i.CanAnalyze);
     private bool AllSelected => SelectableItems.Any() && SelectableItems.All(i => i.Selected);
 
     private static string? RowClass(UploadItem item) => item.State switch
     {
+        UploadItemState.Rejected when item.IsDuplicate => "is-error is-duplicate",
         UploadItemState.Invalid => "is-error is-invalid",
         UploadItemState.Rejected => "is-error is-rejected",
+        UploadItemState.Existing when item.NeedsTextReview => "is-existing needs-review",
         UploadItemState.Existing => "is-existing",
+        _ when item.NeedsTextReview => "needs-review",
         _ => null
     };
 
+    private static string TypeClass(UploadItem item) => item.Extension switch
+    {
+        "PDF" => "pdf",
+        "PNG" or "JPG" or "JPEG" => "image",
+        _ => "other"
+    };
+
     // Dòng phụ dưới tên file (Figma: chữ 13px dưới tên đậm 15px)
-    private static string SubLine(UploadItem item) => item.State switch
+    private static string SubLine(UploadItem item, string? message) => item.State switch
     {
         UploadItemState.Uploading => $"{item.Extension} • đang gửi lên máy chủ...",
-        UploadItemState.Uploaded => $"{item.Extension} • sẵn sàng phân tích",
-        UploadItemState.Existing => $"{item.Message ?? "CV đã có trong hệ thống."} Vẫn chọn được để phân tích.",
-        _ => item.Message ?? item.Extension
+        UploadItemState.Uploaded => $"{item.Extension} • đã lưu lên máy chủ",
+        UploadItemState.Existing => $"{message ?? "CV đã có trong hệ thống."} Vẫn chọn được để phân tích.",
+        _ => message ?? item.Extension
+    };
+
+    private static RenderFragment StatusIcon(TextTone tone) => tone switch
+    {
+        TextTone.Reading => @<span class="ts-icon ts-spin" aria-hidden="true"></span>,
+        TextTone.Good => @<svg class="ts-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></svg>,
+        TextTone.Review => @<svg class="ts-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9.5v4" /><path d="M12 17h.01" /></svg>,
+        TextTone.Failed => @<svg class="ts-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6M15 9l-6 6" /></svg>,
+        _ => @<svg class="ts-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
     };
 }

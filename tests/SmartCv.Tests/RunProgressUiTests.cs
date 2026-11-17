@@ -237,9 +237,14 @@ public class RunProgressUiTests
         public List<UploadItem> Items => (List<UploadItem>)Frames()
             .First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "Items").AttributeValue;
 
-        public Task ChangeJobAsync(string value) => Dispatcher.InvokeAsync(() => DispatchEventAsync(
-            Frames().First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onchange").AttributeEventHandlerId,
-            null, new ChangeEventArgs { Value = value }));
+        // B38: ô chọn nguồn CV / xác nhận đồng ý đứng trước ô chọn công việc → tìm ô công việc theo id
+        public Task ChangeJobAsync(string value) => Dispatcher.InvokeAsync(() =>
+        {
+            var frames = Frames();
+            var index = frames.FindIndex(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "id" && Equals(f.AttributeValue, "job"));
+            return DispatchEventAsync(frames.Skip(index).First(f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "onchange").AttributeEventHandlerId,
+                null, new ChangeEventArgs { Value = value });
+        });
 
         /// <summary>Bấm nút có chữ cho trước; trả Task của handler (để test bấm lặp khi request đang chạy).</summary>
         public Task<Task> ClickAsync(string text) => Dispatcher.InvokeAsync<Task>(() =>

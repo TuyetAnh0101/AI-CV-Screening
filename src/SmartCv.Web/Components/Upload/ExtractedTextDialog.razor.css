@@ -1,0 +1,285 @@
+/* B38: hộp "Chữ đã đọc". <dialog> gốc (top layer) nên không cần z-index; luôn nằm trong khung nhìn, cuộn bên trong. */
+.xt-dialog {
+    width: min(880px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--sc-line-200);
+    border-radius: var(--sc-radius-section);
+    background: var(--sc-surface-0);
+    color: var(--text-main);
+    box-shadow: 0 28px 80px -12px rgba(10, 46, 45, .38);
+    overflow: hidden;
+}
+.xt-dialog::backdrop { background: rgba(10, 46, 45, .52); backdrop-filter: blur(3px); }
+.xt-dialog[open] { animation: xt-in .18s ease-out; }
+@keyframes xt-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+
+.xt-frame {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 34px);
+}
+
+/* ---------- Đầu hộp ---------- */
+.xt-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--sc-line-200);
+}
+.xt-head-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--sc-brand-50);
+    color: var(--brand);
+}
+.xt-head-text { flex: 1; min-width: 0; }
+.xt-kicker {
+    margin: 0 0 2px;
+    color: var(--brand);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+.xt-head h2 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.3; }
+.xt-file {
+    margin: 2px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.xt-close {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: -6px -8px 0 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--sc-ink-500);
+}
+.xt-close:hover { background: var(--sc-surface-100); color: var(--text-main); }
+
+/* ---------- Thân hộp ---------- */
+.xt-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 24px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.xt-loading { display: flex; align-items: center; gap: 10px; color: var(--sc-ink-700); }
+.xt-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid var(--sc-brand-100);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: xt-spin .9s linear infinite;
+}
+@keyframes xt-spin { to { transform: rotate(360deg); } }
+.xt-skeleton { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.xt-skeleton span {
+    height: 64px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--sc-surface-50), var(--sc-surface-100), var(--sc-surface-50));
+    background-size: 200% 100%;
+    animation: xt-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes xt-shimmer { to { background-position: -200% 0; } }
+
+/* Trạng thái: đang đọc / lỗi */
+.xt-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--sc-line-200);
+    border-radius: 12px;
+    background: var(--sc-surface-50);
+}
+.xt-state p { margin: 0; color: var(--sc-ink-700); }
+.xt-state.is-info { border-color: #bae6fd; background: #f0f9ff; }
+.xt-state.is-info strong { color: #075985; }
+.xt-state.is-error { border-color: #fecaca; background: #fef2f2; }
+.xt-state.is-error strong { color: #991b1b; }
+.xt-retry { margin-top: 6px; min-width: 0; height: 40px; }
+
+/* Cảnh báo vàng hổ phách "có thể đọc sai" */
+.xt-warn {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid #fcd34d;
+    border-radius: 12px;
+    background: #fffbeb;
+    color: #78350f;
+}
+.xt-warn-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #fde68a;
+    font-size: 15px;
+}
+.xt-warn strong { display: block; color: #78350f; }
+.xt-warn ul { margin: 6px 0; padding-left: 18px; }
+.xt-warn li + li { margin-top: 2px; }
+.xt-warn p { margin: 0; font-size: 13px; }
+
+.xt-ok {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    background: #f0fdf4;
+    color: #166534;
+}
+.xt-ok svg { flex: 0 0 auto; margin-top: 2px; }
+
+/* 5 ô chỉ số */
+.xt-metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+.xt-metrics > div {
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--sc-line-200);
+    border-radius: 12px;
+    background: var(--sc-surface-50);
+}
+.xt-metrics dt {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.xt-metrics dd {
+    margin: 4px 0 0;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+}
+.xt-metrics dd.is-text { font-size: 14px; line-height: 20px; }
+.xt-metrics .is-low { border-color: #fcd34d; background: #fffbeb; }
+.xt-metrics .is-low dd { color: #92400e; }
+.xt-metrics .is-good { border-color: #bbf7d0; background: #f0fdf4; }
+.xt-metrics .is-good dd { color: #166534; }
+.xt-level-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    vertical-align: 1px;
+}
+
+.xt-note { margin: 0; color: var(--text-muted); }
+
+/* Ẩn danh: che toàn văn */
+.xt-masked {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border: 1px dashed var(--sc-line-300);
+    border-radius: 12px;
+    background: var(--sc-surface-50);
+}
+.xt-masked p { margin: 0; font-size: 13px; color: var(--sc-ink-700); }
+
+/* Toàn văn: chữ đều, giữ xuống dòng, cuộn trong khung */
+.xt-text-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; }
+.xt-text-head span:first-child { font-weight: 600; color: var(--sc-ink-700); }
+.xt-text-hint { color: var(--text-muted); }
+.xt-text {
+    max-height: min(46vh, 440px);
+    margin: 0;
+    padding: 14px 16px;
+    overflow: auto;
+    border: 1px solid var(--sc-line-200);
+    border-radius: 12px;
+    background: #fbfcfc;
+    color: var(--sc-ink-900);
+    font-family: var(--sc-font-mono);
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* ---------- Chân hộp ---------- */
+.xt-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--sc-line-200);
+    background: var(--sc-surface-0);
+}
+.xt-copy-status { margin-right: auto; font-size: 13px; color: var(--sc-ink-500); }
+.xt-foot .btn { min-width: 0; min-height: 44px; }
+.xt-done { min-width: 120px !important; }
+.xt-file-link { text-decoration: none; }
+
+:is(.xt-close, .xt-foot .btn, .xt-retry, .xt-text):focus-visible {
+    outline: 3px solid var(--sc-brand-600);
+    outline-offset: 2px;
+}
+
+@media (max-width: 767.98px) {
+    .xt-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .xt-skeleton { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 575.98px) {
+    .xt-dialog {
+        width: calc(100vw - 16px);
+        max-height: calc(100dvh - 16px);
+        border-radius: 16px;
+    }
+    .xt-frame { max-height: calc(100dvh - 18px); }
+    .xt-head { padding: 16px 16px 12px; gap: 10px; }
+    .xt-head-icon { display: none; }
+    .xt-body { padding: 16px; }
+    .xt-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .xt-metrics > div:last-child { grid-column: 1 / -1; }
+    .xt-text { max-height: none; }
+    .xt-foot { padding: 12px 16px; }
+    .xt-foot .btn { flex: 1 1 auto; }
+    .xt-copy-status { flex-basis: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .xt-dialog[open] { animation: none; }
+    .xt-skeleton span { animation: none; }
+    .xt-spinner { animation-duration: 2.4s; }
+}

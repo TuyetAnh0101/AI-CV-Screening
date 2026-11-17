@@ -135,18 +135,19 @@ public class WebApiClientTests
             Size > maxAllowedSize ? throw new IOException("Supplied file exceeds the maximum") : new MemoryStream(bytes);
     }
 
-    private static (WebApplicationFactory<Program> Api, CvApiClient Client) CvClientAgainstRealApiWithSyntheticConsent()
+    private static (WebApplicationFactory<Program> Api, CvApiClient Client) CvClientAgainstRealApi()
     {
-        // API tải CV chỉ bật ở Development (A4); database InMemory (A5 tra trùng trong bảng Cvs)
+        // API tải CV chỉ bật ở Development (A4); database InMemory (A5 tra trùng trong bảng Cvs).
+        // B38: client tự gửi nguồn CV + xác nhận đồng ý (A38), không cần handler thêm đồng ý giả nữa.
         var api = TestSupport.ApiFactory();
-        return (api, new CvApiClient(A38TestData.ClientWithSyntheticConsent(api),
+        return (api, new CvApiClient(api.CreateDefaultClient(),
             Microsoft.Extensions.Options.Options.Create(new SmartCv.Core.Options.CvUploadOptions()), NullLogger<CvApiClient>.Instance));
     }
 
     [Fact]
     public async Task CvApiClient_upload_matches_A4_contract()
     {
-        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
+        var (api, client) = CvClientAgainstRealApi();
         using var _ = api;
 
         // CV 1 MB > 500 KB mặc định của Blazor: chứng minh client đã truyền maxAllowedSize = 10 MB
@@ -154,7 +155,7 @@ public class WebApiClientTests
         [
             new FakeBrowserFile("cv-mau-1.pdf", "application/pdf", TestSupport.Pdf("cv-mau-1", 1024 * 1024)),
             new FakeBrowserFile("cv-mau-2.png", "image/png", TestSupport.Png("cv-mau-2")),
-        ]);
+        ], "Email", consentConfirmed: true);
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
         Assert.Equal(2, result.Data!.TotalFiles);
@@ -167,14 +168,14 @@ public class WebApiClientTests
     public async Task CvApiClient_receives_A5_rejections_per_file()
     {
         // B5 dựa vào status, errorCode, errorMessage của từng file; HTTP vẫn 200 nên IsSuccess = true
-        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
+        var (api, client) = CvClientAgainstRealApi();
         using var _ = api;
 
         var result = await client.UploadAsync(
         [
             new FakeBrowserFile("cv.pdf", "application/pdf", TestSupport.Pdf("hop-le")),
             new FakeBrowserFile("gia-mao.pdf", "application/pdf", "Day khong phai CV"u8.ToArray()),
-        ]);
+        ], "Email", consentConfirmed: true);
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
         Assert.Equal((2, 1, 1), (result.Data!.TotalFiles, result.Data.SuccessCount, result.Data.FailedCount));
@@ -186,14 +187,14 @@ public class WebApiClientTests
     [Fact]
     public async Task CvApiClient_shows_api_message_when_too_many_files()
     {
-        var (api, client) = CvClientAgainstRealApiWithSyntheticConsent();
+        var (api, client) = CvClientAgainstRealApi();
         using var _ = api;
 
         var files = Enumerable.Range(1, 21)
             .Select(i => (IBrowserFile)new FakeBrowserFile($"cv-{i}.pdf", "application/pdf", new byte[10]))
             .ToList();
 
-        var result = await client.UploadAsync(files);
+        var result = await client.UploadAsync(files, "Email", consentConfirmed: true);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(400, result.StatusCode);
@@ -256,7 +257,7 @@ public class WebApiClientTests
             .Select(i => (IBrowserFile)new TrackedBrowserFile($"cv-{i}.pdf", TestSupport.Pdf($"cv-{i}", 64 * 1024), tracker))
             .ToList();
 
-        var result = await client.UploadAsync(files);
+        var result = await client.UploadAsync(files, "Email", consentConfirmed: true);
 
         Assert.True(result.IsSuccess, result.ErrorMessage);
         Assert.Equal(0, openedBeforeSend);        // chưa file nào mở khi bắt đầu gửi
@@ -280,7 +281,7 @@ public class WebApiClientTests
 
         // Trang Upload lọc file quá lớn trước khi gửi; nếu lọt xuống đây, việc đọc vẫn bị chặn.
         // HttpClient bọc lỗi đọc nội dung thành HttpRequestException → ApiClientBase trả kết quả lỗi, không ném ra circuit.
-        var result = await client.UploadAsync([new TrackedBrowserFile("qua-lon.pdf", new byte[2 * 1024 * 1024], tracker)]);
+        var result = await client.UploadAsync([new TrackedBrowserFile("qua-lon.pdf", new byte[2 * 1024 * 1024], tracker)], "Email", consentConfirmed: true);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(0, tracker.TotalOpened);   // bị chặn trước khi mở stream

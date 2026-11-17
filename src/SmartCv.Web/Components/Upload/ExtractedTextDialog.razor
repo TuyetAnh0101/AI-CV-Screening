@@ -1,0 +1,334 @@
+@*
+    B38: hộp "Chữ đã đọc" — chữ hệ thống đọc từ CV (A7) và chỉ số chất lượng (A42), để HR kiểm tra TRƯỚC khi chấm.
+    - Chỉ gọi GET /api/cvs/{id}/text khi hộp mở; mỗi lần mở là một component mới (@key ở trang) nên không dùng lại dữ liệu cũ.
+      Kết quả về muộn của lần tải trước (bấm "Thử lại", đóng hộp) bị bỏ nhờ CancellationToken + số phiên bản.
+    - <dialog> gốc + showModal() (module JS nhỏ cùng thư mục, Blazor không tự gọi được showModal): focus nằm trong hộp,
+      phần còn lại của trang không bấm được, Escape / bấm nền mờ để đóng, đóng xong trả focus về nút đã mở.
+    - 410 (A39 đã ẩn danh hóa), 404, mất kết nối, quá lâu: báo rõ, không hiện dữ liệu cũ, không có đường tắt vượt API.
+    - Ẩn danh (B36) đang bật: chỉ hiện chỉ số + cảnh báo (không có thông tin cá nhân), ẩn toàn văn; tắt ngay trong hộp nếu cần xem.
+    - Không ghi log nội dung CV. Tên hiển thị là tên file HR vừa chọn trên máy (không lấy tên file đã lưu của CV cũ).
+*@
+@implements IAsyncDisposable
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Extraction
+@inject CvApiClient CvApi
+@inject AnonymityState Anonymity
+@inject IJSRuntime JS
+
+<dialog class="xt-dialog" @ref="dialog" aria-labelledby="xt-title" aria-describedby="xt-desc" aria-busy="@(loading ? "true" : "false")">
+    <div class="xt-frame">
+        <header class="xt-head">
+            <span class="xt-head-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" />
+                </svg>
+            </span>
+            <div class="xt-head-text">
+                <p class="xt-kicker">Kiểm tra trước khi chấm</p>
+                <h2 id="xt-title">Chữ đã đọc</h2>
+                <p id="xt-desc" class="xt-file" title="@FileName">@(string.IsNullOrWhiteSpace(FileName) ? "CV đã chọn" : FileName)</p>
+            </div>
+            <button type="button" class="xt-close" aria-label="Đóng hộp Chữ đã đọc" @onclick="CloseAsync">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+        </header>
+
+        <div class="xt-body">
+            @if (loading)
+            {
+                <div class="xt-loading" role="status">
+                    <span class="xt-spinner" aria-hidden="true"></span>
+                    <span>Đang tải chữ đã đọc…</span>
+                </div>
+                <div class="xt-skeleton" aria-hidden="true">
+                    @for (var i = 0; i < 5; i++) { <span></span> }
+                </div>
+            }
+            else if (error is { } e)
+            {
+                <div class="xt-state is-error" role="alert">
+                    <strong>@e.Title</strong>
+                    <p>@e.Message</p>
+                    @if (e.CanRetry)
+                    {
+                        <button type="button" class="btn sc-btn-secondary xt-retry" @onclick="LoadAsync">Thử lại</button>
+                    }
+                </div>
+            }
+            else if (data is { } d)
+            {
+                var q = d.Quality;
+                @if (d.ExtractionStatus == ExtractionStatuses.Pending)
+                {
+                    <div class="xt-state is-info" role="status">
+                        <strong>Hệ thống đang đọc chữ từ file này</strong>
+                        <p>Chưa có kết quả để kiểm tra. Thử tải lại sau vài giây; trang vẫn tự cập nhật khi đọc xong.</p>
+                        <button type="button" class="btn sc-btn-secondary xt-retry" @onclick="LoadAsync">Tải lại</button>
+                    </div>
+                }
+                else if (d.ExtractionStatus == ExtractionStatuses.Failed)
+                {
+                    <div class="xt-state is-error" role="alert">
+                        <strong>Không đọc được chữ từ file này</strong>
+                        <p>AI sẽ không chấm được CV này. Hãy mở file gốc để kiểm tra, hoặc xin ứng viên bản PDF rõ hơn rồi tải lại.</p>
+                    </div>
+                }
+                else if (q is { MaybeMisread: true })
+                {
+                    <div class="xt-warn" role="alert">
+                        <span class="xt-warn-icon" aria-hidden="true">⚠</span>
+                        <div>
+                            <strong>@(q.Level == TextQualityLevels.Empty ? "Không có chữ để chấm" : "Có thể đọc sai")</strong>
+                            @if (q.Warnings.Count > 0)
+                            {
+                                <ul>
+                                    @foreach (var warning in q.Warnings) { <li>@warning</li> }
+                                </ul>
+                            }
+                            <p>AI chấm dựa trên chữ dưới đây. Nên mở file gốc để đối chiếu; bạn vẫn có thể phân tích CV này sau khi đã kiểm tra.</p>
+                        </div>
+                    </div>
+                }
+                else if (q is not null)
+                {
+                    <div class="xt-ok" role="status">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></svg>
+                        <span><strong>Chữ đọc rõ.</strong> Đủ dài và tỷ lệ chữ cái cao; vẫn nên lướt qua trước khi chấm.</span>
+                    </div>
+                }
+
+                @if (q is not null)
+                {
+                    <dl class="xt-metrics">
+                        <div><dt>Số ký tự</dt><dd>@UploadRules.CountText(q.CharCount)</dd></div>
+                        <div><dt>Số từ</dt><dd>@UploadRules.CountText(q.WordCount)</dd></div>
+                        <div><dt>Tỷ lệ chữ cái</dt><dd>@UploadRules.RatioText(q.LetterRatio)</dd></div>
+                        <div><dt>Phương pháp trích xuất</dt><dd class="is-text">@UploadRules.MethodText(d.ExtractionMethod)</dd></div>
+                        <div class="@(q.MaybeMisread ? "is-low" : "is-good")">
+                            <dt>Đánh giá</dt>
+                            <dd class="is-text"><span class="xt-level-dot" aria-hidden="true"></span>@UploadRules.LevelText(q.Level)</dd>
+                        </div>
+                    </dl>
+                }
+                else if (d.ExtractionMethod is not null)
+                {
+                    <p class="xt-note">Phương pháp trích xuất: @UploadRules.MethodText(d.ExtractionMethod)</p>
+                }
+
+                @if (d.ExtractionStatus == ExtractionStatuses.Completed)
+                {
+                    @if (Anonymity.Enabled)
+                    {
+                        <div class="xt-masked">
+                            <strong>Toàn văn CV đang được ẩn</strong>
+                            <p>Chế độ Ẩn danh đang bật nên tên, liên hệ và nội dung CV không hiển thị. Các chỉ số phía trên không chứa thông tin cá nhân.
+                               Tắt Ẩn danh để xem toàn văn (áp dụng cho cả trang Kết quả).</p>
+                            <AnonymousToggle />
+                        </div>
+                    }
+                    else if (string.IsNullOrWhiteSpace(d.Text))
+                    {
+                        <p class="xt-note">Không có chữ nào được đọc từ file này.</p>
+                    }
+                    else
+                    {
+                        <div class="xt-text-head">
+                            <span id="xt-text-label">Toàn bộ chữ đã đọc</span>
+                            <span class="xt-text-hint">Giữ nguyên xuống dòng như khi đọc</span>
+                        </div>
+                        <pre class="xt-text" @ref="textBlock" tabindex="0" aria-labelledby="xt-text-label">@d.Text</pre>
+                    }
+                }
+            }
+        </div>
+
+        <footer class="xt-foot">
+            <span class="xt-copy-status" role="status">@copyStatus</span>
+            @if (!string.IsNullOrEmpty(FileUrl) && !Anonymity.Enabled && !gone)
+            {
+                <a class="btn sc-btn-secondary xt-file-link" href="@FileUrl" target="_blank" rel="noopener">Mở file gốc</a>
+            }
+            @if (CanCopy)
+            {
+                <button type="button" class="btn sc-btn-secondary" @onclick="CopyAsync">Sao chép chữ</button>
+            }
+            <button type="button" class="btn sc-btn-primary xt-done" @onclick="CloseAsync">Đóng</button>
+        </footer>
+    </div>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public Guid CvId { get; set; }
+    /// <summary>Tên file HR đã chọn trên máy (dòng trong bảng).</summary>
+    [Parameter] public string? FileName { get; set; }
+    /// <summary>{ApiBaseUrl}api/cvs/{id}/file; null thì không có nút "Mở file gốc".</summary>
+    [Parameter] public string? FileUrl { get; set; }
+    /// <summary>Id của nút đã mở hộp, rồi id dự phòng: đóng hộp thì focus trở lại phần tử đầu tiên còn trên trang.</summary>
+    [Parameter] public IReadOnlyList<string> ReturnFocusIds { get; set; } = [];
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Kết quả cho dòng trong bảng: trạng thái + chất lượng (KHÔNG có chữ) hoặc mã lỗi HTTP (404/410).</summary>
+    [Parameter] public EventCallback<(CvTextDto? Text, int? StatusCode)> OnLoaded { get; set; }
+
+    private ElementReference dialog;
+    private ElementReference textBlock;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<ExtractedTextDialog>? reference;
+    private CancellationTokenSource? cts;
+    private int version;
+    private bool loading = true;
+    private bool disposed;
+    private bool closed;
+    private bool gone;        // 404 / 410: CV không còn hoặc đã ẩn danh hóa → không mời mở file gốc
+    private CvTextDto? data;
+    private (string Title, string Message, bool CanRetry)? error;
+    private string? copyStatus;
+
+    private bool CanCopy => !loading && error is null && !Anonymity.Enabled && !string.IsNullOrWhiteSpace(data?.Text);
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
+
+    protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Upload/ExtractedTextDialog.razor.js");
+            if (imported is null) return;   // môi trường không có JS (test)
+            if (disposed) { await imported.DisposeAsync(); return; }
+            module = imported;
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException or ObjectDisposedException) { }
+    }
+
+    private async Task LoadAsync()
+    {
+        cts?.Cancel();
+        var mine = new CancellationTokenSource();
+        cts = mine;
+        var current = ++version;
+        loading = true;
+        error = null;
+        data = null;      // không hiện dữ liệu của lần tải trước trong lúc chờ
+        copyStatus = null;
+
+        ApiResult<CvTextDto> result;
+        var timedOut = false;
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(mine.Token))
+        {
+            timeout.CancelAfter(RequestTimeout);
+            try
+            {
+                result = await CvApi.GetTextAsync(CvId, timeout.Token);
+            }
+            catch (OperationCanceledException) when (!mine.IsCancellationRequested)
+            {
+                timedOut = true;
+                result = ApiResult<CvTextDto>.Failure("Máy chủ phản hồi quá lâu.");
+            }
+            catch (OperationCanceledException)
+            {
+                return;   // đóng hộp hoặc đã bấm tải lại
+            }
+        }
+
+        if (disposed || current != version) return;   // phản hồi cũ: bỏ
+        loading = false;
+
+        if (result.IsSuccess && result.Data is { } dto && dto.CvId == CvId)
+        {
+            // Ẩn danh: không giữ chữ trong bộ nhớ của hộp. Dòng trong bảng không bao giờ nhận chữ.
+            data = Anonymity.Enabled ? WithoutText(dto) : dto;
+            await OnLoaded.InvokeAsync((WithoutText(dto), null));
+        }
+        else
+        {
+            error = result.IsSuccess
+                ? ("Chưa tải được chữ đã đọc", "Dữ liệu trả về không khớp CV đã chọn. Vui lòng thử lại.", true)
+                : UploadRules.TextLoadError(result.StatusCode, timedOut);
+            gone = result.StatusCode is 404 or 410;
+            if (gone) await OnLoaded.InvokeAsync((null, result.StatusCode));
+        }
+    }
+
+    private static CvTextDto WithoutText(CvTextDto dto) => new()
+    {
+        CvId = dto.CvId,
+        ExtractionStatus = dto.ExtractionStatus,
+        ExtractionMethod = dto.ExtractionMethod,
+        Quality = dto.Quality,
+        StatusMessage = dto.StatusMessage
+    };
+
+    private void PrivacyChanged() => _ = InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        if (Anonymity.Enabled)
+        {
+            // Bật Ẩn danh khi hộp đang mở: bỏ ngay toàn văn đã tải, không để lại trong HTML
+            if (data?.Text is not null) data = WithoutText(data);
+            copyStatus = null;
+            StateHasChanged();
+        }
+        else if (!loading && error is null && data is { Text: null, ExtractionStatus: ExtractionStatuses.Completed })
+        {
+            await LoadAsync();   // vừa tắt Ẩn danh: tải lại để xem toàn văn
+            StateHasChanged();
+        }
+        else
+        {
+            StateHasChanged();
+        }
+    });
+
+    private async Task CopyAsync()
+    {
+        if (module is null || !CanCopy) { copyStatus = "Trình duyệt chưa cho sao chép."; return; }
+        try
+        {
+            var ok = await module.InvokeAsync<bool>("copyText", textBlock);
+            copyStatus = ok ? "Đã sao chép toàn bộ chữ." : "Trình duyệt chưa cho sao chép. Hãy chọn chữ rồi nhấn Ctrl+C.";
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException or JSException)
+        {
+            copyStatus = "Trình duyệt chưa cho sao chép. Hãy chọn chữ rồi nhấn Ctrl+C.";
+        }
+    }
+
+    [JSInvokable] public Task CloseFromBrowser() => InvokeAsync(CloseAsync);
+
+    private async Task CloseAsync()
+    {
+        if (closed) return;
+        closed = true;
+        cts?.Cancel();
+        await CloseDialogAsync();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task CloseDialogAsync()
+    {
+        if (module is null) return;
+        try { await module.InvokeVoidAsync("close", dialog, ReturnFocusIds); }
+        catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException or ObjectDisposedException or JSException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (disposed) return;
+        disposed = true;
+        Anonymity.Changed -= PrivacyChanged;
+        cts?.Cancel();
+        if (!closed) await CloseDialogAsync();   // trang đóng hộp (ví dụ bấm Hủy): vẫn trả focus
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException or ObjectDisposedException) { }
+        }
+        reference?.Dispose();
+    }
+}

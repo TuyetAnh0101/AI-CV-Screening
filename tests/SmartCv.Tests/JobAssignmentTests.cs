@@ -129,9 +129,9 @@ public class JobAssignmentTests
         var jobs = await new JobApiClient(http, NullLogger<JobApiClient>.Instance).GetJobsAsync();
         Assert.True(jobs.IsSuccess);
         var job = jobs.Data!.First(j => j.IsActive);
-        using var uploadHttp = A38TestData.ClientWithSyntheticConsent(api);
-        var upload = new CvApiClient(uploadHttp, Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance);
-        var uploaded = await upload.UploadAsync([new BrowserFile(TestSupport.Pdf("B4-isolated"))]);
+        // B38: client tự gửi nguồn CV + xác nhận đồng ý (A38), không cần handler thêm đồng ý giả.
+        var upload = new CvApiClient(http, Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance);
+        var uploaded = await upload.UploadAsync([new BrowserFile(TestSupport.Pdf("B4-isolated"))], "Email", consentConfirmed: true);
         Assert.True(uploaded.IsSuccess);
         var cv = Assert.Single(uploaded.Data!.Files);
         Assert.Equal(CvUploadStatuses.Accepted, cv.Status);
