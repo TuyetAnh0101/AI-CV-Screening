@@ -24,6 +24,9 @@ public partial class RankingTable
     private string? ReasonOf(RankingItemDto row) => overrides.TryGetValue(row.ApplicationId, out var value) ? value.RejectReason : row.RejectReason;
     private Guid VersionOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.StageVersion ?? row.StageVersion;
     private bool flaggedOnly;
+    [Parameter] public bool? FlaggedFilter { get; set; }
+    [Parameter] public EventCallback<bool> OnFlaggedFilterChanged { get; set; }
+    private bool? lastFlaggedFilter;
     [Parameter] public int FlaggedCount { get; set; }
     private IEnumerable<RankingItemDto> FlagFilteredItems => Items.Where(r => !flaggedOnly || r.ReviewFlags.Count > 0);
     private IEnumerable<RankingItemDto> StageFilteredItems => FlagFilteredItems.Where(r => stageFilter is null || StageOf(r) == stageFilter);
@@ -40,6 +43,9 @@ public partial class RankingTable
 
     protected override void OnParametersSet()
     {
+        // Only a changed URL intent applies the flag. A poll or parent render preserves the HR's current choice.
+        if (FlaggedFilter is { } requested && lastFlaggedFilter != requested)
+        { flaggedOnly = requested; lastFlaggedFilter = requested; selected.Clear(); }
         if (ReferenceEquals(lastItems, Items)) return;
         lastItems = Items;
         overrides.Clear();
@@ -57,6 +63,8 @@ public partial class RankingTable
     }
 
     private void ClearSelection() => selected.Clear();
+    private async Task ToggleFlaggedAsync()
+    { flaggedOnly = !flaggedOnly; selected.Clear(); await OnFlaggedFilterChanged.InvokeAsync(flaggedOnly); }
     protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
     private string NameOf(RankingItemDto row) => Anonymity.Name(row.CandidateName, row.Rank, row.ApplicationId);
     private void PrivacyChanged() => _ = InvokeAsync(() => { search = ""; message = null; if (Anonymity.Enabled && sort == RankingSort.NameAsc) sort = RankingSort.FinalDesc; selected.Clear(); StateHasChanged(); });

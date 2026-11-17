@@ -142,7 +142,7 @@
                 </div>
             </section>
 
-            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" />
+            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" />
             break;
 
         case ViewState.NoRuns:
@@ -207,6 +207,10 @@
 
     [SupplyParameterFromQuery(Name = "runId")] public string? RunIdQuery { get; set; }
     [SupplyParameterFromQuery(Name = "jobId")] public string? JobIdQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "filter")] public string? FilterQuery { get; set; }
+    private bool FlaggedQuery => string.Equals(FilterQuery, "flagged", StringComparison.OrdinalIgnoreCase);
+    private void FlaggedChanged(bool value) => Nav.NavigateTo(Nav.GetUriWithQueryParameter("filter", value ? "flagged" : null), replace: true);
+    private string FilteredResultsUrl(int runId, int? jobId = null) => RankingView.ResultsUrl(runId, jobId) + (FlaggedQuery ? "&filter=flagged" : "");
 
     private ViewState state = ViewState.Loading;
     private string? problemMessage;
@@ -340,13 +344,13 @@
 
     // ---------------- Đổi bộ lọc = đổi địa chỉ ----------------
 
-    private void GoToRun(int runId) { if (!stageInteractionBusy) Nav.NavigateTo(RankingView.ResultsUrl(runId)); }
+    private void GoToRun(int runId) { if (!stageInteractionBusy) Nav.NavigateTo(FilteredResultsUrl(runId)); }
 
     private void GoToJob(int jobId)
     {
         if (stageInteractionBusy) return;
         // Lượt đang chọn (kể cả khi địa chỉ chưa có runId vì đang xem lượt mới nhất)
-        if (selectedRunId is { } runId) Nav.NavigateTo(RankingView.ResultsUrl(runId, jobId));
+        if (selectedRunId is { } runId) Nav.NavigateTo(FilteredResultsUrl(runId, jobId));
     }
 
     // ---------------- Tải dữ liệu ----------------
