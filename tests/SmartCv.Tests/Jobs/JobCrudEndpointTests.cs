@@ -114,9 +114,9 @@ public class JobCrudEndpointTests
     [InlineData("{\"title\":\"A\",\"headcount\":1.5}", "headcount")]
     [InlineData("{\"title\":\"A\",\"closingDate\":\"2026-02-29\"}", "closingDate")]
     [InlineData("{\"title\":\"A\",\"closingDate\":\"2026-11-17T00:00:00Z\"}", "closingDate")]
-    [InlineData("{\"title\":\"A\",\"skills\":[]}", "body")]
+    [InlineData("{\"title\":\"A\",\"skillz\":[]}", "body")]
     [InlineData("{\"title\":\"A\",\"isActive\":false}", "body")]
-    public async Task Malformed_null_overflow_dates_and_A22_payload_have_Vietnamese_400(string json, string field)
+    public async Task Malformed_null_overflow_dates_and_unknown_payload_have_Vietnamese_400(string json, string field)
     {
         using var factory = Factory(); using var client = factory.CreateClient();
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

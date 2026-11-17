@@ -19,7 +19,7 @@ public static class JobEndpoints
 {
     private const long MaxBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web) { NumberHandling = JsonNumberHandling.Strict };
-    private static readonly string[] RequestFields = ["title", "description", "minGpa", "minYearsExperience", "headcount", "closingDate"];
+    private static readonly string[] RequestFields = ["title", "description", "minGpa", "minYearsExperience", "headcount", "closingDate", "skills"];
 
     public static WebApplication MapJobEndpoints(this WebApplication app)
     {
@@ -130,14 +130,32 @@ public static class JobEndpoints
         if (problem is not null) return problem;
         var now = clock.GetUtcNow().UtcDateTime;
         var errors = JobRules.Validate(request!, VietnamTime.Today(now), true);
+        var skills = new List<JobSkillInput>();
+        foreach (var (input, index) in (request!.Skills ?? []).Select((s, i) => (s, i)))
+        {
+            var (normalized, skillErrors) = JobSkillRules.ValidateNew(input);
+            foreach (var (field, messages) in skillErrors) errors[$"skills[{index}].{field}"] = messages;
+            if (normalized is not null) skills.Add(normalized);
+        }
+        if (skills.GroupBy(s => s.SkillCode, StringComparer.Ordinal).Any(g => g.Count() > 1))
+            errors["skills"] = ["Mã kỹ năng bị lặp sau khi chuẩn hóa."];
         if (errors.Count > 0) return Invalid(errors);
         var title = JobRules.NormalizeTitle(request!.Title);
         if (await db.Jobs.AsNoTracking().AnyAsync(j => j.Title == title, ct)) return DuplicateTitle();
         var job = new Job { IsActive = true, CreatedAt = now };
         Apply(job, request);
+        foreach (var skill in skills) job.Skills.Add(JobSkillEndpoints.Entity(skill));
         db.Jobs.Add(job);
+        // One relational SaveChanges transaction commits the complete Job/skills/aliases graph,
+        // or rolls it all back, including failures after the first INSERT.
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException ex) when (TitleConflict(ex)) { return DuplicateTitle(); }
+        catch (DbUpdateException ex) when (JobSkillEndpoints.AliasConflict(ex))
+        {
+            return TypedResults.Problem(statusCode: 409, title: "Trùng từ khóa kỹ năng",
+                detail: "Có từ khóa tương đương theo quy tắc so sánh của database. Job chưa được tạo.",
+                extensions: new Dictionary<string, object?> { ["errors"] = new Dictionary<string, string[]> { ["skills"] = ["Kiểm tra từ khóa trùng trong các kỹ năng."] } });
+        }
         logger.LogInformation("Đã tạo vị trí tuyển dụng {JobId}", job.JobId);
         return TypedResults.Created($"/api/jobs/{job.JobId}", await LoadAsync(db, job.JobId, clock, ct));
     }
@@ -205,6 +223,7 @@ public static class JobEndpoints
         catch (JsonException ex)
         {
             var field = RequestFields.FirstOrDefault(f => string.Equals(ex.Path, "$." + f, StringComparison.OrdinalIgnoreCase)) ?? "body";
+            if (ex.Path?.StartsWith("$.skills[", StringComparison.OrdinalIgnoreCase) == true) field = ex.Path[2..];
             return (null, Invalid(new() { [field] = ["JSON không hợp lệ. Kiểm tra kiểu dữ liệu, giới hạn số và định dạng ngày yyyy-MM-dd."] }));
         }
         catch (BadHttpRequestException ex) when (ex.StatusCode == 413)

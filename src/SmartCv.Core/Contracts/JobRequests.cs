@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace SmartCv.Core.Contracts;
 
-/// <summary>A21 general Job information. Skills/aliases belong to A22 and are not accepted here.</summary>
+/// <summary>General Job information. Skills/aliases are accepted on POST only; PUT leaves them intact.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class JobUpsertRequest
 {
@@ -12,4 +12,5 @@ public sealed class JobUpsertRequest
     public decimal MinYearsExperience { get; set; }
     public int? Headcount { get; set; }
     public DateOnly? ClosingDate { get; set; }
+    public List<JobSkillInput>? Skills { get; set; }
 }
