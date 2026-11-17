@@ -1,0 +1,25 @@
+<section class="reasons" aria-labelledby="reasons-title">
+    <header><div><h2 id="reasons-title">Lý do loại hồ sơ</h2><p>Phân bố theo quyết định hiện tại của HR.</p></div><span class="total">@DashboardText.Number(Total) hồ sơ</span></header>
+    @if (Total == 0 || Reasons.Count == 0)
+    { <div class="chart-empty"><span aria-hidden="true">≡</span><p>@(Total == 0 ? "Chưa có hồ sơ nào bị loại." : "Chưa có dữ liệu phân bố lý do loại.")</p></div> }
+    else
+    {
+        <ul>
+            @foreach (var reason in Reasons)
+            {
+                <li class="@(reason.IsProfessional ? "professional" : "other")">
+                    <div class="reason-head"><span>@StageText.Reason(reason.Reason)</span><span class="count"><b>@DashboardText.Number(reason.Count)</b><small>@DashboardText.Percent(reason.Percent)</small></span></div>
+                    <div class="track" aria-hidden="true"><span class="bar" style="width:@DashboardText.Width(reason.Count, Maximum)%"></span></div>
+                    <span class="visually-hidden">@(reason.IsProfessional ? "Lý do chuyên môn" : "Lý do khác")</span>
+                </li>
+            }
+        </ul>
+    }
+    <footer><span><i class="professional" aria-hidden="true"></i>Lý do chuyên môn</span><span><i class="other" aria-hidden="true"></i>Lý do khác</span></footer>
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<ReasonCountDto> Reasons { get; set; } = [];
+    [Parameter] public int Total { get; set; }
+    private int Maximum => Reasons.Count == 0 ? 0 : Reasons.Max(r => r.Count);
+}

@@ -1,0 +1,27 @@
+<section class="funnel" aria-labelledby="funnel-title">
+    <header><div><h2 id="funnel-title">Phễu tuyển dụng</h2><p>Số hồ sơ đã từng tới từng giai đoạn.</p></div><span class="total">@DashboardText.Number(Total) hồ sơ</span></header>
+    @if (Total == 0 || Steps.Count == 0)
+    { <div class="chart-empty"><span aria-hidden="true">↗</span><p>Chưa có hồ sơ nào trong khoảng đã chọn.</p></div> }
+    else
+    {
+        <ol class="steps">
+            @foreach (var step in Steps)
+            {
+                <li class="step @StageText.Css(step.Stage)">
+                    <div class="step-head"><span class="stage"><i aria-hidden="true"></i>@StageText.Name(step.Stage)</span><span class="reached"><b>@DashboardText.Number(step.Reached)</b> đã tới</span></div>
+                    <div class="track" aria-hidden="true"><span class="bar" style="width:@DashboardText.Width(step.Reached, First)%"></span></div>
+                    <div class="step-foot"><span><b>@DashboardText.Number(step.Current)</b> đang ở</span><span>@(step.Stage == "New" ? "Điểm bắt đầu" : $"Chuyển từ bước trước: {DashboardText.Percent(step.ConversionPercent)}")</span></div>
+                </li>
+            }
+        </ol>
+    }
+    <footer><span><i class="rejected" aria-hidden="true"></i>Loại <b>@DashboardText.Number(Rejected)</b></span><span><i class="hold" aria-hidden="true"></i>Dự phòng <b>@DashboardText.Number(OnHold)</b></span></footer>
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<FunnelStepDto> Steps { get; set; } = [];
+    [Parameter] public int Total { get; set; }
+    [Parameter] public int Rejected { get; set; }
+    [Parameter] public int OnHold { get; set; }
+    private int First => Steps.FirstOrDefault()?.Reached ?? 0;
+}

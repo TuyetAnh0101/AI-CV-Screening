@@ -1,98 +1,158 @@
 @page "/"
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.WebUtilities
+@using SmartCv.Web.Components.Dashboard
+@implements IDisposable
+@inject DashboardApiClient DashboardApi
 @inject JobApiClient JobApi
+@inject NavigationManager Nav
 
-<PageHeader Title="Trang chủ" Subtitle="Tải CV, chấm điểm bằng keyword và Gemini, xem bảng xếp hạng theo từng vị trí." />
+<PageTitle>Tổng quan tuyển dụng · SCApp</PageTitle>
 
-@* 3 lối tắt tới 3 trang chính của giai đoạn 1 *@
-<div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <a class="quick-card" href="upload">
-            <h2>1. Tải CV</h2>
-            <p>Kéo thả nhiều file PDF, PNG, JPG; chọn vị trí ứng tuyển; bắt đầu chấm.</p>
-        </a>
-    </div>
-    <div class="col-md-4">
-        <a class="quick-card" href="results">
-            <h2>2. Kết quả</h2>
-            <p>Bảng xếp hạng theo job, màu theo mức đánh giá, xem chi tiết từng CV.</p>
-        </a>
-    </div>
-    <div class="col-md-4">
-        <a class="quick-card" href="prompts">
-            <h2>3. System prompt</h2>
-            <p>Sửa prompt, lưu phiên bản, so sánh tỷ lệ đúng với nhãn của HR.</p>
-        </a>
-    </div>
+<div class="dashboard" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()" aria-busy="@(workspace.Loading ? "true" : "false")">
+    <header class="dashboard-heading">
+        <div><p class="eyebrow">Không gian tuyển dụng</p><h1>Tổng quan tuyển dụng</h1><p>Theo dõi hồ sơ, tiến độ và những quyết định cần ưu tiên.</p></div>
+        <div class="heading-actions"><button type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button><a href="/upload" class="btn sc-btn-primary"><span aria-hidden="true">+</span> Tải CV lên</a></div>
+    </header>
+    <section class="dashboard-filters" aria-label="Bộ lọc Tổng quan">
+        <div class="filter-fields">
+            <label class="job-field">Vị trí tuyển dụng<select id="dashboard-job" value="@jobInput" @onchange="ChangeJobAsync" disabled="@(workspace.JobsLoading && workspace.Jobs.Count == 0)" aria-describedby="dashboard-filter-help dashboard-filter-error">
+                <option value="">Tất cả vị trí</option>
+                @if (!string.IsNullOrEmpty(jobInput) && !workspace.Jobs.Any(j => j.JobId.ToString(System.Globalization.CultureInfo.InvariantCulture) == jobInput)) { <option value="@jobInput">Vị trí trên địa chỉ · chưa xác minh</option> }
+                @foreach (var job in workspace.Jobs) { <option value="@job.JobId">@job.Title@(job.IsActive ? "" : " · Ngừng tuyển")</option> }
+            </select></label>
+            <label>Từ ngày<input id="dashboard-from" type="date" value="@fromInput" @onchange="ChangeFromAsync" aria-describedby="dashboard-filter-help dashboard-filter-error" /></label>
+            <label>Đến ngày<input id="dashboard-to" type="date" value="@toInput" @onchange="ChangeToAsync" aria-describedby="dashboard-filter-help dashboard-filter-error" /></label>
+            <button type="button" class="clear-filters" @onclick="ClearAsync">Xóa bộ lọc</button>
+        </div>
+        <div class="filter-footer"><p id="dashboard-filter-help">Ngày Việt Nam (UTC+7), tính cả ngày bắt đầu và kết thúc.</p><div class="quick-ranges" role="group" aria-label="Khoảng ngày nhanh">
+            <button type="button" class="@(QuickSelected(7) ? "selected" : "")" aria-pressed="@QuickSelected(7).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(7)">7 ngày</button>
+            <button type="button" class="@(QuickSelected(30) ? "selected" : "")" aria-pressed="@QuickSelected(30).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(30)">30 ngày</button>
+            <button type="button" class="@(QuickSelected(null) ? "selected" : "")" aria-pressed="@QuickSelected(null).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(null)">Tất cả</button>
+        </div></div>
+        <div id="dashboard-filter-error">@if (validationError is not null) { <p class="filter-error" role="alert">@validationError Chưa áp dụng bộ lọc này.</p> }</div>
+        @if (workspace.JobsError is not null) { <p class="jobs-warning" role="status">@workspace.JobsError <button type="button" disabled="@workspace.JobsLoading" @onclick="ReloadJobsAsync">Tải lại vị trí</button></p> }
+    </section>
+    @if (workspace.Error is not null && validationError is null)
+    {
+        <section class="dashboard-error" role="alert"><span class="state-symbol" aria-hidden="true">!</span><div><h2>Chưa tải được Tổng quan</h2><p>@workspace.Error</p>@if (workspace.ShowData) { <p>Đang giữ số liệu hợp lệ của lần tải gần nhất, theo cùng bộ lọc.</p> }</div><button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync">Thử lại</button></section>
+    }
+    @if (workspace.Loading && !workspace.ShowData)
+    {
+        <div class="dashboard-skeleton" role="status"><span class="visually-hidden">Đang tải số liệu Tổng quan...</span><div class="kpi-grid" aria-hidden="true">@for (var i = 0; i < 5; i++) { <div class="skeleton-kpi"><i></i><i></i><i></i></div> }</div><div class="panel-grid" aria-hidden="true">@for (var i = 0; i < 4; i++) { <div class="skeleton-panel"><i></i><i></i><i></i><i></i></div> }</div></div>
+    }
+    @if (workspace.ShowData && validationError is null && workspace.Data is { } data)
+    {
+        <div class="scope-line"><p><span class="scope-dot" aria-hidden="true"></span>@ScopeName · @DashboardText.Period(workspace.Filter!)</p>@if (workspace.Loading) { <span role="status">Đang làm mới số liệu…</span> }</div>
+        <section class="kpi-grid @(NeedsWideKpis(data) ? "large-values" : "")" aria-label="Năm số liệu chính">
+            <article class="kpi" data-kpi="cvs"><div class="kpi-head"><h2>Tổng CV</h2><span class="kpi-symbol" aria-hidden="true">CV</span></div><strong class="kpi-number">@DashboardText.Number(data.TotalCvs)</strong><p>@DashboardText.Number(data.TotalApplications) hồ sơ ứng tuyển</p></article>
+            <article class="kpi @(data.FailedCvs > 0 ? "has-error" : "")" data-kpi="failed"><div class="kpi-head"><h2>CV đọc lỗi</h2><span class="kpi-symbol" aria-hidden="true">!</span></div><strong class="kpi-number">@DashboardText.Number(data.FailedCvs)</strong><p>@(data.FailedCvs > 0 ? "Lỗi trích xuất nội dung CV" : "Không có lỗi trích xuất")</p></article>
+            <a class="kpi kpi-link" href="/jobs" data-kpi="jobs"><div class="kpi-head"><h2>Vị trí đang tuyển</h2><span class="kpi-symbol" aria-hidden="true">▤</span></div><strong class="kpi-number">@DashboardText.Number(data.ActiveJobs)</strong><p>Hiện tại · không lọc ngày <span aria-hidden="true">↗</span></p></a>
+            <a class="kpi kpi-link ai-kpi" href="/runs?status=Running" data-kpi="running"><div class="kpi-head"><h2>Lượt đang chấm</h2><span class="kpi-symbol" aria-hidden="true">↻</span></div><strong class="kpi-number">@DashboardText.Number(data.RunningRuns)</strong><p>Đang chờ hoặc chấm · toàn hệ thống <span aria-hidden="true">↗</span></p></a>
+            <a class="kpi kpi-link flag-kpi @(data.FlaggedUnresolved > 0 ? "has-flags" : "")" href="@DashboardText.FlaggedLink(data)" data-kpi="flagged"><div class="kpi-head"><h2>Cần xem kỹ</h2><span class="kpi-symbol" aria-hidden="true">⚑</span></div><strong class="kpi-number">@DashboardText.Number(data.FlaggedUnresolved)</strong><p>Hồ sơ Mới / Đang xem chưa xử lý <span aria-hidden="true">↗</span></p></a>
+        </section>
+        <p class="cohort-note">@(workspace.Filter!.JobId is null ? "Tổng CV theo ngày tải lên; hồ sơ và các phân tích theo ngày ứng tuyển. Một CV có thể ứng tuyển nhiều vị trí." : "Tổng CV là số CV khác nhau trong các hồ sơ của vị trí và khoảng ngày đã chọn.")</p>
+        @if (data.IsEmpty && !workspace.Filter.HasAny)
+        {
+            <section class="onboarding" aria-labelledby="onboarding-title"><span class="onboarding-symbol" aria-hidden="true">+</span><div><p class="eyebrow">Bắt đầu đợt tuyển dụng đầu tiên</p><h2 id="onboarding-title">Chưa có hồ sơ nào</h2><p>Tải CV lên và gán vào vị trí để bắt đầu theo dõi quá trình tuyển dụng.</p><div class="onboarding-actions"><a class="btn sc-btn-primary" href="/upload">Tải CV lên</a>@if (workspace.JobsLoaded && workspace.Jobs.Count == 0) { <a href="/jobs/new">Tạo vị trí tuyển dụng <span aria-hidden="true">↗</span></a> }</div></div></section>
+        }
+        else
+        {
+            @if (data.IsEmpty) { <div class="filter-empty" role="status"><div><strong>Không có hồ sơ trong khoảng đã chọn</strong><p>Thử khoảng ngày khác. Số vị trí và lượt đang chấm vẫn phản ánh trạng thái hiện tại.</p></div><button type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Xóa bộ lọc</button></div> }
+            <div class="panel-grid">
+                <div class="dashboard-panel"><StageFunnel Steps="data.Funnel" Total="data.TotalApplications" Rejected="data.RejectedCount" OnHold="data.OnHoldCount" /></div>
+                <div class="dashboard-panel"><RejectReasonChart Reasons="data.RejectReasons" Total="data.RejectedCount" /></div>
+                <section class="dashboard-panel screening-time" aria-labelledby="screening-title"><header><h2 id="screening-title">Thời gian sàng lọc</h2><p>Từ lúc hồ sơ vào vị trí tới quyết định đầu tiên của HR.</p></header>
+                    <div class="median-stat"><span>Thường mất – trung vị</span><strong>@DashboardText.Hours(data.ScreeningTime.Count > 0 ? data.ScreeningTime.MedianHours : null)</strong></div>
+                    <div class="time-secondary"><div><span>Trung bình</span><strong>@DashboardText.Hours(data.ScreeningTime.Count > 0 ? data.ScreeningTime.AverageHours : null)</strong></div><div><span>Số hồ sơ đã có quyết định</span><strong>@DashboardText.Number(data.ScreeningTime.Count)</strong></div></div>
+                    <p class="time-note">@(data.ScreeningTime.Count == 0 || data.ScreeningTime.MedianHours is null ? "Chưa đủ dữ liệu. Chỉ tính hồ sơ đã có quyết định đầu tiên của HR." : "Trung vị ít bị ảnh hưởng bởi một vài hồ sơ chờ rất lâu, giúp bạn đọc nhịp sàng lọc thường gặp.")</p>
+                </section>
+                <section class="dashboard-panel recent-runs" aria-labelledby="recent-runs-title"><header><div><h2 id="recent-runs-title">5 lượt chấm gần nhất</h2><p>Theo vị trí đang chọn · không lọc theo ngày.</p></div><a href="/runs">Xem lịch sử <span aria-hidden="true">↗</span></a></header>
+                    @if (data.RecentRuns.Count == 0) { <div class="runs-empty"><span aria-hidden="true">↻</span><strong>Chưa có lượt chấm nào</strong><p>Khi bắt đầu phân tích hồ sơ, lượt chấm sẽ xuất hiện ở đây.</p></div> }
+                    else
+                    {
+                        <ol class="run-list">@foreach (var run in data.RecentRuns.Take(5))
+                        {
+                            var status = StatusText.ForRun(run.Status);
+                            <li><a href="@($"/runs/{run.RunId}")"><span class="run-id">#@run.RunId</span><div class="run-main"><div class="run-title"><strong>@DashboardText.RunType(run.RunType)</strong><StatusBadge Text="@status.Text" Variant="status.Variant" /></div><p class="run-jobs">@(run.Jobs.Count == 0 ? "Chưa có vị trí" : string.Join(" · ", run.Jobs.Take(2).Select(j => j.Title)))@if (run.Jobs.Count > 2) { <span class="more-jobs" title="@string.Join(" · ", run.Jobs.Skip(2).Select(j => j.Title))"> +@(run.Jobs.Count - 2) vị trí</span> }</p><p class="run-meta">@RankingView.VnTime(run.CreatedAt) · @DashboardText.Number(run.TotalItems) hồ sơ · @DashboardText.Number(run.FailedItems) lỗi</p></div><span class="run-arrow" aria-hidden="true">↗</span></a></li>
+                        }</ol>
+                    }
+                </section>
+            </div>
+        }
+    }
+    <nav class="dashboard-shortcuts" aria-label="Lối tắt tuyển dụng"><span>Đi tới</span><a href="/upload">Tải hồ sơ lên <span aria-hidden="true">↗</span></a><a href="/results">Kết quả sàng lọc <span aria-hidden="true">↗</span></a><a href="/prompts">System Prompt <span aria-hidden="true">↗</span></a></nav>
 </div>
 
-@* Danh sách job lấy từ API: dùng để kiểm tra B2 đã gọi được API *@
-<section class="card-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 mb-0">Vị trí đang tuyển</h2>
-        <button class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync" disabled="@loading">Tải lại</button>
-    </div>
-
-    @if (loading)
-    {
-        <LoadingIndicator Text="Đang tải danh sách vị trí..." />
-    }
-    else if (error is not null)
-    {
-        <ErrorAlert Title="Không tải được danh sách vị trí" Message="@error" OnRetry="LoadAsync" />
-    }
-    else if (jobs is { Count: 0 })
-    {
-        <p class="text-secondary mb-0">Chưa có vị trí nào đang tuyển.</p>
-    }
-    else if (jobs is not null)
-    {
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Vị trí</th>
-                        <th>Kỹ năng bắt buộc</th>
-                        <th class="text-end">GPA tối thiểu</th>
-                        <th class="text-end">Kinh nghiệm tối thiểu</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var job in jobs)
-                    {
-                        <tr>
-                            <td class="fw-semibold">@job.Title</td>
-                            <td>
-                                @foreach (var skill in job.Skills.Where(s => s.SkillType == SmartCv.Core.Constants.SkillTypes.MustHave))
-                                {
-                                    <span class="badge text-bg-light border me-1">@skill.DisplayName</span>
-                                }
-                            </td>
-                            <td class="text-end">@(job.MinGpa?.ToString("0.00") ?? "Không yêu cầu")</td>
-                            <td class="text-end">@job.MinYearsExperience.ToString("0.#") năm</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-</section>
-
 @code {
-    private List<JobDto>? jobs;
-    private string? error;
-    private bool loading = true;
+    private DashboardWorkspace workspace = default!;
+    private string jobInput = "", fromInput = "", toInput = "";
+    private string? lastUri, validationError;
+    private bool disposed;
+    private static bool NeedsWideKpis(SmartCv.Core.Contracts.DashboardSummaryDto data) =>
+        data.TotalCvs >= 100_000_000 || data.FailedCvs >= 100_000_000 || data.ActiveJobs >= 100_000_000
+        || data.RunningRuns >= 100_000_000 || data.FlaggedUnresolved >= 100_000_000;
+    private string ScopeName => workspace.Filter?.JobId is { } id ? workspace.Jobs.FirstOrDefault(j => j.JobId == id)?.Title ?? $"Vị trí #{id}" : "Tất cả vị trí";
 
-    protected override Task OnInitializedAsync() => LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        loading = true;
-        error = null;
-
-        var result = await JobApi.GetJobsAsync();
-        if (result.IsSuccess) jobs = result.Data;
-        else error = result.ErrorMessage;
-
-        loading = false;
+        workspace = new(DashboardApi, JobApi);
+        Nav.LocationChanged += LocationChanged;
+        await Task.WhenAll(ReloadJobsAsync(), SynchronizeAsync());
     }
+    protected override Task OnParametersSetAsync() => SynchronizeAsync();
+
+    private void LocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        if (new Uri(args.Location).AbsolutePath.TrimEnd('/') != new Uri(Nav.BaseUri).AbsolutePath.TrimEnd('/')) return;
+        _ = InvokeAsync(() => SynchronizeAsync());
+    }
+    private async Task SynchronizeAsync(bool force = false)
+    {
+        if (disposed || (!force && lastUri == Nav.Uri)) return;
+        lastUri = Nav.Uri;
+        var raw = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        jobInput = raw.GetValueOrDefault("jobId").ToString(); fromInput = raw.GetValueOrDefault("from").ToString(); toInput = raw.GetValueOrDefault("to").ToString();
+        var (filter, error) = DashboardFilter.FromUri(Nav.Uri);
+        validationError = error;
+        if (filter is null) { workspace.Invalidate(); StateHasChanged(); return; }
+        jobInput = filter.JobId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        fromInput = filter.From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        toInput = filter.To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        var loading = workspace.LoadAsync(filter); StateHasChanged(); await loading;
+        if (!disposed) StateHasChanged();
+    }
+    private async Task ReloadJobsAsync() { await workspace.LoadJobsAsync(); if (!disposed) StateHasChanged(); }
+    private Task ChangeJobAsync(ChangeEventArgs e) { jobInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task ChangeFromAsync(ChangeEventArgs e) { fromInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task ChangeToAsync(ChangeEventArgs e) { toInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private async Task ApplyAsync()
+    {
+        var (filter, error) = DashboardFilter.Parse(jobInput, fromInput, toInput); validationError = error;
+        if (filter is null) { workspace.Invalidate(); return; }
+        await NavigateAsync(filter);
+    }
+    private async Task NavigateAsync(DashboardFilter filter)
+    {
+        if (Nav.ToAbsoluteUri(filter.Url).AbsoluteUri == Nav.Uri) await SynchronizeAsync(force: true);
+        else Nav.NavigateTo(filter.Url);
+    }
+    private Task ClearAsync() => NavigateAsync(new());
+    private async Task QuickAsync(int? days)
+    {
+        var (filter, error) = DashboardFilter.Parse(jobInput, null, null);
+        if (filter is null) { validationError = error; workspace.Invalidate(); return; }
+        await NavigateAsync(filter.Quick(days));
+    }
+    private bool QuickSelected(int? days) => validationError is null && workspace.Filter is { } filter
+        && filter.Quick(days).From == filter.From && filter.Quick(days).To == filter.To;
+    private async Task RefreshAsync()
+    {
+        if (workspace.Loading || disposed) return;
+        if (validationError is not null || workspace.Filter is null) { await ApplyAsync(); return; }
+        var loading = workspace.LoadAsync(workspace.Filter);
+        var jobs = ReloadJobsAsync(); StateHasChanged(); await Task.WhenAll(loading, jobs);
+        if (!disposed) StateHasChanged();
+    }
+    public void Dispose() { disposed = true; Nav.LocationChanged -= LocationChanged; workspace.Dispose(); }
 }

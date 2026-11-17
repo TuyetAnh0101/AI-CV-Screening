@@ -1,0 +1,24 @@
+.funnel { display:flex; flex-direction:column; min-width:0; height:100%; gap:16px; }
+header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:12px; }
+h2 { margin:0; font-size:17px; line-height:1.5; font-weight:600; }
+header p { margin:4px 0 0; font-size:12px; line-height:1.6; color:var(--sc-ink-500); }
+.total { padding:4px 9px; background:var(--sc-surface-50); border-radius:6px; font-size:12px; color:var(--sc-ink-700); white-space:nowrap; }
+.steps { display:grid; gap:16px; list-style:none; padding:0; margin:0; }
+.step { min-width:0; --stage-color:#6b8583; }
+.step-head,.step-foot { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px 12px; }
+.step-head { margin-bottom:7px; font-size:13px; }
+.stage { display:inline-flex; align-items:center; gap:8px; font-weight:500; }
+i { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--stage-color); flex-shrink:0; }
+.reached { color:var(--sc-ink-500); font-size:12px; font-variant-numeric:tabular-nums; }
+.reached b { color:var(--sc-ink-900); font-size:16px; font-weight:600; margin-right:3px; }
+.track { height:8px; border-radius:8px; background:var(--sc-surface-100); overflow:hidden; }
+.bar { display:block; height:100%; background:var(--stage-color); border-radius:8px; }
+.step-foot { margin-top:6px; font-size:12px; color:var(--sc-ink-500); line-height:1.5; font-variant-numeric:tabular-nums; }
+.step-foot b { font-weight:500; color:var(--sc-ink-700); }
+.stage-reviewing { --stage-color:#398e9b; } .stage-shortlisted { --stage-color:var(--sc-brand-700); } .stage-interview { --stage-color:#7770b8; }
+footer { display:flex; flex-wrap:wrap; gap:12px 24px; padding-top:14px; border-top:1px solid var(--sc-line-200); margin-top:auto; font-size:13px; }
+footer span { display:inline-flex; align-items:center; gap:8px; } footer b { font-weight:600; font-variant-numeric:tabular-nums; }
+.rejected { background:var(--fit-poor); } .hold { background:#a47731; }
+.chart-empty { display:grid; place-content:center; gap:8px; text-align:center; min-height:160px; flex:1; color:var(--sc-ink-500); }
+.chart-empty>span { font-size:24px; color:var(--sc-brand-700); } .chart-empty p { margin:0; font-size:13px; }
+@media(max-width:480px) { .step-foot { align-items:start; } .step-foot>span:last-child { text-align:right; max-width:60%; } }
