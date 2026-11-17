@@ -19,7 +19,7 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
         b.Property(x => x.JobId).UseIdentityColumn(1, 1);
 
         b.Property(x => x.Title).HasMaxLength(150).IsRequired();
-        b.HasAlternateKey(x => x.Title).HasName("UQ_Jobs_Title");
+        b.HasIndex(x => x.Title).IsUnique().HasDatabaseName("UQ_Jobs_Title");
 
         b.Property(x => x.Description);                    // NVARCHAR(MAX) NULL
         b.Property(x => x.MinGpa).HasPrecision(3, 2);
