@@ -13,6 +13,7 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
         {
             t.HasCheckConstraint("CK_Jobs_MinGpa", "MinGpa BETWEEN 0 AND 4");
             t.HasCheckConstraint("CK_Jobs_MinYearsExperience", "MinYearsExperience >= 0");
+            t.HasCheckConstraint("CK_Jobs_Headcount", "Headcount IS NULL OR Headcount BETWEEN 1 AND 1000");
         });
 
         b.HasKey(x => x.JobId).HasName("PK_Jobs");
@@ -32,6 +33,8 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
             .HasDefaultValue(true, "DF_Jobs_IsActive").ValueGeneratedNever();
 
         b.Property(x => x.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()", "DF_Jobs_CreatedAt");
+        b.Property(x => x.Headcount);
+        b.Property(x => x.ClosingDate).HasColumnType("date");
 
         // A3: dữ liệu nền, nạp qua migration SeedJobs
         b.HasData(JobSeedData.Jobs);
