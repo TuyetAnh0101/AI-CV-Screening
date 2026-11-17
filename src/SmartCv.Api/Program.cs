@@ -94,6 +94,7 @@ app.MapCvEndpoints();
 app.MapRetentionEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.
+app.MapDashboardEndpoints(); // A19: chỉ số nội bộ, cùng chốt Development và feature gate của HR.
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
 app.MapAiPreviewEndpoints();   // A10/A41: POST /api/applications/{id}/ai-preview, GET .../ai-preview/quota (chỉ Development, có giới hạn tần suất)
 app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
