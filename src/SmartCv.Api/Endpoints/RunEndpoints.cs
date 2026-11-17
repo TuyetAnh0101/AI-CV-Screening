@@ -7,6 +7,8 @@ using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
+using SmartCv.Core.Privacy;
+using SmartCv.Core.Runs;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Scoring;
@@ -27,6 +29,7 @@ public static partial class RunEndpoints
         // A42: chỉ đọc, đặt trước /{id:int} cho dễ đọc ("estimate" không khớp ràng buộc int nên không che route theo mã)
         group.MapGet("/estimate", EstimateAsync).WithName("EstimateRun").WithSummary("Ước tính thời gian chấm N CV");
         group.MapGet("/{id:int}", GetAsync);
+        group.MapGet("/{id:int}/failures", FailuresAsync).WithName("RunFailures").WithSummary("Hồ sơ không chấm được hoặc chỉ có điểm từ khóa");
         group.MapGet("/{id:int}/ranking", RankingAsync);
         group.MapGet("/{id:int}/compare", CompareAsync);
         return app;
@@ -122,7 +125,13 @@ public static partial class RunEndpoints
             .Select(r => new RunProgressDto(r.RunId, r.RunType, r.Status, r.PromptVersionId,
                 r.PromptVersion.VersionName, r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight,
                 r.PassThreshold, r.TotalItems, r.ProcessedItems, r.FailedItems,
-                0, r.CreatedAt, r.CompletedAt)).FirstOrDefaultAsync(ct);
+                0, r.CreatedAt, r.CompletedAt)
+            {
+                SystemPrompt = r.PromptVersion.SystemPrompt,
+                EvaluationSetId = r.EvaluationSetId,
+                EvaluationSetName = r.EvaluationSet == null ? null : r.EvaluationSet.Name,
+                AccuracyPercent = r.AccuracyPercent
+            }).FirstOrDefaultAsync(ct);
         if (run is null) return Results.NotFound();
         var items = await db.Evaluations.AsNoTracking().Where(e => e.RunId == id)
             .OrderBy(e => e.EvaluationId).Select(e => new RunItemDto
@@ -149,17 +158,106 @@ public static partial class RunEndpoints
     }
 
     // ---------- GET /api/runs ----------
-    private static async Task<Ok<List<RunSummaryDto>>> ListAsync(
-        SmartCvDbContext db, CancellationToken ct, string? type = null, int? jobId = null, int take = 20)
+    private static async Task<IResult> ListAsync(HttpContext http, SmartCvDbContext db, CancellationToken ct)
     {
+        var parameters = http.Request.Query.ToDictionary(p => p.Key, p => p.Value.Select(v => v ?? "").ToArray(), StringComparer.OrdinalIgnoreCase);
+        var (filter, errors) = RunHistoryQuery.Parse(parameters);
+        if (filter is null) return Results.Problem(statusCode: 400, title: "Bộ lọc không hợp lệ",
+            detail: string.Join(" ", errors.Values.SelectMany(v => v)), extensions: new Dictionary<string, object?> { ["errors"] = errors });
         var query = db.EvaluationRuns.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(type)) query = query.Where(r => r.RunType == type);
-        if (jobId is not null) query = query.Where(r => r.Evaluations.Any(e => e.Application.JobId == jobId));
+        if (filter.Type is not null) query = query.Where(r => r.RunType == filter.Type);
+        if (filter.Status is not null) query = query.Where(r => r.Status == filter.Status);
+        if (filter.JobId is not null) query = query.Where(r => r.Evaluations.Any(e => e.Application.JobId == filter.JobId));
+        if (filter.FromUtc is { } first) query = query.Where(r => r.CreatedAt >= first);
+        if (filter.ToUtc is { } end) query = query.Where(r => r.CreatedAt < end);
 
-        var list = await ProjectSummary(query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.RunId).Take(Math.Clamp(take, 1, 100)))
-            .ToListAsync(ct);
-        await FillJobsAsync(db, list, ct);
-        return TypedResults.Ok(list);
+        var ordered = query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.RunId);
+        if (!filter.IsPaged)
+        {
+            // B7's selector continues to receive the original JSON array and take clamp.
+            var list = await ProjectSummary(ordered.Take(filter.Take)).ToListAsync(ct);
+            await FillJobsAsync(db, list, ct);
+            return TypedResults.Ok(list);
+        }
+        var total = await query.CountAsync(ct);
+        var rows = await ordered.Skip(filter.Skip).Take(filter.PageSize).Select(r => new
+        {
+            r.RunId, r.RunType, r.Status, r.PromptVersionId, PromptVersionName = r.PromptVersion.VersionName,
+            r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold, r.EvaluationSetId,
+            EvaluationSetName = r.EvaluationSet == null ? null : r.EvaluationSet.Name,
+            r.AccuracyPercent, r.TotalItems, r.ProcessedItems, r.FailedItems, r.CreatedAt, r.CompletedAt
+        }).ToListAsync(ct);
+        var summaries = rows.Select(r => new RunSummaryDto { RunId = r.RunId }).ToList();
+        await FillJobsAsync(db, summaries, ct);
+        return TypedResults.Ok(new RunPageDto
+        {
+            Page = filter.Page, PageSize = filter.PageSize, TotalCount = total,
+            TotalPages = RunHistoryQuery.TotalPages(total, filter.PageSize),
+            Items = rows.Select((r, i) => new RunHistoryItemDto
+            {
+                RunId = r.RunId, RunType = r.RunType, Status = r.Status, PromptVersionId = r.PromptVersionId,
+                PromptVersionName = r.PromptVersionName, ModelName = r.ModelName, Temperature = r.Temperature,
+                KeywordWeight = r.KeywordWeight, AiWeight = r.AiWeight, PassThreshold = r.PassThreshold,
+                EvaluationSetId = r.EvaluationSetId, EvaluationSetName = r.EvaluationSetName, AccuracyPercent = r.AccuracyPercent,
+                TotalItems = r.TotalItems, ProcessedItems = r.ProcessedItems, FailedItems = r.FailedItems,
+                CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc),
+                CompletedAt = r.CompletedAt is { } c ? DateTime.SpecifyKind(c, DateTimeKind.Utc) : null,
+                DurationSeconds = RunHistoryQuery.DurationSeconds(r.CreatedAt, r.CompletedAt), Jobs = summaries[i].Jobs
+            }).ToList()
+        });
+    }
+
+    private static async Task<IResult> FailuresAsync(int id, SmartCvDbContext db, CancellationToken ct)
+    {
+        if (!await db.EvaluationRuns.AsNoTracking().AnyAsync(r => r.RunId == id, ct)) return Results.NotFound();
+        var rows = await db.Evaluations.AsNoTracking()
+            .Where(e => e.RunId == id && (e.Status == EvaluationStatuses.Failed || e.ScoreSource == ScoreSources.KeywordOnly))
+            .OrderBy(e => e.Status == EvaluationStatuses.Failed ? 0 : 1).ThenBy(e => e.EvaluationId)
+            .Select(e => new
+            {
+                e.EvaluationId, e.ApplicationId, e.Application.CvId, e.Application.JobId, JobTitle = e.Application.Job.Title,
+                Anonymized = e.Application.Cv.AnonymizedAt != null,
+                FileName = e.Application.Cv.AnonymizedAt == null ? e.Application.Cv.OriginalFileName : RetentionRules.AnonymizedFileName,
+                CandidateName = e.Application.Cv.AnonymizedAt == null && e.Application.Cv.Candidate != null ? e.Application.Cv.Candidate.FullName : null,
+                e.Status, ErrorMessage = e.Application.Cv.AnonymizedAt == null ? e.ErrorMessage : null,
+                e.Application.Cv.ExtractionStatus,
+                HasExtractionError = e.Application.Cv.AnonymizedAt == null && e.Application.Cv.ExtractionError != null && e.Application.Cv.ExtractionError != "",
+                e.CreatedAt
+            }).ToListAsync(ct);
+        var items = rows.Select(r => new RunFailureDto
+        {
+            EvaluationId = r.EvaluationId, ApplicationId = r.ApplicationId, CvId = r.CvId,
+            FileName = r.FileName, CandidateName = r.CandidateName, JobId = r.JobId, JobTitle = r.JobTitle,
+            Kind = r.Status == EvaluationStatuses.Failed ? "Failed" : "KeywordOnly",
+            ErrorMessage = SafeRunFailure(r.ErrorMessage, r.Status == EvaluationStatuses.Failed, r.ExtractionStatus, r.Anonymized),
+            CvExtractionStatus = r.ExtractionStatus,
+            CvExtractionError = !r.HasExtractionError ? null : r.ExtractionStatus == ExtractionStatuses.Failed
+                ? "Trích xuất nội dung CV thất bại. Hãy kiểm tra và tải lại tệp rõ hơn."
+                : "Thông tin chẩn đoán trích xuất đã được ẩn để bảo vệ dữ liệu CV.",
+            CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc)
+        }).ToList();
+        return Results.Ok(new RunFailuresDto
+        {
+            RunId = id, FailedCount = items.Count(i => i.Kind == "Failed"),
+            KeywordOnlyCount = items.Count(i => i.Kind == "KeywordOnly"), Items = items
+        });
+    }
+
+    // Errors may embed CV text, paths or provider credentials. Return only controlled reasons,
+    // so the client-side B36 anonymity switch cannot be bypassed through a raw error string.
+    private static string SafeRunFailure(string? message, bool failed, string extractionStatus, bool anonymized)
+    {
+        if (anonymized) return "Thông tin lỗi đã được ẩn để bảo vệ hồ sơ đã ẩn danh.";
+        if (extractionStatus == ExtractionStatuses.Failed) return "Không đọc được nội dung CV. Hãy kiểm tra và tải lại tệp rõ hơn.";
+        if (extractionStatus != ExtractionStatuses.Completed) return "CV chưa trích xuất xong nội dung nên chưa thể chấm.";
+        var prefix = failed ? "Không chấm được hồ sơ. " : "Chỉ tính điểm từ khóa. ";
+        if (message?.Contains("HTTP 429", StringComparison.OrdinalIgnoreCase) == true || message?.Contains("quota", StringComparison.OrdinalIgnoreCase) == true)
+            return prefix + "Dịch vụ AI đã hết hạn mức hoặc đang giới hạn tần suất.";
+        if (message?.Contains("HTTP 503", StringComparison.OrdinalIgnoreCase) == true || message?.Contains("overload", StringComparison.OrdinalIgnoreCase) == true)
+            return prefix + "Dịch vụ AI đang quá tải.";
+        if (message?.Contains("timeout", StringComparison.OrdinalIgnoreCase) == true)
+            return prefix + "Dịch vụ AI phản hồi quá thời gian chờ.";
+        return failed ? "Không chấm được hồ sơ. Vui lòng kiểm tra trạng thái CV và cấu hình chấm." : "AI chưa chấm thành công; chỉ tính điểm từ khóa.";
     }
 
     // ---------- GET /api/runs/latest?jobId= ----------
