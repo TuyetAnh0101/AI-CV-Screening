@@ -43,6 +43,27 @@ public class RunTimeEstimatorTests
         Assert.Equal(4.5m, RunTimeEstimator.Estimate(10, [S(10, 5)], 4500).SecondsPerCv);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(801)]
+    [InlineData(4500)]
+    [InlineData(4501)]
+    [InlineData(4510)]
+    [InlineData(4549)]
+    [InlineData(4567)]
+    [InlineData(599999)]
+    public void Rounding_keeps_the_configured_millisecond_floor(int delayMs)
+    {
+        var e = RunTimeEstimator.Estimate(500, [S(10, 1)], delayMs);
+        var floor = delayMs / 1000m;
+
+        Assert.Equal(floor, e.MinSecondsPerCv);
+        Assert.True(e.SecondsPerCv >= floor, $"{e.SecondsPerCv} seconds/CV is below the {floor} second floor.");
+        Assert.Equal(e.SecondsPerCv, Math.Round(e.SecondsPerCv, 1));
+        Assert.True(e.EstimatedSeconds >= Math.Ceiling(500 * floor));
+    }
+
     [Fact]
     public void Invalid_and_abnormal_samples_are_ignored()
     {

@@ -48,7 +48,8 @@ public static class RunTimeEstimator
         var perCv = valid.Count == 0
             ? floor + DefaultOverheadSeconds
             : valid.Sum(s => (decimal)s.Duration.TotalSeconds) / valid.Sum(s => (long)s.TotalItems);
-        perCv = Math.Round(Math.Max(perCv, floor), 1, MidpointRounding.AwayFromZero);
+        // Giữ một chữ số thập phân nhưng không làm tròn xuống dưới sàn cấu hình (ví dụ 4,51 → ít nhất 4,6).
+        perCv = Math.Max(Math.Round(perCv, 1, MidpointRounding.AwayFromZero), Math.Ceiling(floor * 10m) / 10m);
 
         // count ≤ 500 và perCv ≤ 3600 (hoặc sàn cấu hình ≤ 600 giây) nên không tràn int
         var seconds = (int)Math.Ceiling(perCv * count);

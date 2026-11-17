@@ -14,7 +14,8 @@ public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
         var path = http.Request.Path;
         // Writes such as HR stages, run creation and re-extraction take the same shared lease first,
         // so they cannot pass eligibility checks and then resume behind an erasure commit.
-        var personalResponse = PersonalRoutes.Any(route => path.StartsWithSegments(route)) && path.Value?.EndsWith("/anonymize", StringComparison.OrdinalIgnoreCase) != true && !path.StartsWithSegments("/api/cvs/upload");
+        // A42: upload trùng trả metadata của CV cũ, nên cũng giữ lease tới khi trả xong và cấm cache.
+        var personalResponse = PersonalRoutes.Any(route => path.StartsWithSegments(route)) && path.Value?.EndsWith("/anonymize", StringComparison.OrdinalIgnoreCase) != true;
         if (!personalResponse || !environment.IsDevelopment() || !endpoint.Value.Enabled)
         {
             await next(http);
