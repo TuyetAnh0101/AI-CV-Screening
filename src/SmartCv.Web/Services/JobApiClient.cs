@@ -12,4 +12,10 @@ public sealed class JobApiClient(HttpClient http, ILogger<JobApiClient> logger) 
     /// <summary>GET /api/jobs/{id}: chi tiết một job.</summary>
     public Task<ApiResult<JobDto>> GetJobAsync(int jobId, CancellationToken ct = default) =>
         GetAsync<JobDto>($"api/jobs/{jobId}", ct);
+
+    public Task<ApiResult<JobDto>> DeactivateAsync(int jobId, CancellationToken ct = default) =>
+        PostJsonAsync<JobDto>($"api/jobs/{jobId}/deactivate", new { }, ct);
+
+    public Task<ApiResult<JobDto>> ActivateAsync(int jobId, CancellationToken ct = default) =>
+        PostJsonAsync<JobDto>($"api/jobs/{jobId}/activate", new { }, ct);
 }

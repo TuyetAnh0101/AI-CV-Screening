@@ -1,0 +1,126 @@
+@page "/jobs"
+@using SmartCv.Core.Constants
+@implements IDisposable
+@inject JobApiClient JobApi
+
+<PageTitle>Vị trí tuyển dụng · SCApp</PageTitle>
+
+<div class="jobs-page">
+    <header class="page-heading">
+        <div>
+            <p class="eyebrow"><span aria-hidden="true">✧</span> Quản lý tuyển dụng</p>
+            <h1 id="jobs-title" tabindex="-1">Vị trí tuyển dụng</h1>
+            <p>Theo dõi từng vị trí, kết nối với ứng viên phù hợp.</p>
+        </div>
+        <div class="heading-actions">
+            <button id="jobs-refresh" type="button" class="btn sc-btn-secondary" @onclick="Model.LoadAsync" disabled="@(Model.Loading || Model.Busy || Model.Pending is not null)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>Làm mới
+            </button>
+            <a class="btn sc-btn-primary" href="jobs/new"><span aria-hidden="true">＋</span> Tạo vị trí</a>
+        </div>
+    </header>
+
+    <section class="overview" aria-label="Tổng quan vị trí">
+        <div><span class="metric-icon" aria-hidden="true">▦</span><div><span>Tổng vị trí</span><strong>@Count(Model.Jobs.Count)</strong></div></div>
+        <div><span class="metric-icon active-icon" aria-hidden="true">↗</span><div><span>Đang tuyển</span><strong>@Count(Model.Jobs.Count(j => j.IsActive))</strong></div></div>
+        <div><span class="metric-icon expired-icon" aria-hidden="true">◷</span><div><span>Đang tuyển · quá hạn</span><strong>@Count(Model.Jobs.Count(j => j.IsActive && j.IsExpired))</strong></div></div>
+    </section>
+
+    <section class="jobs-panel" aria-labelledby="jobs-list-title" aria-busy="@Model.Loading.ToString().ToLowerInvariant()">
+        <div class="panel-heading"><h2 id="jobs-list-title">Danh sách vị trí</h2><span>Chủ động theo dõi hành trình tuyển dụng</span></div>
+        <div class="toolbar">
+            <div class="status-filters" role="group" aria-label="Lọc trạng thái vị trí">
+                @foreach (var (value, label) in Filters)
+                {
+                    <button id="jobs-filter-@value" type="button" class="@(Model.Show == value ? "selected" : null)" aria-pressed="@((Model.Show == value).ToString().ToLowerInvariant())" @onclick="() => Model.Show = value">
+                        @label <span>@Count(value == "all" ? Model.Jobs.Count : Model.Jobs.Count(j => j.IsActive == (value == "active")))</span>
+                    </button>
+                }
+            </div>
+            <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><span class="visually-hidden">Tìm theo tên vị trí</span>
+                <input id="jobs-search" type="search" placeholder="Tìm theo tên vị trí..." @bind="Model.Search" @bind:event="oninput" />
+            </label>
+        </div>
+
+        @if (Model.Message is not null)
+        {
+            <div class="message @(Model.MessageIsError ? "is-error" : "is-success")" role="@(Model.MessageIsError ? "alert" : "status")">
+                <span>@Model.Message</span>
+                @if (Model.NeedsVerification) { <button id="jobs-verify" type="button" class="btn sc-btn-secondary" disabled="@Model.Loading" @onclick="Model.LoadAsync">Tải lại trạng thái</button> }
+            </div>
+        }
+        @if (Model.Loading)
+        {
+            <div class="loading-state" role="status"><LoadingIndicator Text="Đang tải danh sách vị trí..." /><div class="skeleton" aria-hidden="true"></div><div class="skeleton" aria-hidden="true"></div><div class="skeleton" aria-hidden="true"></div></div>
+        }
+        else if (Model.Error is not null)
+        {
+            <div class="empty-state error-state" role="alert"><span class="state-icon" aria-hidden="true">!</span><h2>Chưa tải được vị trí tuyển dụng</h2><p>@Model.Error</p><button id="jobs-retry" type="button" class="btn sc-btn-primary" @onclick="Model.LoadAsync">Thử lại</button></div>
+        }
+        else if (Model.Jobs.Count == 0)
+        {
+            <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Sẵn sàng cho vị trí đầu tiên</h2><p>Tạo vị trí tuyển dụng để bắt đầu tiếp nhận và sàng lọc CV.</p><a class="btn sc-btn-primary" href="jobs/new">Tạo vị trí</a></div>
+        }
+        else if (Model.Visible.Count == 0)
+        {
+            <div class="empty-state" role="status"><span class="state-icon" aria-hidden="true">⌕</span><h2>Không tìm thấy vị trí phù hợp</h2><p>Thử tên khác hoặc xem tất cả trạng thái tuyển dụng.</p><button id="jobs-clear" type="button" class="btn sc-btn-secondary" @onclick="Model.ClearFilters">Xóa bộ lọc</button></div>
+        }
+        else
+        {
+            <div class="table-region">
+                <table class="jobs-table">
+                    <caption class="visually-hidden">Vị trí, kỹ năng bắt buộc, nhu cầu tuyển và hồ sơ theo giai đoạn</caption>
+                    <thead><tr><th scope="col">Vị trí / Kỹ năng bắt buộc</th><th scope="col">Cần tuyển</th><th scope="col">Hạn nhận CV</th><th scope="col">Hồ sơ theo giai đoạn</th><th scope="col">Trạng thái</th><th scope="col"><span class="visually-hidden">Thao tác</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var job in Model.Visible)
+                        {
+                            var status = JobText.Status(job);
+                            <tr class="@status.Css" @key="job.JobId">
+                                <td class="position-cell">
+                                    <span class="job-code">VỊ TRÍ #@job.JobId</span>
+                                    <a class="job-title" href="jobs/@job.JobId">@job.Title</a>
+                                    <span class="skill-caption">@job.MustHaveCount kỹ năng bắt buộc</span>
+                                    <div class="skills">@foreach (var skill in job.Skills.Where(s => s.SkillType == SkillTypes.MustHave)) { <span>@skill.DisplayName</span> }</div>
+                                </td>
+                                <td class="headcount-cell" data-label="Cần tuyển"><span class="headcount">@JobText.Headcount(job.Headcount)</span>@if (job.Headcount is not null) { <small>nhân sự</small> }</td>
+                                <td class="deadline-cell" data-label="Hạn nhận CV"><span>@JobText.Closing(job.ClosingDate)</span>@if (job.IsExpired) { <small class="expired-label">Đã quá hạn</small> }</td>
+                                <td class="stages-cell">
+                                    <div class="application-total">@(job.ApplicationCount is { } total ? $"{total:N0} hồ sơ" : "Chưa có thống kê hồ sơ")</div>
+                                    @if (job.StageCounts is { } stages)
+                                    {
+                                        <div class="stages">@foreach (var stage in ApplicationStages.All) { <a class="stage-link @StageText.Css(stage)" href="@JobText.ResultsUrl(job.JobId, stage)" title="Xem @StageText.Name(stage) trong lượt chấm mới nhất"><span>@StageText.Name(stage)</span><b>@(stages.TryGetValue(stage, out var count) ? count.ToString("N0") : "—")</b></a> }</div>
+                                    }
+                                    else { <span class="unavailable">Thống kê chưa được cung cấp</span> }
+                                </td>
+                                <td class="status-cell"><span class="status-badge @status.Css"><i aria-hidden="true"></i>@status.Text</span></td>
+                                <td class="actions-cell"><div class="row-actions">
+                                    <a class="results-link" href="@JobText.ResultsUrl(job.JobId)" aria-label="Xem kết quả của @job.Title">Kết quả <span aria-hidden="true">↗</span></a>
+                                    <a class="edit-link" href="jobs/@job.JobId" aria-label="Sửa @job.Title">Sửa vị trí</a>
+                                    <button id="job-toggle-@job.JobId" type="button" class="toggle-button @(job.IsActive ? "stop-button" : "open-button")" @onclick="() => Model.Ask(job)" disabled="@(!Model.CanToggle(job))" aria-label="@((job.IsActive ? "Ngừng tuyển " : "Mở lại ") + job.Title)">@(job.IsActive ? "Ngừng tuyển" : "Mở lại")</button>
+                                </div></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <footer class="panel-footer"><span>Hiển thị <strong>@Model.Visible.Count</strong> / @Model.Jobs.Count vị trí</span><p>Thống kê gồm toàn bộ hồ sơ của vị trí. Liên kết giai đoạn mở kết quả trong lượt chấm mới nhất.</p></footer>
+        }
+    </section>
+    @if (!Model.Loading && Model.Error is null && Model.Jobs.Any(j => j.HasEvaluations is null))
+    {
+        <p class="access-note">Một số vị trí chỉ có dữ liệu công khai. Thống kê và thay đổi trạng thái cần quyền truy cập nội bộ.</p>
+    }
+</div>
+
+@if (Model.Pending is { } pending)
+{
+    <ConfirmDialog Title="@JobText.ConfirmTitle(pending)" Text="@JobText.ConfirmText(pending)" ConfirmText="@(pending.IsActive ? "Ngừng tuyển" : "Mở lại")" Danger="pending.IsActive" Busy="Model.Busy" ReturnFocusId="@($"job-toggle-{pending.JobId}")" OnConfirm="Model.ToggleAsync" OnCancel="Model.Cancel" />
+}
+
+@code {
+    private JobsWorkspace Model = default!;
+    private static readonly (string Value, string Label)[] Filters = [("active", "Đang tuyển"), ("inactive", "Ngừng tuyển"), ("all", "Tất cả")];
+    protected override async Task OnInitializedAsync() { Model = new(JobApi); await Model.LoadAsync(); }
+    private string Count(int count) => Model.Loading || Model.Error is not null ? "—" : count.ToString("N0");
+    public void Dispose() => Model?.Dispose();
+}

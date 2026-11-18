@@ -1,0 +1,56 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog class="confirm-dialog" @ref="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" aria-busy="@Busy.ToString().ToLowerInvariant()">
+    <span class="dialog-icon @(Danger ? "danger-icon" : null)" aria-hidden="true">@(Danger ? "Ⅱ" : "↗")</span>
+    <h2 id="confirm-title">@Title</h2>
+    <p id="confirm-text">@Text</p>
+    <div class="dialog-actions"><button id="jobs-confirm-cancel" type="button" class="btn sc-btn-secondary" disabled="@(Busy || submitting)" @onclick="CancelAsync" autofocus>Hủy</button><button id="jobs-confirm-submit" type="button" class="btn @(Danger ? "danger-button" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">@(Busy || submitting ? "Đang xử lý..." : ConfirmText)</button></div>
+</dialog>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Xác nhận";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string ConfirmText { get; set; } = "Đồng ý";
+    [Parameter] public bool Danger { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<ConfirmDialog>? reference;
+    private bool disposed, submitting;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !RendererInfo.IsInteractive) return;
+        try
+        {
+            var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/ConfirmDialog.razor.js");
+            if (disposed) { await imported.DisposeAsync(); return; }
+            module = imported;
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference, ReturnFocusId);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    [JSInvokable] public Task CancelFromBrowser() => InvokeAsync(CancelAsync);
+    private Task CancelAsync() => Busy || submitting ? Task.CompletedTask : OnCancel.InvokeAsync();
+    private async Task ConfirmAsync()
+    {
+        if (Busy || submitting) return;
+        submitting = true;
+        try { await OnConfirm.InvokeAsync(); }
+        finally { submitting = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog, ReturnFocusId); await module.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException) { }
+        }
+        reference?.Dispose();
+    }
+}
