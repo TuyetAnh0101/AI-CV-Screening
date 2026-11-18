@@ -70,10 +70,10 @@
 
     <div class="stage-filters" role="group" aria-label="Lọc giai đoạn hồ sơ">
         <span class="filter-label">Giai đoạn</span>
-        <button type="button" class="stage-filter @(stageFilter is null ? "on" : null)" aria-pressed="@(stageFilter is null ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(null)">Tất cả <span>@StageCount(null)</span></button>
+        <button id="stage-filter-all" type="button" class="stage-filter @(stageFilter is null ? "on" : null)" aria-pressed="@(stageFilter is null ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(null)">Tất cả <span>@StageCount(null)</span></button>
         @foreach (var stage in ApplicationStages.All)
         {
-            <button type="button" class="stage-filter @StageText.Css(stage) @(stageFilter == stage ? "on" : null)" aria-pressed="@(stageFilter == stage ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(stage)">
+            <button id="stage-filter-@stage" type="button" class="stage-filter @StageText.Css(stage) @(stageFilter == stage ? "on" : null)" aria-pressed="@(stageFilter == stage ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(stage)">
                 <i class="stage-dot" aria-hidden="true"></i>@StageText.Name(stage) <span>@StageCount(stage)</span>
             </button>
         }

@@ -24,6 +24,9 @@ public partial class RankingTable
     private string? ReasonOf(RankingItemDto row) => overrides.TryGetValue(row.ApplicationId, out var value) ? value.RejectReason : row.RejectReason;
     private Guid VersionOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.StageVersion ?? row.StageVersion;
     private bool flaggedOnly;
+    [Parameter] public string? StageFilter { get; set; }
+    [Parameter] public EventCallback<string?> OnStageFilterChanged { get; set; }
+    private string? lastStageFilter;
     [Parameter] public bool? FlaggedFilter { get; set; }
     [Parameter] public EventCallback<bool> OnFlaggedFilterChanged { get; set; }
     private bool? lastFlaggedFilter;
@@ -43,6 +46,8 @@ public partial class RankingTable
 
     protected override void OnParametersSet()
     {
+        if (StageFilter is not null && lastStageFilter != StageFilter)
+        { stageFilter = JobText.Stage(StageFilter); lastStageFilter = StageFilter; selected.Clear(); }
         // Only a changed URL intent applies the flag. A poll or parent render preserves the HR's current choice.
         if (FlaggedFilter is { } requested && lastFlaggedFilter != requested)
         { flaggedOnly = requested; lastFlaggedFilter = requested; selected.Clear(); }
@@ -69,7 +74,7 @@ public partial class RankingTable
     private string NameOf(RankingItemDto row) => Anonymity.Name(row.CandidateName, row.Rank, row.ApplicationId);
     private void PrivacyChanged() => _ = InvokeAsync(() => { search = ""; message = null; if (Anonymity.Enabled && sort == RankingSort.NameAsc) sort = RankingSort.FinalDesc; selected.Clear(); StateHasChanged(); });
     private void SetFitFilter(RankingFilter value) { filter = value; selected.Clear(); }
-    private void SetStageFilter(string? stage) { stageFilter = stage; selected.Clear(); }
+    private async Task SetStageFilter(string? stage) { stageFilter = stage; selected.Clear(); await OnStageFilterChanged.InvokeAsync(stage); }
     private void Toggle(int id, ChangeEventArgs e)
     {
         if (TableLocked) return;

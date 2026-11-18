@@ -142,7 +142,7 @@
                 </div>
             </section>
 
-            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" />
+            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" StageFilter="@StageQuery" OnStageFilterChanged="StageChanged" />
             break;
 
         case ViewState.NoRuns:
@@ -208,9 +208,13 @@
     [SupplyParameterFromQuery(Name = "runId")] public string? RunIdQuery { get; set; }
     [SupplyParameterFromQuery(Name = "jobId")] public string? JobIdQuery { get; set; }
     [SupplyParameterFromQuery(Name = "filter")] public string? FilterQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "stage")] public string? StageQueryParameter { get; set; }
+    private string StageQuery => JobText.Stage(StageQueryParameter) ?? JobText.Stage(FilterQuery) ?? "";
     private bool FlaggedQuery => string.Equals(FilterQuery, "flagged", StringComparison.OrdinalIgnoreCase);
-    private void FlaggedChanged(bool value) => Nav.NavigateTo(Nav.GetUriWithQueryParameter("filter", value ? "flagged" : null), replace: true);
-    private string FilteredResultsUrl(int runId, int? jobId = null) => RankingView.ResultsUrl(runId, jobId) + (FlaggedQuery ? "&filter=flagged" : "");
+    private void FlaggedChanged(bool value) => Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["filter"] = value ? "flagged" : null, ["stage"] = StageQuery.Length > 0 ? StageQuery : null }), replace: true);
+    private void StageChanged(string? value) => Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["filter"] = FlaggedQuery ? "flagged" : value, ["stage"] = FlaggedQuery ? value : null }), replace: true);
+    private string FilteredResultsUrl(int runId, int? jobId = null) => RankingView.ResultsUrl(runId, jobId)
+        + (FlaggedQuery ? "&filter=flagged" + (StageQuery.Length > 0 ? "&stage=" + StageQuery : "") : StageQuery.Length > 0 ? "&filter=" + StageQuery : "");
 
     private ViewState state = ViewState.Loading;
     private string? problemMessage;
