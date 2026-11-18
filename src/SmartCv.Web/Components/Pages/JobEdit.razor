@@ -1,0 +1,124 @@
+@page "/jobs/new"
+@page "/jobs/{Id:int}"
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Jobs
+@using SmartCv.Web.Components.Jobs
+@implements IDisposable
+@inject JobApiClient JobApi
+@inject NavigationManager Nav
+
+<PageTitle>@(Id is null ? "Tạo vị trí tuyển dụng" : "Chỉnh sửa vị trí") · SCApp</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@(Form?.IsDirty == true || Form?.Busy == true)" OnBeforeInternalNavigation="BeforeNavigation" />
+
+<div class="job-edit-page">
+    <a id="job-back" class="back-link" href="jobs"><span aria-hidden="true">←</span> Danh sách vị trí</a>
+    <header class="page-heading"><div><p class="eyebrow"><span aria-hidden="true">✧</span> Thiết lập tuyển dụng</p><h1>@(Id is null ? "Tạo vị trí tuyển dụng" : "Chỉnh sửa vị trí")</h1><p>Xây dựng bộ tiêu chí rõ ràng cho hành trình tìm ứng viên phù hợp.</p></div><span class="draft-status">@(Form?.Busy == true ? "Đang lưu..." : Form?.IsDirty == true ? "Có thay đổi chưa lưu" : Id is null ? "Bản nháp mới" : "Tiêu chí tuyển dụng")</span></header>
+    @if (Form is null || Form.Loading)
+    {
+        <section class="state-panel" role="status"><LoadingIndicator Text="Đang tải vị trí tuyển dụng..." /><div class="skeleton"></div><div class="skeleton"></div></section>
+    }
+    else if (Form.LoadError is not null)
+    {
+        <section class="state-panel error-panel" role="alert"><h2>@(Form.NotFound ? "Không tìm thấy vị trí" : "Chưa tải được vị trí")</h2><p>@Form.LoadError</p><div class="state-actions"><a class="btn sc-btn-secondary" href="jobs">Về danh sách</a><button id="job-load-retry" type="button" class="btn sc-btn-primary" @onclick="RetryLoad">Thử lại</button></div></section>
+    }
+    else
+    {
+        @if (Form.Original?.HasEvaluations == true)
+        {
+            <aside class="criteria-warning" role="note"><span aria-hidden="true">!</span><p><strong>Vị trí này đã có lượt chấm.</strong> Thay đổi tiêu chí chỉ áp dụng cho lượt chấm sau; kết quả cũ không còn so sánh trực tiếp với kết quả mới. Nên chấm lại các hồ sơ cần so sánh.</p></aside>
+        }
+        else if (Form.Original is { HasEvaluations: null })
+        {
+            <aside class="criteria-warning" role="note"><p>API chưa cung cấp thống kê HR nên chưa xác định được lịch sử lượt chấm. Vị trí đang ở chế độ chỉ xem; thay đổi tiêu chí cần quyền truy cập nội bộ.</p></aside>
+        }
+        @if (createdId == Id && Id is not null) { <div class="notice success" role="status">Đã tạo vị trí tuyển dụng. Vị trí đã có trong danh sách chọn khi tải CV.</div> }
+        @if (Form.Original?.IsActive == false) { <div class="notice" role="note">Vị trí đang ngừng tuyển. Có thể mở lại từ danh sách vị trí.</div> }
+        <EditForm EditContext="editContext" FormName="b21-job-form" OnValidSubmit="SaveAsync" OnInvalidSubmit="InvalidSubmit" @oninput="MarkInput" novalidate="novalidate">
+            <DataAnnotationsValidator />
+            <section class="general-panel" aria-labelledby="general-title">
+                <header class="panel-heading"><div><span class="section-number" aria-hidden="true">01</span><h2 id="general-title">Thông tin vị trí</h2></div><span>Trường có dấu <b>*</b> là bắt buộc</span></header>
+                <div class="fields-grid">
+                    <div class="field full"><label for="job-title">Tên vị trí tuyển dụng <b>*</b></label><InputText id="job-title" @bind-Value="Form.Model.Title" @oninput="TitleInput" placeholder="Ví dụ: Backend Developer (.NET)" disabled="@Form.Locked" aria-required="true" /><ValidationMessage For="() => Form.Model.Title" /></div>
+                    <div class="field"><label for="job-headcount">Số lượng cần tuyển</label><InputNumber id="job-headcount" @bind-Value="Form.Model.Headcount" min="1" max="@JobRules.MaxHeadcount" placeholder="Chưa xác định" disabled="@Form.Locked" ParsingErrorMessage="Số lượng cần tuyển phải là số nguyên." /><span class="hint">Để trống nếu chưa xác định số lượng</span><ValidationMessage For="() => Form.Model.Headcount" /></div>
+                    <div class="field"><label for="job-closing">Hạn nhận hồ sơ</label><InputDate id="job-closing" @bind-Value="Form.Model.ClosingDate" disabled="@Form.Locked" ParsingErrorMessage="Hạn nhận hồ sơ phải là ngày hợp lệ." /><span class="hint">Ngày Việt Nam · bỏ trống để không giới hạn</span><ValidationMessage For="() => Form.Model.ClosingDate" /></div>
+                    <div class="field"><label for="job-gpa">GPA tối thiểu</label><InputNumber id="job-gpa" @bind-Value="Form.Model.MinGpa" min="0" max="4" step="any" placeholder="Không yêu cầu" disabled="@Form.Locked" ParsingErrorMessage="GPA phải là một số hợp lệ." /><span class="hint">Thang điểm 0–4</span><ValidationMessage For="() => Form.Model.MinGpa" /></div>
+                    <div class="field"><label for="job-experience">Kinh nghiệm tối thiểu</label><div class="input-unit"><InputNumber id="job-experience" @bind-Value="Form.Model.MinYearsExperience" min="0" max="@JobRules.MaxYears" step="any" disabled="@Form.Locked" ParsingErrorMessage="Kinh nghiệm phải là một số hợp lệ." /><span>năm</span></div><span class="hint">Từ 0 đến @JobRules.MaxYears năm kinh nghiệm</span><ValidationMessage For="() => Form.Model.MinYearsExperience" /></div>
+                    <div class="field full"><label for="job-description">Mô tả công việc</label><InputTextArea id="job-description" @bind-Value="Form.Model.Description" rows="4" maxlength="@JobRules.DescriptionMax" disabled="@Form.Locked" placeholder="Mô tả vai trò, trách nhiệm và yêu cầu của vị trí..." /><span class="hint">Nội dung rõ ràng giúp việc đánh giá CV có thêm bối cảnh.</span><ValidationMessage For="() => Form.Model.Description" /></div>
+                </div>
+            </section>
+
+            <div class="skills-heading"><div><span class="section-number" aria-hidden="true">02</span><h2>Kỹ năng và từ khóa</h2></div><p>Tên kỹ năng và các từ khóa tương đương được dùng để nhận diện năng lực trong CV.</p></div>
+            <ValidationMessage For="() => Form.Model.Skills" />
+            <div class="skills-grid">
+                <SkillEditor Skills="Form.Model.Skills" SkillType="@SkillTypes.MustHave" Title="Kỹ năng bắt buộc" Disabled="Form.Locked" OnChanged="SkillsChanged" />
+                <SkillEditor Skills="Form.Model.Skills" SkillType="@SkillTypes.NiceToHave" Title="Kỹ năng ưu tiên" Disabled="Form.Locked" OnChanged="SkillsChanged" />
+            </div>
+            @if (Form.Notice is not null)
+            {
+                <div class="notice @(Form.NoticeIsError ? "error-notice" : "success")" role="@(Form.NoticeIsError ? "alert" : "status")"><span>@Form.Notice</span></div>
+            }
+            @if (Form.NeedsVerification)
+            {
+                <div class="verification"><span>Bản nháp vẫn được giữ. Chưa có yêu cầu ghi nào được gửi lại.</span><button id="job-verify" type="button" class="btn sc-btn-secondary" disabled="@Form.Busy" @onclick="VerifyAsync">Tải lại trạng thái</button><a href="jobs" target="_blank" rel="noopener">Mở danh sách để đối chiếu ↗</a></div>
+            }
+            <footer class="save-bar"><div><strong>@(Form.IsDirty ? "Có thay đổi chưa lưu" : "Thông tin và tiêu chí tuyển dụng")</strong><span>@(Form.Busy ? "Đang xử lý, vui lòng chờ..." : "Tiêu chí chỉ áp dụng cho lượt chấm tiếp theo.")</span></div><div class="save-actions"><a class="btn sc-btn-secondary @(Form.Busy ? "busy-link" : null)" href="jobs" aria-disabled="@Form.Busy.ToString().ToLowerInvariant()">Hủy</a><button id="job-save" type="submit" class="btn sc-btn-primary" disabled="@Form.Locked">@(Form.Busy ? "Đang lưu..." : Form.IsNew ? "Tạo vị trí" : "Lưu thay đổi")</button></div></footer>
+        </EditForm>
+    }
+</div>
+@if (pendingNavigation is not null)
+{
+    <ConfirmDialog Title="Rời trang khi chưa lưu?" Text="Thay đổi chưa lưu trong bản nháp sẽ bị mất khi rời trang. Bạn có thể ở lại để tiếp tục chỉnh sửa." ConfirmText="Rời trang" Danger="true" ReturnFocusId="job-back" OnCancel="() => pendingNavigation = null" OnConfirm="LeaveAsync" />
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    private JobFormWorkspace? Form;
+    private EditContext editContext = new(new JobFormModel());
+    private ValidationMessageStore serverMessages = default!;
+    private int? loadedId, createdId;
+    private bool initialized, allowNavigation, disposed;
+    private string? pendingNavigation;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (initialized && loadedId == Id) return;
+        initialized = true; loadedId = Id; allowNavigation = false;
+        Form?.Dispose(); var current = Form = new(JobApi, Id); await current.LoadAsync();
+        if (disposed || !ReferenceEquals(Form, current)) return;
+        SetContext();
+    }
+    private void SetContext()
+    {
+        editContext.OnFieldChanged -= FieldChanged;
+        editContext = new(Form!.Model); serverMessages = new(editContext); editContext.OnFieldChanged += FieldChanged;
+    }
+    private async Task RetryLoad() { await Form!.LoadAsync(); if (!disposed) SetContext(); }
+    private void FieldChanged(object? sender, FieldChangedEventArgs args) { Form!.InputTouched = true; serverMessages.Clear(args.FieldIdentifier); var json = char.ToLowerInvariant(args.FieldIdentifier.FieldName[0]) + args.FieldIdentifier.FieldName[1..]; Form.FieldErrors.Remove(json); }
+    private void MarkInput(ChangeEventArgs _) { if (Form is not null && !Form.Locked) Form.InputTouched = true; }
+    private void TitleInput(ChangeEventArgs args) { Form!.Model.Title = args.Value?.ToString() ?? ""; editContext.NotifyFieldChanged(new(Form.Model, nameof(JobFormModel.Title))); }
+    private void SkillsChanged() { Form!.InputTouched = true; editContext.NotifyFieldChanged(new(Form.Model, nameof(JobFormModel.Skills))); }
+    private void InvalidSubmit(EditContext _) { StateHasChanged(); }
+    private async Task SaveAsync()
+    {
+        var current = Form!;
+        var created = await current.SaveAsync();
+        if (disposed || !ReferenceEquals(Form, current)) return;
+        if (created is { } id) { createdId = id; allowNavigation = true; Nav.NavigateTo($"jobs/{id}"); return; }
+        serverMessages.Clear(); foreach (var (field, errors) in current.FieldErrors) if (field is "title" or "description" or "minGpa" or "minYearsExperience" or "headcount" or "closingDate" or "skills") serverMessages.Add(new FieldIdentifier(current.Model, JobFormModel.Property(field)), errors);
+        editContext.NotifyValidationStateChanged(); if (!current.IsDirty) editContext.MarkAsUnmodified();
+    }
+    private async Task VerifyAsync()
+    {
+        var current = Form!; var created = await current.VerifyAsync();
+        if (disposed || !ReferenceEquals(Form, current)) return;
+        if (created is { } id) { allowNavigation = true; Nav.NavigateTo($"jobs/{id}"); }
+    }
+    private Task BeforeNavigation(LocationChangingContext context)
+    {
+        if (allowNavigation || Form is null) return Task.CompletedTask;
+        if (Form.Busy) { context.PreventNavigation(); return Task.CompletedTask; }
+        if (Form.IsDirty) { context.PreventNavigation(); pendingNavigation = context.TargetLocation; StateHasChanged(); }
+        return Task.CompletedTask;
+    }
+    private Task LeaveAsync() { var target = pendingNavigation; pendingNavigation = null; allowNavigation = true; if (target is not null) Nav.NavigateTo(target); return Task.CompletedTask; }
+    public void Dispose() { disposed = true; editContext.OnFieldChanged -= FieldChanged; Form?.Dispose(); }
+}

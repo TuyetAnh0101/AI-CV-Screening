@@ -16,12 +16,13 @@ public sealed class ApiResult<T>
 
     /// <summary>B39: header Retry-After của API (429/503); null nếu không có.</summary>
     public TimeSpan? RetryAfter { get; private init; }
+    public IReadOnlyDictionary<string, string[]> ValidationErrors { get; private init; } = new Dictionary<string, string[]>();
 
     public static ApiResult<T> Success(T data) => new() { IsSuccess = true, Data = data };
 
     public static ApiResult<T> Failure(string message, int? statusCode = null) =>
         new() { IsSuccess = false, ErrorMessage = message, StatusCode = statusCode };
 
-    public static ApiResult<T> Failure(string message, int? statusCode, string? errorCode, TimeSpan? retryAfter = null) =>
-        new() { IsSuccess = false, ErrorMessage = message, StatusCode = statusCode, ErrorCode = errorCode, RetryAfter = retryAfter };
+    public static ApiResult<T> Failure(string message, int? statusCode, string? errorCode, TimeSpan? retryAfter = null, IReadOnlyDictionary<string, string[]>? validationErrors = null) =>
+        new() { IsSuccess = false, ErrorMessage = message, StatusCode = statusCode, ErrorCode = errorCode, RetryAfter = retryAfter, ValidationErrors = validationErrors ?? new Dictionary<string, string[]>() };
 }
