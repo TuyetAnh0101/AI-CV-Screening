@@ -8,7 +8,7 @@ namespace SmartCv.Api.Middleware;
 public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
 {
     // A41: assembled-preview trả nội dung CV (đã che) nên cũng giữ khóa đọc, để ẩn danh hóa không chen ngang lúc đang trả.
-    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare", "/api/prompts/assembled-preview"];
+    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/candidates", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare", "/api/prompts/assembled-preview"];
     public async Task InvokeAsync(HttpContext http, IServiceScopeFactory scopes, IHostEnvironment environment, IOptions<CvUploadEndpointOptions> endpoint)
     {
         var path = http.Request.Path;
@@ -22,6 +22,7 @@ public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
             return;
         }
 
+        http.Response.Headers.CacheControl = "no-store";
         using var scope = scopes.CreateScope();
         CvPrivacyScope? lease;
         try
