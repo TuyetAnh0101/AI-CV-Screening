@@ -91,6 +91,7 @@ app.MapControllers();
 app.MapEvaluationEndpoints();
 app.MapRunEndpoints(); // A12: persist run settings before background scoring.
 app.MapCvEndpoints();
+app.MapCandidateEndpoints(); // A24: internal candidate management, same Development/HR gate as CVs.
 app.MapRetentionEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.

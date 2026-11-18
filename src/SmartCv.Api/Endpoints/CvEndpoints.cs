@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Candidates;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Cvs;
@@ -25,7 +26,7 @@ namespace SmartCv.Api.Endpoints;
 ///   GET  /api/cvs/{id}/text   chữ đã đọc + chỉ số chất lượng (A42); 410 khi CV đã ẩn danh hóa
 ///   POST /api/cvs/{id}/extract đọc lại chữ (A7), ví dụ khi lần trước lỗi do thiếu dữ liệu OCR
 /// </summary>
-public static class CvEndpoints
+public static partial class CvEndpoints
 {
     /// <summary>
     /// Đăng ký POST /api/cvs/upload.
@@ -111,6 +112,13 @@ public static class CvEndpoints
             // Không có cookie/phiên đăng nhập nên không có nguy cơ CSRF (giống API tải lên ở trên).
             .DisableAntiforgery();
 
+        // A24: same Development gate and A39 privacy middleware as the existing CV API.
+        group.MapPut("/{id:guid}/candidate", AttachCandidateAsync)
+            .WithName("AttachCandidate").Accepts<AttachCandidateRequest>("application/json").AddEndpointFilter<CandidateApiFilter>()
+            .ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
+        group.MapGet("/{id:guid}/candidate-suggestion", CandidateSuggestionAsync)
+            .WithName("CandidateSuggestion").AddEndpointFilter<CandidateApiFilter>()
+            .ProducesProblem(404).ProducesProblem(410);
         return app;
     }
 
@@ -132,11 +140,13 @@ public static class CvEndpoints
 
         if (query.Search is { } search)
         {
+            var phone = CandidateRules.NormalizePhone(search); // A24: formatted VN numbers match normalized contacts.
             // Hồ sơ đã ẩn danh: không còn tên, email, chữ và không được tìm ra (kể cả theo tên file thay thế "Hồ sơ đã ẩn danh").
             cvs = cvs.Where(c => c.AnonymizedAt == null && (
                 c.OriginalFileName.Contains(search)
                 || (c.Candidate != null && (c.Candidate.FullName.Contains(search)
-                                            || (c.Candidate.Email != null && c.Candidate.Email.Contains(search))))
+                                            || (c.Candidate.Email != null && c.Candidate.Email.Contains(search))
+                                            || (phone != null && c.Candidate.PhoneNumber == phone)))
                 || (c.ExtractedText != null && c.ExtractedText.Contains(search))));
         }
 
