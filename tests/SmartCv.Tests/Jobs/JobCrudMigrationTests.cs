@@ -45,6 +45,7 @@ public class JobCrudMigrationTests
         Assert.Equal(5, job.GetSeedData().Count());
         Assert.Equal("DF_Jobs_CreatedAt", job.FindProperty(nameof(Job.CreatedAt))!.FindAnnotation("Relational:DefaultConstraintName")!.Value);
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(Current, db.Database.GetMigrations().Last());
+        // A43 appends its journal migration; keep the exact A20/A21/A43 order checked.
+        Assert.Equal(new[] { Previous, Current, "20261118131430_CandidateDataRequests" }, db.Database.GetMigrations().TakeLast(3));
     }
 }

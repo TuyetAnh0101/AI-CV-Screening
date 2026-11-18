@@ -66,6 +66,7 @@ public sealed class CandidateDetailDto
     public List<CandidateApplicationDto> Applications { get; init; } = [];
     /// <summary>Ứng viên KHÁC có cùng email / điện thoại → B24 hiện hộp thoại gộp.</summary>
     public List<DuplicateMatchDto> PossibleDuplicates { get; init; } = [];
+    public List<DataRequestDto> DataRequests { get; init; } = [];
 }
 
 public sealed class CandidateCvDto

@@ -13,7 +13,7 @@ using SmartCv.Infrastructure.Data;
 namespace SmartCv.Api.Endpoints;
 
 /// <summary>A24 – API ứng viên. No automatic contact extraction, attachment or merge.</summary>
-public static class CandidateEndpoints
+public static partial class CandidateEndpoints
 {
     public static WebApplication MapCandidateEndpoints(this WebApplication app)
     {
@@ -27,6 +27,14 @@ public static class CandidateEndpoints
         group.MapGet("/{id:int}", GetAsync).WithName("GetCandidate").ProducesProblem(404);
         group.MapPut("/{id:int}", UpdateAsync).WithName("UpdateCandidate").Accepts<CandidateRequest>("application/json").ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
         group.MapPost("/{id:int}/merge", MergeAsync).WithName("MergeCandidate").Accepts<MergeCandidateRequest>("application/json").ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
+        group.MapGet("/{id:int}/data-export", ExportAsync).WithName("ExportCandidateData")
+            .AddEndpointFilter<CandidateRightsAccessFilter>().ProducesProblem(400).ProducesProblem(404);
+        group.MapPost("/{id:int}/erase", EraseAsync).WithName("EraseCandidateData")
+            .WithMetadata(new CandidateErasureEndpoint()).AddEndpointFilter<CandidateRightsAccessFilter>()
+            .Accepts<EraseCandidateRequest>("application/json").Produces<EraseCandidateResultDto>().ProducesProblem(400)
+            .ProducesProblem(404).ProducesProblem(409).ProducesProblem(410).ProducesProblem(503);
+        app.MapGet("/api/data-requests", ListRequestsAsync).WithName("ListDataRequests").WithTags("Candidates")
+            .AddEndpointFilter<CandidateApiFilter>().AddEndpointFilter<CandidateRightsAccessFilter>();
         return app;
     }
 
@@ -130,7 +138,7 @@ public static class CandidateEndpoints
     }
 
     private static async Task<Results<Ok<CandidateDetailDto>, ProblemHttpResult>> GetAsync(
-        int id, SmartCvDbContext db, CancellationToken ct)
+        int id, HttpContext http, SmartCvDbContext db, CancellationToken ct)
     {
         var candidate = await db.Candidates.AsNoTracking().FirstOrDefaultAsync(c => c.CandidateId == id, ct);
         if (candidate is null) return NotFound(id);
@@ -161,6 +169,10 @@ public static class CandidateEndpoints
             RejectReason = e.RejectReason, Note = e.Note, Actor = e.Actor, CreatedAt = Utc(e.CreatedAt)
         }).ToList());
         var duplicates = await CandidateQueries.FindDuplicatesAsync(db, candidate.Email, candidate.PhoneNumber, id, ct);
+        var requests = await CandidateRightsAccessFilter.StatusAsync(http) == 0
+            ? await db.CandidateDataRequests.AsNoTracking().Where(r => r.CandidateId == id)
+                .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.RequestId).ToListAsync(ct)
+            : [];
         return TypedResults.Ok(new CandidateDetailDto
         {
             CandidateId = candidate.CandidateId, FullName = candidate.FullName, Email = candidate.Email,
@@ -180,6 +192,7 @@ public static class CandidateEndpoints
                 LatestEvaluatedAt = a.Latest is null ? null : Utc(a.Latest.CreatedAt),
                 Events = byApp.GetValueOrDefault(a.ApplicationId) ?? []
             }).ToList(),
+            DataRequests = requests.Select(ToRequestDto).ToList(),
             PossibleDuplicates = duplicates
         });
     }

@@ -145,5 +145,30 @@ public sealed class CvAnonymizer(SmartCvDbContext db, ICvFileStorage storage, IL
         }
     }
 
+
+    // A43 calls this only under the exclusive privacy lease and its existing Serializable transaction.
+    // A39's single-CV API keeps its existing locks, stage rules and recovery behavior.
+    internal SmartCv.Core.Storage.ICvErasureStorage? CandidateErasureFiles => storage as SmartCv.Core.Storage.ICvErasureStorage;
+    internal async Task ClearCandidateDataAsync(int candidateId, IReadOnlyList<Guid> cvIds, DateTime now, CancellationToken ct)
+    {
+        if (!db.Database.IsSqlServer() || db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Candidate erasure requires a SQL transaction.");
+        var evaluations = db.Evaluations.Where(e => e.Application.Cv.CandidateId == candidateId);
+        await db.EvaluationSkills.Where(s => s.Evaluation.Application.Cv.CandidateId == candidateId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Evidence, (string?)null), ct);
+        await evaluations.ExecuteUpdateAsync(s => s.SetProperty(e => e.Reasoning, (string?)null)
+            .SetProperty(e => e.AiRawResponse, (string?)null).SetProperty(e => e.ErrorMessage, (string?)null), ct);
+        // Alternate-key hashes require ExecuteUpdate. No per-CV reads: IDs came from the locked candidate query.
+        foreach (var id in cvIds)
+        {
+            var hash = AnonymizedHash(id);
+            await db.Cvs.Where(c => c.CvId == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.FileHash, hash), ct);
+        }
+        await db.Cvs.Where(c => c.CandidateId == candidateId).ExecuteUpdateAsync(s =>
+            s.SetProperty(c => c.CandidateId, (int?)null).SetProperty(c => c.ExtractedText, (string?)null)
+                .SetProperty(c => c.ExtractionError, (string?)null).SetProperty(c => c.OriginalFileName, RetentionRules.AnonymizedFileName)
+                .SetProperty(c => c.StoredPath, RemovedPath).SetProperty(c => c.AnonymizedAt, c => c.AnonymizedAt ?? now), ct);
+    }
+
     private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
 }
