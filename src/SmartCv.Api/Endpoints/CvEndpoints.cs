@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
+using SmartCv.Core.Cvs;
 using SmartCv.Core.Extraction;
 using SmartCv.Core.Options;
+using SmartCv.Core.Privacy;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Data;
@@ -14,6 +17,8 @@ namespace SmartCv.Api.Endpoints;
 
 /// <summary>
 /// Các API liên quan đến CV:
+///   GET  /api/cvs             kho CV: tìm kiếm + lọc + phân trang (A23)
+///                             ?search=&amp;jobId=&amp;stage=&amp;source=&amp;status=&amp;page=&amp;pageSize=
 ///   POST /api/cvs/upload      tải một hoặc nhiều file (A4–A6)
 ///   GET  /api/cvs/{id}        thông tin CV, trạng thái đọc chữ, các job đã ứng tuyển (A6)
 ///   GET  /api/cvs/{id}/file   xem / tải file gốc (A6)
@@ -49,6 +54,13 @@ public static class CvEndpoints
         }
 
         var group = app.MapGroup("/api/cvs").WithTags("CVs");
+
+        // A23: kho CV trả tên, email ứng viên và tìm trong nội dung CV, nên dùng chung chốt chặn Development ở trên
+        // (M6: thêm .RequireAuthorization(...)). CvPrivacyReadMiddleware giữ khóa đọc A39 và đặt Cache-Control: no-store.
+        group.MapGet("/", ListAsync)
+            .WithName("ListCvs")
+            .WithSummary("Kho CV: tìm theo tên file, tên / email ứng viên, nội dung CV; lọc theo job, giai đoạn, nguồn, trạng thái")
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         group.MapPost("/upload", UploadAsync)
             .WithName("UploadCvs")
@@ -101,6 +113,128 @@ public static class CvEndpoints
 
         return app;
     }
+
+    // ---------- GET /api/cvs (A23: kho CV) ----------
+    // Tìm bằng LIKE '%từ khóa%' (EF dịch string.Contains và tự thoát %, _, [ trong từ khóa). Theo collation mặc định của
+    // SQL Server: không phân biệt hoa thường, có phân biệt dấu. Vài trăm–vài nghìn CV chưa cần Full-Text Search (xem
+    // hướng dẫn A23); ElapsedMs trả về để theo dõi. Chỉ đọc: không ghi database, không ghi log từ khóa hay nội dung CV.
+    private static async Task<Results<Ok<CvPageDto>, ProblemHttpResult>> ListAsync(
+        HttpContext http, SmartCvDbContext db, ILogger<CvListQuery> logger, CancellationToken ct)
+    {
+        var parameters = http.Request.Query.ToDictionary(p => p.Key, p => p.Value.Select(v => v ?? "").ToArray(), StringComparer.OrdinalIgnoreCase);
+        var (query, errors) = CvListQuery.Parse(parameters);
+        if (query is null)
+            return TypedResults.Problem(title: "Bộ lọc không hợp lệ", detail: string.Join(" ", errors.Values.SelectMany(v => v)),
+                statusCode: StatusCodes.Status400BadRequest, extensions: new Dictionary<string, object?> { ["errors"] = errors });
+
+        var watch = Stopwatch.StartNew();
+        var cvs = db.Cvs.AsNoTracking();
+
+        if (query.Search is { } search)
+        {
+            // Hồ sơ đã ẩn danh: không còn tên, email, chữ và không được tìm ra (kể cả theo tên file thay thế "Hồ sơ đã ẩn danh").
+            cvs = cvs.Where(c => c.AnonymizedAt == null && (
+                c.OriginalFileName.Contains(search)
+                || (c.Candidate != null && (c.Candidate.FullName.Contains(search)
+                                            || (c.Candidate.Email != null && c.Candidate.Email.Contains(search))))
+                || (c.ExtractedText != null && c.ExtractedText.Contains(search))));
+        }
+
+        if (query.JobId is { } jobId)
+            cvs = query.Stage is { } jobStage
+                ? cvs.Where(c => c.Applications.Any(a => a.JobId == jobId && a.Stage == jobStage))
+                : cvs.Where(c => c.Applications.Any(a => a.JobId == jobId));
+        else if (query.Stage is { } stage)
+            cvs = cvs.Where(c => c.Applications.Any(a => a.Stage == stage));
+
+        if (query.Source is { } source) cvs = cvs.Where(c => c.SourceChannel == source);
+
+        if (query.Status is { } status)
+            cvs = status == CvListQuery.AnonymizedStatus
+                ? cvs.Where(c => c.AnonymizedAt != null)
+                : cvs.Where(c => c.AnonymizedAt == null && c.ExtractionStatus == status);
+
+        // 1) Mã CV của trang: lần quét duy nhất có điều kiện tìm/lọc (LIKE trên ExtractedText là phần tốn thời gian).
+        var ids = await cvs
+            .OrderByDescending(c => c.UploadedAt).ThenBy(c => c.CvId)
+            .Skip(query.Skip).Take(query.PageSize)
+            .Select(c => c.CvId)
+            .ToListAsync(ct);
+
+        // 2) Trang chưa đầy (và có dòng, hoặc là trang 1) là trang cuối: tổng = số dòng trước nó + số dòng của nó,
+        //    không cần quét lại. Trường hợp chậm nhất của hướng dẫn ("khongcotrongcv", 0 kết quả) chỉ còn một lần quét.
+        var total = ids.Count < query.PageSize && (ids.Count > 0 || query.Page == 1)
+            ? query.Skip + ids.Count
+            : await cvs.CountAsync(ct);
+
+        // 3) Chi tiết theo khóa chính (không lặp lại điều kiện tìm), giữ đúng thứ tự của bước 1.
+        var details = ids.Count == 0 ? [] : await db.Cvs.AsNoTracking()
+            .Where(c => ids.Contains(c.CvId))
+            .Select(c => new
+            {
+                c.CvId, c.UploadedAt, c.ExtractionStatus, c.SourceChannel, c.RetainUntil, c.AnonymizedAt,
+                // Phòng hờ dữ liệu cũ: CV đã ẩn danh không bao giờ trả tên file gốc, ứng viên hay email.
+                FileName = c.AnonymizedAt == null ? c.OriginalFileName : RetentionRules.AnonymizedFileName,
+                CandidateId = c.AnonymizedAt == null ? c.CandidateId : null,
+                CandidateName = c.AnonymizedAt == null && c.Candidate != null ? c.Candidate.FullName : null,
+                CandidateEmail = c.AnonymizedAt == null && c.Candidate != null ? c.Candidate.Email : null,
+                Applications = c.Applications.OrderBy(a => a.CreatedAt).ThenBy(a => a.ApplicationId).Select(a => new
+                {
+                    a.ApplicationId, a.JobId, JobTitle = a.Job.Title, a.Stage, a.RejectReason, a.StageUpdatedAt,
+                    // Điểm của lần chấm SÀNG LỌC xong gần nhất; lượt đánh giá prompt không tính.
+                    Latest = a.Evaluations
+                        .Where(e => e.Status == EvaluationStatuses.Completed && e.Run.RunType == RunTypes.Screening)
+                        .OrderByDescending(e => e.CreatedAt).ThenByDescending(e => e.EvaluationId)
+                        .Select(e => new { e.FinalScore, e.FitLabel, e.CreatedAt })
+                        .FirstOrDefault()
+                }).ToList()
+            })
+            .AsSplitQuery()
+            .ToListAsync(ct);
+        var order = ids.Select((id, index) => (id, index)).ToDictionary(p => p.id, p => p.index);
+        var rows = details.OrderBy(r => order[r.CvId]).ToList();
+
+        watch.Stop();
+        if (watch.ElapsedMilliseconds > 1500)
+            logger.LogWarning("Tìm kho CV chậm: {Ms} ms, {Total} kết quả. Cân nhắc Full-Text Search (A23).", watch.ElapsedMilliseconds, total);
+
+        return TypedResults.Ok(new CvPageDto
+        {
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = total,
+            TotalPages = CvListQuery.TotalPages(total, query.PageSize),
+            ElapsedMs = watch.ElapsedMilliseconds,
+            Items = rows.Select(r => new CvListItemDto
+            {
+                CvId = r.CvId,
+                FileName = r.FileName,
+                UploadedAt = DateTime.SpecifyKind(r.UploadedAt, DateTimeKind.Utc),
+                ExtractionStatus = r.ExtractionStatus,
+                SourceChannel = r.SourceChannel,
+                SourceChannelName = CvSourceChannels.DisplayName(r.SourceChannel),
+                RetainUntil = Utc(r.RetainUntil),
+                AnonymizedAt = Utc(r.AnonymizedAt),
+                CandidateId = r.CandidateId,
+                CandidateName = r.CandidateName,
+                CandidateEmail = r.CandidateEmail,
+                Applications = r.Applications.Select(a => new CvJobStatusDto
+                {
+                    ApplicationId = a.ApplicationId,
+                    JobId = a.JobId,
+                    JobTitle = a.JobTitle,
+                    Stage = a.Stage,
+                    RejectReason = a.RejectReason,
+                    StageUpdatedAt = Utc(a.StageUpdatedAt),
+                    LatestFinalScore = a.Latest?.FinalScore,
+                    LatestFitLabel = a.Latest?.FitLabel,
+                    LatestEvaluatedAt = a.Latest is null ? null : DateTime.SpecifyKind(a.Latest.CreatedAt, DateTimeKind.Utc)
+                }).ToList()
+            }).ToList()
+        });
+    }
+
+    private static DateTime? Utc(DateTime? value) => value is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;
 
     // ---------- POST /api/cvs/{id}/extract ----------
     private static async Task<Results<Accepted<CvExtractionAcceptedDto>, NotFound, ProblemHttpResult>> ReExtractAsync(
