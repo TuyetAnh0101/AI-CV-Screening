@@ -8,6 +8,7 @@ namespace SmartCv.Web.Services;
 /// B6: POST /api/runs { applicationIds } → 201 + RunProgressDto (trạng thái Queued);
 ///     GET /api/runs/{id} → RunProgressDto kèm Items (404 khi không có lượt).
 /// B7: GET /api/runs?type=Screening, GET /api/runs/latest, GET /api/runs/{id}/ranking?jobId= (A13).
+/// B26: GET /api/runs?page= (RunPageDto), GET /api/runs/{id}/failures (A25).
 /// </summary>
 public sealed class RunApiClient(HttpClient http, ILogger<RunApiClient> logger) : ApiClientBase(http, logger)
 {
@@ -46,4 +47,15 @@ public sealed class RunApiClient(HttpClient http, ILogger<RunApiClient> logger) 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(count, SmartCv.Core.Scoring.RunTimeEstimator.MaxCount);
         return GetAsync<RunEstimateDto>($"api/runs/estimate?count={count.ToString(System.Globalization.CultureInfo.InvariantCulture)}", ct);
     }
+
+    /// <summary>
+    /// B26 (A25): lịch sử lượt chấm có phân trang. Luôn gửi page nên API trả RunPageDto;
+    /// ListScreeningAsync ở trên không gửi page và vẫn nhận List&lt;RunSummaryDto&gt; như B7.
+    /// </summary>
+    public Task<ApiResult<RunPageDto>> ListPageAsync(Helpers.RunHistoryFilter filter, CancellationToken ct = default) =>
+        GetAsync<RunPageDto>("api/runs?" + filter.ApiQuery, ct);
+
+    /// <summary>B26 (A25): GET /api/runs/{id}/failures — hồ sơ Failed và KeywordOnly kèm lý do đã được API làm sạch.</summary>
+    public Task<ApiResult<RunFailuresDto>> GetFailuresAsync(int runId, CancellationToken ct = default) =>
+        GetAsync<RunFailuresDto>($"api/runs/{runId.ToString(System.Globalization.CultureInfo.InvariantCulture)}/failures", ct);
 }

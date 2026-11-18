@@ -1,0 +1,341 @@
+@page "/runs"
+@*
+    B26: lịch sử lượt chấm (A25: GET /api/runs?page=&pageSize=20&type=&status=&from=&to= → RunPageDto).
+    Địa chỉ trang là bộ lọc đang áp dụng (/runs?type=PromptTest&status=Completed&page=2): F5, Back/Forward và gửi link đều giữ bộ lọc.
+    Bộ lọc sai không gọi API. Đổi bộ lọc về trang 1. Phản hồi cũ trả về sau bộ lọc mới bị bỏ (RunHistoryWorkspace).
+*@
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.WebUtilities
+@implements IDisposable
+@inject RunApiClient RunApi
+@inject NavigationManager Nav
+
+<PageTitle>Lịch sử lượt chấm · SCApp</PageTitle>
+
+<div class="runs-page" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()">
+    <header class="page-heading">
+        <div>
+            <p class="eyebrow"><span aria-hidden="true">✧</span> Quản lý đánh giá</p>
+            <h1>Lịch sử lượt chấm</h1>
+            <p>Mọi lượt sàng lọc và đánh giá prompt, kèm cấu hình đã dùng, số hồ sơ lỗi và tỷ lệ đúng.</p>
+        </div>
+        <div class="heading-actions">
+            <button id="runs-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>Làm mới
+            </button>
+            <a class="btn sc-btn-primary" href="/upload"><span aria-hidden="true">＋</span> Tải hồ sơ lên</a>
+        </div>
+    </header>
+
+    <section class="filters" aria-labelledby="runs-filter-title">
+        <h2 id="runs-filter-title" class="visually-hidden">Bộ lọc lịch sử lượt chấm</h2>
+        <div class="filter-fields">
+            <label for="runs-type">Loại lượt
+                <select id="runs-type" value="@typeInput" @onchange="ChangeTypeAsync" aria-invalid="@Invalid(TypeInvalid)" aria-describedby="runs-filter-error">
+                    <option value="">Tất cả loại</option>
+                    @foreach (var (value, label) in RunHistoryFilter.Types) { <option value="@value">@label</option> }
+                    @if (TypeInvalid) { <option value="@typeInput">Giá trị trên địa chỉ không hợp lệ</option> }
+                </select>
+            </label>
+            <label for="runs-status">Trạng thái
+                <select id="runs-status" value="@statusInput" @onchange="ChangeStatusAsync" aria-invalid="@Invalid(StatusInvalid)" aria-describedby="runs-filter-error">
+                    <option value="">Tất cả trạng thái</option>
+                    @foreach (var (value, label) in RunHistoryFilter.Statuses) { <option value="@value">@label</option> }
+                    @if (StatusInvalid) { <option value="@statusInput">Giá trị trên địa chỉ không hợp lệ</option> }
+                </select>
+            </label>
+            <label for="runs-from">Từ ngày
+                <input id="runs-from" type="date" value="@fromInput" max="@(DateInput(toInput))" @onchange="ChangeFromAsync" aria-invalid="@Invalid(DatesInvalid)" aria-describedby="runs-date-help runs-filter-error" />
+            </label>
+            <label for="runs-to">Đến ngày
+                <input id="runs-to" type="date" value="@toInput" min="@(DateInput(fromInput))" @onchange="ChangeToAsync" aria-invalid="@Invalid(DatesInvalid)" aria-describedby="runs-date-help runs-filter-error" />
+            </label>
+            <button id="runs-clear" type="button" class="clear-filters" disabled="@(!HasInput)" @onclick="ClearAsync">Bỏ lọc</button>
+        </div>
+        <p id="runs-date-help" class="filter-help">Ngày theo giờ Việt Nam (UTC+7), tính cả ngày bắt đầu và ngày kết thúc. Đổi bộ lọc sẽ quay về trang 1.</p>
+        <div id="runs-filter-error">
+            @if (validationError is not null) { <p class="filter-error" role="alert"><span aria-hidden="true">!</span> @validationError Chưa áp dụng bộ lọc này.</p> }
+        </div>
+    </section>
+
+    <section class="history-panel" aria-labelledby="runs-list-title" aria-busy="@(workspace.Loading ? "true" : "false")">
+        <header class="panel-heading">
+            <div>
+                <h2 id="runs-list-title">Danh sách lượt chấm</h2>
+                <p>@ScopeText</p>
+            </div>
+            @if (workspace.Loading && (workspace.ShowData || workspace.ShowStale))
+            {
+                <span class="updating" role="status"><i aria-hidden="true"></i>Đang cập nhật…</span>
+            }
+        </header>
+
+        @if (validationError is not null)
+        {
+            <div class="state" role="status">
+                <span class="state-icon is-warning" aria-hidden="true">!</span>
+                <h3>Bộ lọc chưa hợp lệ</h3>
+                <p>Danh sách chưa được tải với bộ lọc này. Sửa giá trị ở trên hoặc bỏ lọc để xem toàn bộ lượt chấm.</p>
+                <button id="runs-invalid-clear" type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Bỏ lọc</button>
+            </div>
+        }
+        else if (workspace.Error is not null)
+        {
+            <div class="state is-error" role="alert">
+                <span class="state-icon is-danger" aria-hidden="true">!</span>
+                <h3>Chưa tải được lịch sử lượt chấm</h3>
+                <p>@workspace.Error</p>
+                <div class="state-actions">
+                    <button id="runs-retry" type="button" class="btn sc-btn-primary" @onclick="RefreshAsync">Thử lại</button>
+                    @if (workspace.Filter?.HasCriteria == true || workspace.Filter?.Page > 1)
+                    {
+                        <button type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Bỏ lọc</button>
+                    }
+                </div>
+            </div>
+        }
+        else if ((workspace.ShowData || workspace.ShowStale) && workspace.Data is { } data && workspace.DataFilter is { } shown)
+        {
+            @if (data.TotalCount == 0 && !shown.HasCriteria)
+            {
+                <div class="state">
+                    <span class="state-icon" aria-hidden="true">↻</span>
+                    <h3>Chưa có lượt chấm nào</h3>
+                    <p>Tải CV lên, gán vào vị trí tuyển dụng rồi bấm “Phân tích hồ sơ” để tạo lượt sàng lọc đầu tiên. Lượt đánh giá prompt được tạo ở trang System Prompt.</p>
+                    <div class="state-actions">
+                        <a class="btn sc-btn-primary" href="/upload">Tải hồ sơ lên</a>
+                        <a class="text-link" href="/prompts">Mở System Prompt <span aria-hidden="true">↗</span></a>
+                    </div>
+                </div>
+            }
+            else if (data.TotalCount == 0)
+            {
+                <div class="state" role="status">
+                    <span class="state-icon" aria-hidden="true">⌕</span>
+                    <h3>Không có lượt chấm khớp bộ lọc</h3>
+                    <p>Thử loại lượt, trạng thái hoặc khoảng ngày khác.</p>
+                    <button id="runs-empty-clear" type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Bỏ lọc</button>
+                </div>
+            }
+            else if (data.Items.Count == 0)
+            {
+                <div class="state" role="status">
+                    <span class="state-icon" aria-hidden="true">⇤</span>
+                    <h3>Trang @RunText.Number(data.Page) không có lượt nào</h3>
+                    <p>Bộ lọc hiện có @RunText.Number(data.TotalCount) lượt trong @RunText.Number(data.TotalPages) trang.</p>
+                    <button id="runs-last-page" type="button" class="btn sc-btn-secondary" @onclick="() => GoToPageAsync(Math.Max(1, data.TotalPages))">Về trang @RunText.Number(Math.Max(1, data.TotalPages))</button>
+                </div>
+            }
+            else
+            {
+                <div class="table-region @(workspace.ShowStale ? "is-stale" : null)">
+                    <table class="runs-table">
+                        <caption class="visually-hidden">Lịch sử lượt chấm, @RunText.PageInfo(data.Page, data.TotalPages, data.TotalCount). Thời gian theo giờ Việt Nam (UTC+7).</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col" class="col-run">Lượt chấm</th>
+                                <th scope="col" class="col-time">Bắt đầu · Thời gian chạy</th>
+                                <th scope="col" class="col-scope">Vị trí / Bộ CV đánh giá</th>
+                                <th scope="col" class="col-config">Prompt · Model · Temperature</th>
+                                <th scope="col" class="col-num">Hồ sơ</th>
+                                <th scope="col" class="col-num">Lỗi</th>
+                                <th scope="col" class="col-num col-accuracy">Tỷ lệ đúng</th>
+                                <th scope="col" class="col-status">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var run in data.Items)
+                            {
+                                var status = StatusText.ForRun(run.Status);
+                                var promptTest = RunText.IsPromptTest(run.RunType);
+                                <tr @key="run.RunId">
+                                    <th scope="row" class="run-cell">
+                                        <a class="run-link" href="@DetailUrl(run.RunId)" aria-label="@($"Xem chi tiết lượt chấm #{run.RunId}")">#@run.RunId</a>
+                                        <span class="type-chip @(promptTest ? "is-prompt" : "is-screening")">@RunText.Type(run.RunType)</span>
+                                    </th>
+                                    <td class="time-cell" data-label="Bắt đầu">
+                                        <time datetime="@RunText.IsoTime(run.CreatedAt)"><span>@RunText.VnDate(run.CreatedAt)</span> <span class="clock">@RunText.VnClock(run.CreatedAt)</span></time>
+                                        <small class="duration @(RunText.IsActive(run.Status) ? "is-active" : null)"><span class="visually-hidden">Thời gian chạy: </span>@RunText.RunDuration(run.Status, run.DurationSeconds)</small>
+                                    </td>
+                                    <td class="scope-cell" data-label="@(promptTest ? "Bộ CV đánh giá" : "Vị trí")">
+                                        @if (promptTest)
+                                        {
+                                            var setName = run.EvaluationSetName ?? (run.EvaluationSetId is { } setId ? $"Bộ đánh giá #{setId}" : "—");
+                                            <span class="scope-kind">Bộ CV đánh giá</span>
+                                            <span class="scope-name" title="@setName">@setName</span>
+                                        }
+                                        else if (run.Jobs.Count == 0)
+                                        {
+                                            <span class="muted">Chưa có vị trí</span>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var job in run.Jobs.Take(2)) { <span class="scope-name" title="@job.Title">@job.Title</span> }
+                                            @if (run.Jobs.Count > 2)
+                                            {
+                                                var others = string.Join(" · ", run.Jobs.Skip(2).Select(j => j.Title));
+                                                <small class="more-jobs" title="@others">+@(run.Jobs.Count - 2) vị trí khác: @others</small>
+                                            }
+                                        }
+                                    </td>
+                                    <td class="config-cell" data-label="Prompt · Model">
+                                        <span class="prompt-name" title="@run.PromptVersionName">@Display.Text(run.PromptVersionName)</span>
+                                        <small class="model" title="@run.ModelName">@Display.Text(run.ModelName)</small>
+                                        <small class="temperature">Temperature <b>@RunText.Temperature(run.Temperature)</b></small>
+                                    </td>
+                                    <td class="num" data-label="Hồ sơ">
+                                        <span class="count">@RunText.Number(run.TotalItems)</span>
+                                        @if (RunText.IsActive(run.Status)) { <small class="processed">@RunText.Number(run.ProcessedItems) đã xử lý</small> }
+                                    </td>
+                                    <td class="num" data-label="Hồ sơ lỗi">
+                                        @if (run.FailedItems > 0) { <span class="failed-count">@RunText.Number(run.FailedItems)<span class="visually-hidden"> hồ sơ lỗi</span></span> }
+                                        else { <span class="count is-zero">0</span> }
+                                    </td>
+                                    <td class="num" data-label="Tỷ lệ đúng">
+                                        @if (promptTest)
+                                        {
+                                            <span class="accuracy @(run.AccuracyPercent is null ? "is-empty" : null)">@RunText.Accuracy(run.AccuracyPercent)</span>
+                                            @if (run.AccuracyPercent is null) { <small>chưa có</small> }
+                                        }
+                                        else
+                                        {
+                                            <span class="accuracy is-empty" aria-hidden="true">—</span><span class="visually-hidden">Không áp dụng cho lượt sàng lọc</span>
+                                        }
+                                    </td>
+                                    <td class="status-cell" data-label="Trạng thái"><StatusBadge Text="@status.Text" Variant="status.Variant" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (data.Items.Any(r => RunText.IsActive(r.Status)))
+                {
+                    <p class="active-note"><span aria-hidden="true">↻</span> Có lượt đang chờ hoặc đang phân tích. Trang không tự tải lại; bấm Làm mới để cập nhật tiến độ.</p>
+                }
+                <nav class="pager" aria-label="Phân trang lịch sử lượt chấm">
+                    <p class="page-info" aria-live="polite"><strong>@RunText.PageInfo(data.Page, data.TotalPages, data.TotalCount)</strong><span>Hiển thị @RunText.Number(FirstRow(data))–@RunText.Number(FirstRow(data) + data.Items.Count - 1)</span></p>
+                    <div class="pager-buttons">
+                        <button id="runs-prev" type="button" class="pager-button" disabled="@(data.Page <= 1 || workspace.Loading)" @onclick="() => GoToPageAsync(data.Page - 1)"><span aria-hidden="true">←</span> Trước</button>
+                        <button id="runs-next" type="button" class="pager-button" disabled="@(data.Page >= data.TotalPages || workspace.Loading)" @onclick="() => GoToPageAsync(data.Page + 1)">Sau <span aria-hidden="true">→</span></button>
+                    </div>
+                </nav>
+            }
+        }
+        else
+        {
+            <div class="skeleton-list" role="status">
+                <span class="visually-hidden">Đang tải lịch sử lượt chấm...</span>
+                @for (var i = 0; i < 5; i++) { <div class="skeleton-row" aria-hidden="true"><i></i><i></i><i></i><i></i></div> }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private RunHistoryWorkspace workspace = default!;
+    private string typeInput = "", statusInput = "", fromInput = "", toInput = "";
+    private string? lastUri, validationError;
+    private bool disposed;
+
+    private bool HasInput => typeInput.Length > 0 || statusInput.Length > 0 || fromInput.Length > 0 || toInput.Length > 0
+                             || validationError is not null || workspace.Filter?.Page > 1;
+    private bool TypeInvalid => validationError is not null && typeInput.Length > 0
+                                && !RunHistoryFilter.Types.Any(t => string.Equals(t.Value, typeInput, StringComparison.OrdinalIgnoreCase));
+    private bool StatusInvalid => validationError is not null && statusInput.Length > 0
+                                  && !RunHistoryFilter.Statuses.Any(s => string.Equals(s.Value, statusInput, StringComparison.OrdinalIgnoreCase));
+    private bool DatesInvalid => validationError is not null && (fromInput.Length > 0 || toInput.Length > 0)
+                                 && RunHistoryFilter.Parse(null, null, fromInput, toInput, null).Filter is null;
+    private static string Invalid(bool value) => value ? "true" : "false";
+    private static string? DateInput(string value) => value.Length == 10 ? value : null;
+    private static int FirstRow(RunPageDto data) => (int)Math.Min(int.MaxValue, (data.Page - 1L) * data.PageSize + 1);
+
+    private string ScopeText
+    {
+        get
+        {
+            var filter = workspace.Filter ?? workspace.DataFilter;
+            if (validationError is not null || filter is null) return "Chọn bộ lọc hợp lệ để xem lượt chấm.";
+            var parts = new List<string>();
+            if (filter.Type is not null) parts.Add(RunText.Type(filter.Type));
+            if (filter.Status is not null) parts.Add(StatusText.ForRun(filter.Status).Text);
+            if (filter.From is not null || filter.To is not null)
+                parts.Add($"{(filter.From is { } f ? f.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture) : "…")} – {(filter.To is { } t ? t.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture) : "…")}");
+            return parts.Count == 0 ? "Tất cả lượt chấm, mới nhất trước · 20 lượt mỗi trang." : "Đang lọc: " + string.Join(" · ", parts) + " · mới nhất trước.";
+        }
+    }
+
+    /// <summary>Detail link keeps the history filter/page so "Lịch sử" on the detail page returns here.</summary>
+    private string DetailUrl(int runId) => $"/runs/{runId}{workspace.DataFilter?.Query}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        workspace = new(RunApi);
+        Nav.LocationChanged += LocationChanged;
+        await SynchronizeAsync();
+    }
+
+    protected override Task OnParametersSetAsync() => SynchronizeAsync();
+
+    private bool IsHistoryPath(string uri) =>
+        string.Equals(Nav.ToBaseRelativePath(uri).Split('?', '#')[0].TrimEnd('/'), "runs", StringComparison.OrdinalIgnoreCase);
+
+    private void LocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        if (!IsHistoryPath(args.Location)) return;
+        _ = InvokeAsync(() => SynchronizeAsync());
+    }
+
+    private async Task SynchronizeAsync(bool force = false)
+    {
+        if (disposed || (!force && lastUri == Nav.Uri) || !IsHistoryPath(Nav.Uri)) return;
+        lastUri = Nav.Uri;
+        var raw = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        typeInput = raw.GetValueOrDefault("type").ToString(); statusInput = raw.GetValueOrDefault("status").ToString();
+        fromInput = raw.GetValueOrDefault("from").ToString(); toInput = raw.GetValueOrDefault("to").ToString();
+        var (filter, error) = RunHistoryFilter.FromUri(Nav.Uri);
+        validationError = error;
+        if (filter is null) { workspace.Invalidate(); StateHasChanged(); return; }
+        typeInput = filter.Type ?? ""; statusInput = filter.Status ?? "";
+        fromInput = filter.From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        toInput = filter.To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+        var loading = workspace.LoadAsync(filter); StateHasChanged(); await loading;
+        if (!disposed) StateHasChanged();
+    }
+
+    private Task ChangeTypeAsync(ChangeEventArgs e) { typeInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task ChangeStatusAsync(ChangeEventArgs e) { statusInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task ChangeFromAsync(ChangeEventArgs e) { fromInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task ChangeToAsync(ChangeEventArgs e) { toInput = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+
+    /// <summary>A changed filter always starts at page 1; an invalid one is shown but never requested.</summary>
+    private async Task ApplyAsync()
+    {
+        var (filter, error) = RunHistoryFilter.Parse(typeInput, statusInput, fromInput, toInput, null);
+        validationError = error;
+        if (filter is null) { workspace.Invalidate(); return; }
+        await NavigateAsync(filter);
+    }
+
+    private async Task NavigateAsync(RunHistoryFilter filter)
+    {
+        if (Nav.ToAbsoluteUri(filter.Url).AbsoluteUri == Nav.Uri) await SynchronizeAsync(force: true);
+        else Nav.NavigateTo(filter.Url);
+    }
+
+    private Task ClearAsync() => NavigateAsync(new());
+
+    private Task GoToPageAsync(int page) =>
+        workspace.Loading || workspace.Filter is not { } filter || page < 1 ? Task.CompletedTask : NavigateAsync(filter.WithPage(page));
+
+    private async Task RefreshAsync()
+    {
+        if (workspace.Loading || disposed) return;
+        if (validationError is not null || workspace.Filter is null) { await ApplyAsync(); return; }
+        var loading = workspace.LoadAsync(workspace.Filter); StateHasChanged(); await loading;
+    }
+
+    public void Dispose()
+    {
+        disposed = true; Nav.LocationChanged -= LocationChanged; workspace.Dispose();
+    }
+}
