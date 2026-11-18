@@ -11,6 +11,7 @@ public class SmartCvDbContext : DbContext
 
     // Các bảng nghiệp vụ, bao gồm lịch sử quyết định chỉ thêm của A35.
     public DbSet<Candidate> Candidates => Set<Candidate>();
+    public DbSet<CandidateDataRequest> CandidateDataRequests => Set<CandidateDataRequest>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
     public DbSet<JobSkillAlias> JobSkillAliases => Set<JobSkillAlias>();

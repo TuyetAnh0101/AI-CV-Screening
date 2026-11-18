@@ -8,7 +8,7 @@ namespace SmartCv.Api.Middleware;
 public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
 {
     // A41: assembled-preview trả nội dung CV (đã che) nên cũng giữ khóa đọc, để ẩn danh hóa không chen ngang lúc đang trả.
-    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/candidates", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare", "/api/prompts/assembled-preview"];
+    private static readonly string[] PersonalRoutes = ["/api/cvs", "/api/candidates", "/api/data-requests", "/api/runs", "/api/evaluations", "/api/applications", "/api/evaluation-sets", "/api/prompt-tests", "/api/prompts/compare", "/api/prompts/assembled-preview"];
     public async Task InvokeAsync(HttpContext http, IServiceScopeFactory scopes, IHostEnvironment environment, IOptions<CvUploadEndpointOptions> endpoint)
     {
         var path = http.Request.Path;
@@ -16,6 +16,8 @@ public sealed class CvPrivacyReadMiddleware(RequestDelegate next)
         // so they cannot pass eligibility checks and then resume behind an erasure commit.
         // A42: upload trùng trả metadata của CV cũ, nên cũng giữ lease tới khi trả xong và cấm cache.
         var personalResponse = PersonalRoutes.Any(route => path.StartsWithSegments(route)) && path.Value?.EndsWith("/anonymize", StringComparison.OrdinalIgnoreCase) != true;
+        // A43 erase owns an exclusive lease; do not hold a shared lease while trying to upgrade.
+        if (http.GetEndpoint()?.Metadata.GetMetadata<CandidateErasureEndpoint>() is not null) personalResponse = false;
         if (!personalResponse || !environment.IsDevelopment() || !endpoint.Value.Enabled)
         {
             await next(http);

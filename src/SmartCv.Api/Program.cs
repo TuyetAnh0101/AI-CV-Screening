@@ -21,6 +21,7 @@ builder.Services.AddHostedService<CvExtractionWorker>();
 // A11: tiến trình chấm điểm nền, chỉ chạy khi Scoring:WorkerEnabled = true.
 builder.Services.AddHostedService<RunScoringWorker>();
 builder.Services.AddScoped<CvAnonymizer>();
+builder.Services.AddScoped<SmartCv.Infrastructure.Candidates.CandidateErasureService>();
 builder.Services.AddScoped<RetentionProcessor>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<RetentionWorker>();
