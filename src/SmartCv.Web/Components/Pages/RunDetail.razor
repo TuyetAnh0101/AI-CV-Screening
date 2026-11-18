@@ -1,0 +1,399 @@
+@page "/runs/{Id:int}"
+@*
+    B26: chi tiết một lượt chấm (A25).
+      - GET /api/runs/{id}: trạng thái, số hồ sơ, thời gian và CẤU HÌNH ĐÃ LƯU của lượt (prompt, model, temperature,
+        trọng số, ngưỡng Đạt, bộ CV đánh giá, nội dung prompt đã dùng). Không lấy cấu hình đang chạy hiện tại.
+      - GET /api/runs/{id}/failures: hồ sơ Failed và KeywordOnly, tải và thử lại riêng; lỗi ở đây không làm mất phần tóm tắt.
+    Tên/tệp CV theo chế độ Ẩn danh (B36). Lý do lỗi chỉ hiện các câu cố định đã làm sạch (RunText.SafeReason).
+*@
+@using SmartCv.Core.Constants
+@implements IDisposable
+@inject RunApiClient RunApi
+@inject AnonymityState Anonymity
+@inject NavigationManager Nav
+
+<PageTitle>Chi tiết lượt chấm #@Id · SCApp</PageTitle>
+
+<div class="run-detail" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()" aria-busy="@(workspace.Loading ? "true" : "false")">
+    <a class="back-link" href="@BackUrl"><span aria-hidden="true">←</span> Lịch sử lượt chấm</a>
+
+    <header class="page-heading">
+        <div>
+            <p class="eyebrow">@(Current is { } head ? (RunText.IsPromptTest(head.RunType) ? "Lượt đánh giá prompt" : "Lượt sàng lọc") : "Lượt chấm")</p>
+            <div class="title-row">
+                <h1>Chi tiết lượt chấm #@Id</h1>
+                @if (Current is { } titled)
+                {
+                    var status = StatusText.ForRun(titled.Status);
+                    <StatusBadge Text="@status.Text" Variant="status.Variant" />
+                }
+            </div>
+            <p>@Subtitle</p>
+        </div>
+        @if (Id > 0)
+        {
+            <div class="heading-actions">
+                <button id="run-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>Làm mới
+                </button>
+            </div>
+        }
+    </header>
+
+    @if (Id <= 0)
+    {
+        <section class="state-card" role="alert">
+            <span class="state-icon is-warning" aria-hidden="true">!</span>
+            <h2>Mã lượt chấm không hợp lệ</h2>
+            <p>Mã lượt chấm phải là số nguyên dương. Hãy mở lượt từ trang Lịch sử lượt chấm.</p>
+            <a class="btn sc-btn-primary" href="@BackUrl">Về lịch sử lượt chấm</a>
+        </section>
+    }
+    else if (Current is null && workspace.Error is not null)
+    {
+        <section class="state-card @(workspace.NotFound ? null : "is-error")" role="alert">
+            <span class="state-icon @(workspace.NotFound ? "is-warning" : "is-danger")" aria-hidden="true">@(workspace.NotFound ? "?" : "!")</span>
+            <h2>@(workspace.NotFound ? $"Không có lượt chấm #{Id}." : "Chưa tải được lượt chấm")</h2>
+            <p>@(workspace.NotFound ? "Lượt có thể chưa được tạo hoặc địa chỉ có mã lượt sai. Kiểm tra lại mã hoặc chọn lượt trong lịch sử." : workspace.Error)</p>
+            <div class="state-actions">
+                <button id="run-retry" type="button" class="btn sc-btn-primary" disabled="@workspace.Loading" @onclick="RefreshAsync">Thử lại</button>
+                <a class="btn sc-btn-secondary" href="@BackUrl">Về lịch sử lượt chấm</a>
+            </div>
+        </section>
+    }
+    else if (Current is null)
+    {
+        <div class="detail-skeleton" role="status">
+            <span class="visually-hidden">Đang tải lượt chấm #@Id...</span>
+            <div class="stats" aria-hidden="true">@for (var i = 0; i < 5; i++) { <div class="stat skeleton-stat"><i></i><i></i><i></i></div> }</div>
+            <div class="detail-grid" aria-hidden="true"><div class="panel skeleton-panel"><i></i><i></i><i></i><i></i></div><div class="panel skeleton-panel"><i></i><i></i><i></i></div></div>
+        </div>
+    }
+    else if (Current is { } run)
+    {
+        var promptTest = RunText.IsPromptTest(run.RunType);
+        var active = RunText.IsActive(run.Status);
+        var duration = RunText.DurationSeconds(run.CreatedAt, run.CompletedAt);
+        var systemPrompt = run.SystemPrompt ?? "";
+
+        @if (workspace.Error is not null)
+        {
+            <div class="notice is-warning" role="alert">
+                <p><strong>Chưa làm mới được.</strong> @workspace.Error Đang hiển thị dữ liệu tải lần trước.</p>
+                <button type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync">Thử lại</button>
+            </div>
+        }
+        @if (active)
+        {
+            <div class="notice is-info" role="status">
+                <p><strong>@(run.Status == RunStatuses.Queued ? "Lượt đang chờ xử lý." : "Lượt đang phân tích.")</strong> Đã xử lý @RunText.Number(run.ProcessedItems)/@RunText.Number(run.TotalItems) hồ sơ. Số liệu dưới đây chưa phải kết quả cuối cùng; trang không tự tải lại, bấm Làm mới để cập nhật.</p>
+            </div>
+        }
+        else if (run.Status == RunStatuses.Failed)
+        {
+            <div class="notice is-danger" role="status">
+                <p><strong>Lượt chấm kết thúc ở trạng thái Thất bại.</strong> Xem danh sách hồ sơ lỗi bên dưới để biết lý do và cách khắc phục.</p>
+            </div>
+        }
+
+        <section class="stats @(promptTest ? "has-accuracy" : null)" aria-label="Tóm tắt lượt chấm">
+            <div class="stat">
+                <span class="stat-label">Tổng hồ sơ</span>
+                <strong class="stat-value">@RunText.Number(run.TotalItems)</strong>
+                <small>@(promptTest ? "Trong bộ CV đánh giá" : $"{RunText.Number(workspace.Jobs.Count)} vị trí tuyển dụng")</small>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Đã xử lý</span>
+                <strong class="stat-value">@RunText.Number(run.ProcessedItems)<span class="stat-of">/@RunText.Number(run.TotalItems)</span></strong>
+                @if (active)
+                {
+                    <span class="progress" aria-hidden="true"><span style="width:@(RunFlow.Percent(run).ToString(System.Globalization.CultureInfo.InvariantCulture))%"></span></span>
+                    <small>@RunFlow.Percent(run)% · đang chấm</small>
+                }
+                else
+                {
+                    <small>@(run.ProcessedItems >= run.TotalItems ? "Đã xử lý hết hồ sơ" : $"{RunText.Number(RunFlow.Pending(run))} hồ sơ chưa xử lý")</small>
+                }
+            </div>
+            <div class="stat @(run.FailedItems > 0 ? "is-danger" : null)">
+                <span class="stat-label">Hồ sơ lỗi</span>
+                <strong class="stat-value">@RunText.Number(run.FailedItems)</strong>
+                <small>@(workspace.Failures is { } fs && fs.KeywordOnlyCount > 0 ? $"Không chấm được · thêm {RunText.Number(fs.KeywordOnlyCount)} chỉ có điểm từ khóa" : "Không chấm được")</small>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Bắt đầu</span>
+                <strong class="stat-value stat-time"><time datetime="@RunText.IsoTime(run.CreatedAt)">@RunText.VnClock(run.CreatedAt)</time></strong>
+                <small>@RunText.VnDate(run.CreatedAt) · giờ Việt Nam</small>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Hoàn tất</span>
+                @if (active)
+                {
+                    <strong class="stat-value stat-pending">Chưa hoàn tất</strong>
+                    <small>@RunText.RunDuration(run.Status, duration)</small>
+                }
+                else if (run.CompletedAt is { } completed)
+                {
+                    <strong class="stat-value stat-time"><time datetime="@RunText.IsoTime(completed)">@RunText.VnClock(completed)</time></strong>
+                    <small>@RunText.VnDate(completed) · chạy @RunText.Duration(duration)</small>
+                }
+                else
+                {
+                    <strong class="stat-value stat-pending">Chưa ghi nhận</strong>
+                    <small>Thời gian chạy: —</small>
+                }
+            </div>
+            @if (promptTest)
+            {
+                <div class="stat is-accent">
+                    <span class="stat-label">Tỷ lệ đúng</span>
+                    <strong class="stat-value @(run.AccuracyPercent is null ? "stat-pending" : null)">@(run.AccuracyPercent is null ? "—" : RunText.Accuracy(run.AccuracyPercent))</strong>
+                    <small>@(run.AccuracyPercent is not null ? "So với nhãn HR của bộ CV" : active ? "Có khi lượt hoàn tất" : "Chưa có kết quả")</small>
+                </div>
+            }
+        </section>
+
+        <div class="detail-grid">
+            <section class="panel config-panel" aria-labelledby="config-title">
+                <header class="panel-head">
+                    <div>
+                        <h2 id="config-title">Cấu hình đã dùng</h2>
+                        <p>Lưu cùng lượt chấm lúc tạo lượt. Đổi cấu hình hoặc kích hoạt prompt khác sau này không làm thay đổi lượt này.</p>
+                    </div>
+                    <span class="readonly-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>Chỉ xem</span>
+                </header>
+                <dl class="config-list">
+                    <div class="config-row">
+                        <dt>Phiên bản System Prompt</dt>
+                        <dd><span class="value-strong">@Display.Text(run.PromptVersionName)</span><small>Mã phiên bản #@run.PromptVersionId</small></dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Model</dt>
+                        <dd class="mono">@Display.Text(run.ModelName)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Temperature</dt>
+                        <dd class="tabular">@RunText.Temperature(run.Temperature)</dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Trọng số điểm</dt>
+                        <dd>
+                            <span class="value-strong">@RunText.Weights(run.KeywordWeight, run.AiWeight)</span>
+                            @if (RunText.KeywordShare(run.KeywordWeight, run.AiWeight) is { } share)
+                            {
+                                <span class="weight-bar" aria-hidden="true"><span style="width:@share%"></span></span>
+                                <span class="weight-legend"><span><i class="is-keyword"></i>Trọng số Keyword @Display.Weight(run.KeywordWeight)</span><span><i class="is-ai"></i>Trọng số AI @Display.Weight(run.AiWeight)</span></span>
+                            }
+                        </dd>
+                    </div>
+                    <div class="config-row">
+                        <dt>Ngưỡng Đạt</dt>
+                        <dd class="tabular">@RunText.Threshold(run.PassThreshold)</dd>
+                    </div>
+                    @if (promptTest)
+                    {
+                        <div class="config-row">
+                            <dt>Bộ CV đánh giá</dt>
+                            <dd><span class="value-strong">@Display.Text(run.EvaluationSetName)</span>@if (run.EvaluationSetId is { } setId) { <small>Mã bộ #@setId</small> }</dd>
+                        </div>
+                    }
+                </dl>
+                <div class="prompt-block">
+                    <button id="prompt-toggle" type="button" class="prompt-toggle" aria-expanded="@(showPrompt ? "true" : "false")" aria-controls="prompt-content" @onclick="() => showPrompt = !showPrompt">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>
+                        <span class="toggle-text">@(showPrompt ? "Ẩn nội dung Prompt" : "Xem nội dung Prompt")</span>
+                        <small>@RunText.Number(systemPrompt.Length) ký tự · @RunText.Number(LineCount(systemPrompt)) dòng</small>
+                        <svg class="chevron @(showPrompt ? "is-open" : null)" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    <div id="prompt-content" class="prompt-viewer" hidden="@(!showPrompt)">
+                        @if (showPrompt)
+                        {
+                            <div class="viewer-head"><strong>@Display.Text(run.PromptVersionName)</strong><span>Chỉ đọc · nội dung đã dùng cho lượt #@run.RunId</span></div>
+                            @if (string.IsNullOrWhiteSpace(systemPrompt))
+                            {
+                                <p class="viewer-empty">Lượt này không có nội dung prompt được lưu.</p>
+                            }
+                            else
+                            {
+                                <pre tabindex="0" aria-label="@($"Nội dung System Prompt {run.PromptVersionName}, chỉ đọc")">@systemPrompt</pre>
+                            }
+                        }
+                    </div>
+                </div>
+                <p class="config-note">Mức phù hợp (85/70/55 điểm) và mức trần 69 điểm khi thiếu kỹ năng bắt buộc là quy tắc chung của hệ thống, không lưu riêng theo lượt.</p>
+            </section>
+
+            <section class="panel results-panel" aria-labelledby="results-title">
+                <header class="panel-head">
+                    <div>
+                        <h2 id="results-title">Kết quả và liên kết</h2>
+                        <p>@(promptTest ? "Độ chính xác của prompt trên bộ CV có nhãn HR." : "Bảng xếp hạng của chính lượt này, theo từng vị trí.")</p>
+                    </div>
+                </header>
+                @if (promptTest)
+                {
+                    <dl class="result-facts">
+                        <div><dt>Bộ CV đánh giá</dt><dd>@Display.Text(run.EvaluationSetName)</dd></div>
+                        <div><dt>Tỷ lệ đúng</dt><dd class="@(run.AccuracyPercent is null ? "is-empty" : "is-accent")">@RunText.Accuracy(run.AccuracyPercent)</dd></div>
+                        <div><dt>Hồ sơ đã đánh giá</dt><dd>@RunText.Number(run.ProcessedItems)/@RunText.Number(run.TotalItems)</dd></div>
+                    </dl>
+                    <a id="prompt-link" class="btn sc-btn-primary action-link" href="@($"/prompts?testRunId={run.RunId}")">Xem đánh giá Prompt <span aria-hidden="true">→</span></a>
+                    <p class="hint-text">Mở trang System Prompt với đúng lượt #@run.RunId để xem độ chính xác và hồ sơ lệch nhãn. Không tạo lượt đánh giá mới.</p>
+                }
+                else if (workspace.Jobs.Count == 0)
+                {
+                    <p class="empty-inline">Lượt chấm này chưa có hồ sơ nên chưa có bảng xếp hạng.</p>
+                }
+                else
+                {
+                    <ul class="job-list">
+                        @foreach (var job in workspace.Jobs)
+                        {
+                            <li @key="job.JobId">
+                                <div class="job-main">
+                                    <span class="job-title">@Display.Text(job.Title)</span>
+                                    <small>@RunText.Number(job.Count) hồ sơ@(job.FailedCount > 0 ? $" · {RunText.Number(job.FailedCount)} lỗi" : "")</small>
+                                </div>
+                                <a class="job-link" href="@("/" + RankingView.ResultsUrl(run.RunId, job.JobId))" aria-label="@($"Xem bảng xếp hạng {job.Title} trong lượt #{run.RunId}")">Xem bảng xếp hạng <span aria-hidden="true">→</span></a>
+                            </li>
+                        }
+                    </ul>
+                    <p class="hint-text">Liên kết mở đúng lượt #@run.RunId, không chuyển sang lượt mới nhất.</p>
+                }
+            </section>
+        </div>
+
+        <section class="panel failures-panel" aria-labelledby="failures-title" aria-busy="@(workspace.FailuresLoading ? "true" : "false")">
+            <header class="panel-head">
+                <div>
+                    <h2 id="failures-title">Hồ sơ lỗi</h2>
+                    <p>Hồ sơ không chấm được và hồ sơ AI lỗi (chỉ có điểm từ khóa) được tách riêng. Tên và tệp CV hiển thị theo chế độ Ẩn danh.</p>
+                </div>
+                <AnonymousToggle />
+            </header>
+
+            @if (workspace.FailuresError is null && workspace.Failures is { } summary && (summary.Items.Count > 0 || summary.FailedCount > 0 || summary.KeywordOnlyCount > 0))
+            {
+                <div class="failure-summary" aria-label="Tổng hợp hồ sơ lỗi">
+                    <span class="kind-count is-failed"><i aria-hidden="true">✕</i><b>@RunText.Number(summary.FailedCount)</b> Không chấm được</span>
+                    <span class="kind-count is-keyword"><i aria-hidden="true">!</i><b>@RunText.Number(summary.KeywordOnlyCount)</b> AI lỗi · chỉ có điểm từ khóa</span>
+                </div>
+            }
+
+            @if (workspace.FailuresError is not null)
+            {
+                <div class="inline-alert" role="alert">
+                    <div><strong>Chưa tải được danh sách hồ sơ lỗi.</strong><p>@workspace.FailuresError Phần tóm tắt và cấu hình phía trên vẫn đúng.</p></div>
+                    <button id="failures-retry" type="button" class="btn sc-btn-secondary" disabled="@workspace.FailuresLoading" @onclick="RetryFailuresAsync">Thử lại</button>
+                </div>
+            }
+            else if (workspace.Failures is null)
+            {
+                <div class="failures-skeleton" role="status"><span class="visually-hidden">Đang tải danh sách hồ sơ lỗi...</span><i aria-hidden="true"></i><i aria-hidden="true"></i></div>
+            }
+            else if (workspace.Failures.Items.Count == 0)
+            {
+                <p class="no-failures" role="status"><span aria-hidden="true">✓</span>@(active ? "Chưa ghi nhận hồ sơ lỗi. Lượt đang chạy nên danh sách có thể còn thay đổi." : "Không có hồ sơ lỗi trong lượt này.")</p>
+            }
+            else
+            {
+                @if (active) { <p class="partial-note">Lượt đang chạy: danh sách hồ sơ lỗi có thể còn thay đổi.</p> }
+                <table class="failures-table">
+                    <caption class="visually-hidden">Hồ sơ lỗi của lượt chấm #@run.RunId</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col" class="f-profile">Hồ sơ</th>
+                            <th scope="col" class="f-job">Vị trí</th>
+                            <th scope="col" class="f-kind">Loại lỗi</th>
+                            <th scope="col" class="f-reason">Lý do · Cách khắc phục</th>
+                            <th scope="col" class="f-link"><span class="visually-hidden">Chi tiết</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in workspace.Failures.Items)
+                        {
+                            var failed = item.Kind == RunText.FailedKind;
+                            var name = Anonymity.Name(item.CandidateName, null, item.ApplicationId);
+                            var hint = RunText.CvHint(item.CvExtractionStatus);
+                            <tr @key="item.EvaluationId" class="@(failed ? "is-failed" : "is-keyword")">
+                                <th scope="row" class="profile-cell"><span class="profile-name">@name</span><small>@Anonymity.FileName(item.FileName)</small></th>
+                                <td data-label="Vị trí">@Display.Text(item.JobTitle)</td>
+                                <td data-label="Loại lỗi"><span class="kind-badge @(failed ? "is-failed" : "is-keyword")"><i aria-hidden="true">@(failed ? "✕" : "!")</i>@RunText.FailureKind(item.Kind)</span></td>
+                                <td data-label="Lý do" class="reason-cell">
+                                    <p>@RunText.SafeReason(item.Kind, item.ErrorMessage)</p>
+                                    @if (hint is not null) { <p class="fix-hint"><strong>Cách khắc phục:</strong> @hint <a href="/upload">Tải lại CV</a></p> }
+                                </td>
+                                <td class="link-cell"><a class="detail-link" href="@EvaluationUrl(run, item)" aria-label="@($"Xem kết quả chi tiết của {name}")">Xem kết quả <span aria-hidden="true">↗</span></a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private RunDetailWorkspace workspace = default!;
+    private bool showPrompt, disposed;
+    private int loadedId;
+
+    /// <summary>Only the run that belongs to the current route id is ever rendered.</summary>
+    private RunProgressDto? Current => workspace.Run is { } r && r.RunId == Id && workspace.RunId == Id ? r : null;
+
+    private string Subtitle => Current is { } run
+        ? $"{RunText.Type(run.RunType)} · bắt đầu {RunText.VnDateTime(run.CreatedAt)} (giờ Việt Nam) · {Display.Text(run.ModelName)}"
+        : "Trạng thái, cấu hình đã dùng và hồ sơ lỗi của lượt chấm.";
+
+    /// <summary>Back to the history page with its previous filter/page when the link carried a valid one; otherwise /runs.</summary>
+    private string BackUrl => RunHistoryFilter.FromUri(Nav.Uri).Filter?.Url ?? "/runs";
+
+    private static int LineCount(string text) => text.Length == 0 ? 0 : text.Count(c => c == '\n') + 1;
+
+    private static string EvaluationUrl(RunProgressDto run, RunFailureDto item) =>
+        $"/results/evaluations/{item.EvaluationId}"
+        + (RunText.IsPromptTest(run.RunType) ? "" : Display.BackUrl(run.RunId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            item.JobId.ToString(System.Globalization.CultureInfo.InvariantCulture))["/results".Length..]);
+
+    protected override void OnInitialized()
+    {
+        workspace = new(RunApi);
+        workspace.Changed += WorkspaceChanged;
+        Anonymity.Changed += PrivacyChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == loadedId) return;
+        loadedId = Id;
+        showPrompt = false;
+        if (Id <= 0) return;
+        await workspace.LoadAsync(Id);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && RendererInfo.IsInteractive) await Anonymity.EnsureLoadedAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (disposed || Id <= 0 || workspace.Loading) return;
+        await workspace.LoadAsync(Id);
+    }
+
+    private Task RetryFailuresAsync() => disposed ? Task.CompletedTask : workspace.RetryFailuresAsync();
+
+    private void WorkspaceChanged() { if (!disposed) _ = InvokeAsync(StateHasChanged); }
+    private void PrivacyChanged() { if (!disposed) _ = InvokeAsync(StateHasChanged); }
+
+    public void Dispose()
+    {
+        disposed = true;
+        workspace.Changed -= WorkspaceChanged;
+        Anonymity.Changed -= PrivacyChanged;
+        workspace.Dispose();
+    }
+}
