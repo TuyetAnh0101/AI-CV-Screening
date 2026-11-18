@@ -18,4 +18,11 @@ public sealed class JobApiClient(HttpClient http, ILogger<JobApiClient> logger) 
 
     public Task<ApiResult<JobDto>> ActivateAsync(int jobId, CancellationToken ct = default) =>
         PostJsonAsync<JobDto>($"api/jobs/{jobId}/activate", new { }, ct);
+
+    public Task<ApiResult<JobDto>> CreateAsync(JobUpsertRequest request, CancellationToken ct = default) => PostJsonAsync<JobDto>("api/jobs", request, ct);
+    public Task<ApiResult<JobDto>> UpdateAsync(int jobId, JobUpsertRequest request, CancellationToken ct = default) => PutJsonAsync<JobDto>($"api/jobs/{jobId}", request, ct);
+    public Task<ApiResult<JobSkillDto>> AddSkillAsync(int jobId, JobSkillInput request, CancellationToken ct = default) => PostJsonAsync<JobSkillDto>($"api/jobs/{jobId}/skills", request, ct);
+    public Task<ApiResult<JobSkillDto>> UpdateSkillAsync(int jobId, string code, UpdateJobSkillRequest request, CancellationToken ct = default) => PutJsonAsync<JobSkillDto>($"api/jobs/{jobId}/skills/{Uri.EscapeDataString(code)}", request, ct);
+    public Task<ApiResult<bool>> DeleteSkillAsync(int jobId, string code, CancellationToken ct = default) => DeleteAsync($"api/jobs/{jobId}/skills/{Uri.EscapeDataString(code)}", ct);
+    public Task<ApiResult<JobSkillDto>> ReplaceAliasesAsync(int jobId, string code, IEnumerable<string> aliases, CancellationToken ct = default) => PutJsonAsync<JobSkillDto>($"api/jobs/{jobId}/skills/{Uri.EscapeDataString(code)}/aliases", new ReplaceAliasesRequest { Aliases = aliases.Select(a => (string?)a).ToList() }, ct);
 }

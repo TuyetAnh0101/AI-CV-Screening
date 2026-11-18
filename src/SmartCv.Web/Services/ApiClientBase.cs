@@ -26,7 +26,11 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<T>> PatchJsonAsync<T>(string url, object body, CancellationToken ct = default) =>
         SendAsync<T>(() => Http.PatchAsJsonAsync(url, body, ct), url, ct);
 
-    private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct)
+    // B21: DELETE 204 has no JSON body. Share the existing cancellation/error handling.
+    protected Task<ApiResult<bool>> DeleteAsync(string url, CancellationToken ct = default) =>
+        SendAsync<bool>(() => Http.DeleteAsync(url, ct), url, ct, delete: true);
+
+    private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct, bool delete = false)
     {
         try
         {
@@ -34,15 +38,16 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
 
             if (response.IsSuccessStatusCode)
             {
+                if (delete) return ApiResult<T>.Success((T)(object)true);
                 var data = await response.Content.ReadFromJsonAsync<T>(ct);
                 return data is null
                     ? ApiResult<T>.Failure("API trả về dữ liệu rỗng.", (int)response.StatusCode)
                     : ApiResult<T>.Success(data);
             }
 
-            var (message, code) = await ReadErrorMessageAsync(response, ct);
-            logger.LogWarning("Gọi API {Url} lỗi {Status}: {Message}", url, (int)response.StatusCode, message);
-            return ApiResult<T>.Failure(message, (int)response.StatusCode, code, RetryAfter(response));
+            var (message, code, errors) = await ReadErrorMessageAsync(response, ct);
+            logger.LogWarning("Gọi API {Url} lỗi {Status}", url, (int)response.StatusCode);
+            return ApiResult<T>.Failure(message, (int)response.StatusCode, code, RetryAfter(response), errors);
         }
         catch (HttpRequestException ex)
         {
@@ -70,22 +75,23 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     }
 
     /// <summary>Đọc thông báo lỗi. API trả lỗi theo chuẩn ProblemDetails (title, detail, và "code" nếu có).</summary>
-    private static async Task<(string Message, string? Code)> ReadErrorMessageAsync(HttpResponseMessage response, CancellationToken ct)
+    private static async Task<(string Message, string? Code, Dictionary<string, string[]>? Errors)> ReadErrorMessageAsync(HttpResponseMessage response, CancellationToken ct)
     {
         string? code = null;
         try
         {
             var problem = await response.Content.ReadFromJsonAsync<ApiProblem>(ct);
             code = string.IsNullOrWhiteSpace(problem?.Code) ? null : problem.Code;
-            if (!string.IsNullOrWhiteSpace(problem?.Detail)) return (problem.Detail!, code);
-            if (!string.IsNullOrWhiteSpace(problem?.Title)) return (problem.Title!, code);
+            if (!string.IsNullOrWhiteSpace(problem?.Detail)) return (problem.Detail!, code, problem.Errors);
+            if (!string.IsNullOrWhiteSpace(problem?.Title)) return (problem.Title!, code, problem.Errors);
+            return (DefaultMessage(response), code, problem?.Errors);
         }
         catch
         {
             // Nội dung lỗi không phải JSON: dùng thông báo mặc định bên dưới
         }
 
-        return (DefaultMessage(response), code);
+        return (DefaultMessage(response), code, null);
     }
 
     private static string DefaultMessage(HttpResponseMessage response) =>
@@ -100,5 +106,5 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
             _ => $"Gọi API thất bại (mã {(int)response.StatusCode})."
         };
 
-    private sealed record ApiProblem(string? Title, string? Detail, int? Status, string? Code);
+    private sealed record ApiProblem(string? Title, string? Detail, int? Status, string? Code, Dictionary<string, string[]>? Errors);
 }

@@ -1,0 +1,77 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="tag-input @(Disabled || !ready ? "disabled" : null)">
+    @foreach (var tag in Values)
+    {
+        <span class="tag" @key="tag"><span>@tag</span><button type="button" disabled="@Disabled" aria-label="Bỏ từ khóa @tag" @onclick="() => RemoveAsync(tag)">×</button></span>
+    }
+    <input @key="inputKey" @ref="input" value="@initialDraft" placeholder="Gõ từ khóa, Enter để thêm" aria-label="@Label" disabled="@(Disabled || !ready)" autocomplete="off" />
+</div>
+@if (error is not null) { <p class="tag-error" role="alert">@error</p> }
+
+@code {
+    [Parameter] public List<string> Values { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> ValuesChanged { get; set; }
+    [Parameter] public string Draft { get; set; } = "";
+    [Parameter] public EventCallback<string> DraftChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Từ khóa";
+    [Parameter] public bool Disabled { get; set; }
+    private ElementReference input;
+    private readonly object inputKey = new();
+    private IJSObjectReference? module;
+    private DotNetObjectReference<TagInput>? reference;
+    private string? error;
+    private bool disposed;
+    private bool ready;
+    private string initialDraft = "";
+    private bool initialized;
+    protected override void OnParametersSet() { if (!initialized) { initialDraft = Draft; initialized = true; } }
+    [JSInvokable] public Task DraftFromBrowser(string value) => InvokeAsync(async () =>
+    {
+        if (disposed || Disabled) return;
+        Draft = value; error = SmartCv.Core.Jobs.JobSkillRules.NormalizeAliases(Values.Concat(value.Split(',')).Cast<string?>()).Error;
+        await DraftChanged.InvokeAsync(value); StateHasChanged();
+    });
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!RendererInfo.IsInteractive) return;
+        try
+        {
+            if (module is null)
+            {
+                if (!firstRender) return;
+                var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Jobs/TagInput.razor.js");
+                if (disposed) { await imported.DisposeAsync(); return; }
+                module = imported; reference = DotNetObjectReference.Create(this);
+            }
+            await module.InvokeVoidAsync("bind", input, reference);
+            await module.InvokeVoidAsync("sync", input, Draft);
+            if (!ready && !disposed) { ready = true; StateHasChanged(); }
+        }
+        catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException) { }
+    }
+    [JSInvokable] public async Task<CommitResult> CommitFromBrowser(string value)
+    {
+        var accepted = false;
+        await InvokeAsync(async () =>
+        {
+            if (disposed || Disabled) return;
+            Draft = value;
+            var (aliases, problem) = SmartCv.Core.Jobs.JobSkillRules.NormalizeAliases(Values.Concat(value.Split(',')).Cast<string?>());
+            error = problem; accepted = problem is null;
+            if (accepted) { Draft = ""; Values = aliases; await ValuesChanged.InvokeAsync(aliases); }
+            await DraftChanged.InvokeAsync(Draft); StateHasChanged();
+        });
+        return new(accepted, Draft);
+    }
+    public sealed record CommitResult(bool Accepted, string Draft);
+    [JSInvokable] public Task RemoveLastFromBrowser() => InvokeAsync(async () => { if (!Disabled && Values.Count > 0) await RemoveAsync(Values[^1]); });
+    private async Task RemoveAsync(string tag) { if (Disabled) return; error = null; Values = Values.Where(v => v != tag).ToList(); await ValuesChanged.InvokeAsync(Values); }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (module is not null) { try { await module.InvokeVoidAsync("unbind", input); await module.DisposeAsync(); } catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException) { } }
+        reference?.Dispose();
+    }
+}

@@ -1,0 +1,49 @@
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Jobs
+
+<section class="skill-panel @(SkillType == SkillTypes.MustHave ? "required-panel" : null)" aria-label="@Title">
+    <header><div><span class="section-kicker">@(SkillType == SkillTypes.MustHave ? "TIÊU CHÍ CỐT LÕI" : "ĐIỂM CỘNG")</span><h2>@Title <span class="count">@Rows.Count(s => !s.Deleted)</span></h2></div><button id="add-@SkillType" type="button" class="add-button" @onclick="AddAsync" disabled="@Disabled">＋ Thêm kỹ năng</button></header>
+    <p class="panel-hint">@(SkillType == SkillTypes.MustHave ? "Ít nhất một kỹ năng để xác định yêu cầu tối thiểu của vị trí." : "Những thế mạnh giúp ứng viên nổi bật hơn.")</p>
+    @if (Rows.Count == 0) { <div class="empty-skills"><span aria-hidden="true">＋</span><p>Thêm kỹ năng đầu tiên</p><small>Tên kỹ năng sẽ gợi ý mã phù hợp.</small></div> }
+    <div class="skill-list">
+    @foreach (var row in Rows)
+    {
+        <article class="skill-row @(row.Error is not null || row.Validation.Count > 0 ? "has-error" : null) @(row.Deleted ? "will-delete" : null)" @key="row.Key" data-code="@row.EffectiveCode">
+            <div class="row-heading"><span>@(row.Deleted ? "Sẽ xóa khi lưu" : row.IsSaved ? "Đã lưu" : "Kỹ năng mới")</span><div class="row-actions">
+                @if (row.Deleted) { <button type="button" @onclick="() => UndoAsync(row)" disabled="@Disabled">Hoàn tác xóa</button> }
+                else
+                {
+                    <button type="button" disabled="@Disabled" @onclick="() => MoveAsync(row)" aria-label="Chuyển loại @row.DisplayName">@(SkillType == SkillTypes.MustHave ? "↓ Ưu tiên" : "↑ Bắt buộc")</button>
+                    <button type="button" class="remove-skill" disabled="@(Disabled || row.DeleteBlocked)" @onclick="() => RemoveAsync(row)" aria-label="Xóa kỹ năng @row.DisplayName">×</button>
+                }
+            </div></div>
+            <div class="skill-fields">
+                <label><span>Tên kỹ năng <i aria-hidden="true">*</i></span><input id="skill-name-@row.Key" value="@row.DisplayName" @oninput="e => NameAsync(row, e.Value?.ToString() ?? string.Empty)" disabled="@(Disabled || row.Deleted)" placeholder="Ví dụ: ASP.NET Core" aria-invalid="@(row.Validation.ContainsKey("displayName") ? "true" : null)" />@Error(row, "displayName")</label>
+                <label><span>Mã kỹ năng @if (row.IsSaved) { <small>· Đã khóa</small> }</span><input class="skill-code" value="@row.SkillCode" @oninput="e => CodeAsync(row, e.Value?.ToString() ?? string.Empty)" readonly="@row.IsSaved" disabled="@(Disabled || row.Deleted)" placeholder="Mã gợi ý" aria-invalid="@(row.Validation.ContainsKey("skillCode") ? "true" : null)" />@Error(row, "skillCode")</label>
+                <div class="alias-field"><span class="alias-label">Từ khóa tương đương <small>· Enter hoặc dấu phẩy để thêm</small></span><TagInput Values="row.Aliases" ValuesChanged="v => AliasesAsync(row, v)" Draft="@row.AliasDraft" DraftChanged="v => DraftAsync(row, v)" Label="@($"Từ khóa của {row.DisplayName}")" Disabled="@(Disabled || row.Deleted)" />@Error(row, "aliases")</div>
+            </div>
+            @if (row.Error is not null) { <p class="row-error" role="alert">@row.Error</p> }
+            @if (row.MissingOnServer) { <button type="button" class="discard-row" disabled="@Disabled" @onclick="() => DiscardAsync(row)">Bỏ dòng khỏi bản nháp</button> }
+        </article>
+    }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public List<SkillFormModel> Skills { get; set; } = [];
+    [Parameter] public string SkillType { get; set; } = SkillTypes.MustHave;
+    [Parameter] public string Title { get; set; } = "Kỹ năng bắt buộc";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private List<SkillFormModel> Rows => Skills.Where(s => s.SkillType == SkillType).ToList();
+    private RenderFragment Error(SkillFormModel row, string field) => builder => { if (row.Validation.TryGetValue(field, out var text)) { builder.OpenElement(0, "span"); builder.AddAttribute(1, "class", "field-error"); builder.AddAttribute(2, "role", "alert"); builder.AddContent(3, text); builder.CloseElement(); } };
+    private Task AddAsync() { if (!Disabled) Skills.Add(new() { SkillType = SkillType }); return OnChanged.InvokeAsync(); }
+    private Task NameAsync(SkillFormModel row, string value) { row.DisplayName = value; if (!row.IsSaved && !row.CodeEdited) row.SkillCode = JobSkillRules.SuggestCode(value); row.Validation.Remove("displayName"); return OnChanged.InvokeAsync(); }
+    private Task CodeAsync(SkillFormModel row, string value) { if (row.IsSaved) return Task.CompletedTask; row.SkillCode = value; row.CodeEdited = true; row.Validation.Remove("skillCode"); return OnChanged.InvokeAsync(); }
+    private Task AliasesAsync(SkillFormModel row, List<string> values) { row.Aliases = values; row.Validation.Remove("aliases"); return OnChanged.InvokeAsync(); }
+    private Task DraftAsync(SkillFormModel row, string value) { row.AliasDraft = value; row.Validation.Remove("aliases"); return OnChanged.InvokeAsync(); }
+    private Task MoveAsync(SkillFormModel row) { row.SkillType = row.SkillType == SkillTypes.MustHave ? SkillTypes.NiceToHave : SkillTypes.MustHave; return OnChanged.InvokeAsync(); }
+    private Task RemoveAsync(SkillFormModel row) { if (row.IsSaved) row.Deleted = true; else Skills.Remove(row); return OnChanged.InvokeAsync(); }
+    private Task UndoAsync(SkillFormModel row) { row.Deleted = false; return OnChanged.InvokeAsync(); }
+    private Task DiscardAsync(SkillFormModel row) { Skills.Remove(row); return OnChanged.InvokeAsync(); }
+}
