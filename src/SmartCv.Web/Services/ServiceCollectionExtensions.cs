@@ -19,12 +19,17 @@ public static class ServiceCollectionExtensions
         // Địa chỉ gốc phải kết thúc bằng "/" thì "api/jobs" mới ghép đúng thành https://.../api/jobs
         var baseUri = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
-        void Add<TClient>(TimeSpan timeout) where TClient : class =>
-            services.AddHttpClient<TClient>(client =>
+        void Add<TClient>(TimeSpan timeout) where TClient : class
+        {
+            var clientBuilder = services.AddHttpClient<TClient>(client =>
             {
                 client.BaseAddress = baseUri;
                 client.Timeout = timeout;
             });
+            // HttpClient's default logger includes the entire URI, including private search queries.
+            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient))
+                clientBuilder.RemoveAllLoggers();
+        }
 
         Add<HealthApiClient>(TimeSpan.FromSeconds(5));
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
@@ -35,6 +40,7 @@ public static class ServiceCollectionExtensions
         Add<PromptApiClient>(TimeSpan.FromSeconds(30)); // B12: xem và tạo phiên bản prompt
         Add<AiPreviewApiClient>(TimeSpan.FromMinutes(5)); // B39: chấm thử chờ Gemini (có thể thử lại), lâu hơn 30 giây
         Add<CvApiClient>(TimeSpan.FromMinutes(5));   // tải nhiều file cần lâu hơn
+        Add<CandidateApiClient>(TimeSpan.FromSeconds(30)); // B23: tìm người đã có để gắn CV.
 
         // B3: giới hạn tải CV, đọc mục "CvUpload" trong appsettings.json của Web.
         // PHẢI KHỚP với mục "CvUpload" của API, nếu không giao diện cho qua mà API lại từ chối.

@@ -14,6 +14,13 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<T>> GetAsync<T>(string url, CancellationToken ct = default) =>
         SendAsync<T>(() => Http.GetAsync(url, ct), url, ct);
 
+    // B23: search queries and exception details may contain applicant information.
+    protected Task<ApiResult<T>> GetPrivateAsync<T>(string url, string route, CancellationToken ct = default) =>
+        SendAsync<T>(() => Http.GetAsync(url, ct), route, ct, sensitive: true);
+
+    protected Task<ApiResult<T>> PutPrivateJsonAsync<T>(string url, object body, CancellationToken ct = default) =>
+        SendAsync<T>(() => Http.PutAsJsonAsync(url, body, ct), "CV candidate attachment", ct, sensitive: true);
+
     protected Task<ApiResult<T>> PostAsync<T>(string url, HttpContent content, CancellationToken ct = default) =>
         SendAsync<T>(() => Http.PostAsync(url, content, ct), url, ct);
 
@@ -30,7 +37,7 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<bool>> DeleteAsync(string url, CancellationToken ct = default) =>
         SendAsync<bool>(() => Http.DeleteAsync(url, ct), url, ct, delete: true);
 
-    private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct, bool delete = false)
+    private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct, bool delete = false, bool sensitive = false)
     {
         try
         {
@@ -51,7 +58,8 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
         }
         catch (HttpRequestException ex)
         {
-            logger.LogError(ex, "Không kết nối được API khi gọi {Url}", url);
+            if (sensitive) logger.LogError("Không kết nối được API khi gọi {Route}", url);
+            else logger.LogError(ex, "Không kết nối được API khi gọi {Url}", url);
             return ApiResult<T>.Failure("Không kết nối được máy chủ API. Hãy kiểm tra API đã chạy và ApiBaseUrl đúng cổng.");
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
@@ -61,7 +69,8 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
         }
         catch (System.Text.Json.JsonException ex)
         {
-            logger.LogError(ex, "Dữ liệu từ {Url} không đúng định dạng", url);
+            if (sensitive) logger.LogError("Dữ liệu từ {Route} không đúng định dạng", url);
+            else logger.LogError(ex, "Dữ liệu từ {Url} không đúng định dạng", url);
             return ApiResult<T>.Failure("Dữ liệu API trả về không đúng định dạng mong đợi.");
         }
     }
