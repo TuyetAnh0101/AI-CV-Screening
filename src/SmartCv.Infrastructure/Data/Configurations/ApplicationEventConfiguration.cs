@@ -46,5 +46,14 @@ public class ApplicationEventConfiguration : IEntityTypeConfiguration<Applicatio
             .HasForeignKey(x => x.ApplicationId)
             .HasConstraintName("FK_ApplicationEvents_Applications")
             .OnDelete(DeleteBehavior.Restrict);
+
+        // A27: chỉ bổ sung liên kết tùy chọn, không suy đoán tài khoản cho Actor trong lịch sử cũ.
+        b.HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .IsRequired(false)
+            .HasConstraintName("FK_ApplicationEvents_Users")
+            .OnDelete(DeleteBehavior.NoAction);
+        b.HasIndex(x => x.UserId).HasDatabaseName("IX_ApplicationEvents_UserId");
     }
 }

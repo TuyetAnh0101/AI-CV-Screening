@@ -90,7 +90,7 @@ public class JobSeedDataTests
     {
         using var db = CreateContext();
         Assert.Equal(
-            new[] { "20261106132922_InitialCreate", "20261106142155_SeedJobs", "20261112045258_ApplicationStages", "20261113014746_CvConsentRetention", "20261117042418_JobTitleUniqueIndex", "20261117045748_JobHeadcountClosingDate", "20261118131430_CandidateDataRequests", "20261119024613_ScappWorkflowV2" },
+            new[] { "20261106132922_InitialCreate", "20261106142155_SeedJobs", "20261112045258_ApplicationStages", "20261113014746_CvConsentRetention", "20261117042418_JobTitleUniqueIndex", "20261117045748_JobHeadcountClosingDate", "20261118131430_CandidateDataRequests", "20261119024613_ScappWorkflowV2", Auth.A27MigrationTests.Current },
             db.Database.GetMigrations().ToArray());
         Assert.False(db.Database.HasPendingModelChanges());
     }

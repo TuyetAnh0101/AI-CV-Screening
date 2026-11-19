@@ -73,6 +73,7 @@ public class ApplicationStagePersistenceTests
         var entity = db.Model.FindEntityType(typeof(Application))!;
         Assert.All(new[] { "StageVersion", "Stage", "RejectReason" }, name => Assert.True(entity.FindProperty(name)!.IsConcurrencyToken));
         Assert.False(db.Model.FindEntityType(typeof(ApplicationEvent))!.IsSqlOutputClauseUsed());
-        Assert.Equal(DeleteBehavior.Restrict, db.Model.FindEntityType(typeof(ApplicationEvent))!.GetForeignKeys().Single().DeleteBehavior);
+        Assert.Equal(DeleteBehavior.Restrict, db.Model.FindEntityType(typeof(ApplicationEvent))!.GetForeignKeys()
+            .Single(f => f.PrincipalEntityType.ClrType == typeof(Application)).DeleteBehavior);
     }
 }
