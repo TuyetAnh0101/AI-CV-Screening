@@ -18,6 +18,31 @@ namespace SmartCv.Tests;
 /// <summary>Dữ liệu và môi trường dùng chung cho các test tải CV (không cần SQL Server, không gọi Gemini).</summary>
 internal static class TestSupport
 {
+    /// <summary>A28: fixture nghiệp vụ cho các filter privacy A39/A43 vốn đòi HR khi auth được cấu hình.</summary>
+    internal static async Task<HttpClient> ClientWithSyntheticHrAsync(WebApplicationFactory<Program> factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+        var user = new SmartCv.Core.Entities.User
+        {
+            Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Synthetic regression HR",
+            Role = SmartCv.Core.Auth.UserRoles.Hr, IsActive = true, CreatedAt = DateTime.UtcNow
+        };
+        user.PasswordHash = new Microsoft.AspNetCore.Identity.PasswordHasher<SmartCv.Core.Entities.User>()
+            .HashPassword(user, Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+        if (db.Database.IsSqlServer())
+        {
+            // Tạo identity của fixture ngoài các interceptor lỗi/cancellation đang kiểm tra nghiệp vụ CV.
+            await using var identityDb = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>().UseSqlServer(db.Database.GetConnectionString()).Options);
+            identityDb.Add(user); await identityDb.SaveChangesAsync();
+        }
+        else { db.Add(user); await db.SaveChangesAsync(); }
+        // Clock của các fixture job/privacy có thể là ngày lịch sử; JWT luôn cần thời gian hiện tại.
+        var token = new SmartCv.Api.Auth.JwtTokenService(scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SmartCv.Core.Options.JwtOptions>>(), TimeProvider.System).Create(user).Token;
+        var client = factory.CreateClient(); client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        return client;
+    }
+
     /// <summary>Nội dung PDF giả có chữ ký "%PDF-" đúng; seed khác nhau thì nội dung (và hash) khác nhau.</summary>
     public static byte[] Pdf(string seed, int size = 0)
     {
@@ -114,6 +139,18 @@ internal static class TestSupport
 /// </summary>
 internal class StartupGatedApiFactory : WebApplicationFactory<Program>
 {
+    // Khóa test ngẫu nhiên chỉ trong RAM của test host; không dùng User Secrets thật.
+    internal static readonly string JwtTestKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = JwtTestKey,
+            ["Auth:SeedAdmin:Email"] = null, ["Auth:SeedAdmin:FullName"] = null, ["Auth:SeedAdmin:Password"] = null
+        }));
+        base.ConfigureWebHost(builder);
+    }
+
     protected override IHost CreateHost(IHostBuilder builder)
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

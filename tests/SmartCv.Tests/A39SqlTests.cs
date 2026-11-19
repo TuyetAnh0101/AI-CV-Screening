@@ -653,7 +653,7 @@ public class A39SqlTests
                     s.AddSingleton<ICvFileStorage>(env.Adapter);
                 });
             });
-            env.Http = env.Factory.CreateClient();
+            env.Http = await TestSupport.ClientWithSyntheticHrAsync(env.Factory);
             return env;
         }
 

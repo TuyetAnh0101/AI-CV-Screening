@@ -72,7 +72,7 @@ public class A43EndpointTests
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         await db.Database.EnsureCreatedAsync();
         var seed = await SeedAsync(db);
-        return (factory, factory.CreateClient(), seed);
+        return (factory, auth ? factory.CreateClient() : await TestSupport.ClientWithSyntheticHrAsync(factory), seed);
     }
 
     private static async Task<JsonElement> JsonAsync(HttpResponseMessage response, HttpStatusCode status)

@@ -5,6 +5,7 @@ public sealed class AuthOptions
 {
     public const string SectionName = "Auth";
     public SeedAdminOptions? SeedAdmin { get; set; }
+    public int LoginAttemptsPerMinute { get; set; } = 5;
 }
 
 public sealed class SeedAdminOptions

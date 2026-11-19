@@ -90,7 +90,7 @@ public class A39PrivacyTests
     public async Task Worker_is_off_by_default_and_settings_do_not_start_a_scan()
     {
         using var factory = TestSupport.ApiFactory(settings: new() { ["Scoring:WorkerEnabled"] = "false" });
-        using var http = factory.CreateClient();
+        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await http.GetAsync("/api/retention/settings");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("\"autoAnonymize\":false", await response.Content.ReadAsStringAsync());
@@ -103,7 +103,7 @@ public class A39PrivacyTests
     public async Task Invalid_asOf_or_future_real_run_is_400(string value, bool dryRun)
     {
         using var factory = TestSupport.ApiFactory(settings: new() { ["Scoring:WorkerEnabled"] = "false" });
-        using var http = factory.CreateClient();
+        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await http.PostAsync($"/api/retention/run?dryRun={dryRun}&asOf={Uri.EscapeDataString(value)}", null);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

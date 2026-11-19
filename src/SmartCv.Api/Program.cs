@@ -19,6 +19,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddSmartCvAuth(builder.Configuration);
 
 // A7: tiến trình chạy nền đọc chữ CV (PdfPig / OCR Tesseract) từ hàng đợi; đăng ký các service trong AddInfrastructure.
 builder.Services.AddHostedService<CvExtractionWorker>();
@@ -86,15 +87,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseAuthorization();
-// Sau routing (WebApplication tự thêm ở đầu pipeline) để đọc được policy của từng endpoint.
-// M6: đặt UseAuthentication/UseAuthorization trước dòng này nếu muốn giới hạn theo người dùng.
-app.UseRateLimiter();
+app.UseSmartCvAuth();
 
 app.UseMiddleware<SqlReadCancellationMiddleware>();
 app.UseMiddleware<CvPrivacyReadMiddleware>();
 
 app.MapControllers();
+app.MapAuthEndpoints();
 app.MapEvaluationEndpoints();
 app.MapRunEndpoints(); // A12: persist run settings before background scoring.
 app.MapCvEndpoints();
