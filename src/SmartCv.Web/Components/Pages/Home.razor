@@ -28,6 +28,7 @@
         <div class="filter-footer"><p id="dashboard-filter-help">Ngày Việt Nam (UTC+7), tính cả ngày bắt đầu và kết thúc.</p><div class="quick-ranges" role="group" aria-label="Khoảng ngày nhanh">
             <button type="button" class="@(QuickSelected(7) ? "selected" : "")" aria-pressed="@QuickSelected(7).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(7)">7 ngày</button>
             <button type="button" class="@(QuickSelected(30) ? "selected" : "")" aria-pressed="@QuickSelected(30).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(30)">30 ngày</button>
+            <button type="button" class="@(QuickSelected(90) ? "selected" : "")" aria-pressed="@QuickSelected(90).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(90)">90 ngày</button>
             <button type="button" class="@(QuickSelected(null) ? "selected" : "")" aria-pressed="@QuickSelected(null).ToString().ToLowerInvariant()" @onclick="() => QuickAsync(null)">Tất cả</button>
         </div></div>
         <div id="dashboard-filter-error">@if (validationError is not null) { <p class="filter-error" role="alert">@validationError Chưa áp dụng bộ lọc này.</p> }</div>
@@ -49,7 +50,7 @@
             <article class="kpi @(data.FailedCvs > 0 ? "has-error" : "")" data-kpi="failed"><div class="kpi-head"><h2>CV đọc lỗi</h2><span class="kpi-symbol" aria-hidden="true">!</span></div><strong class="kpi-number">@DashboardText.Number(data.FailedCvs)</strong><p>@(data.FailedCvs > 0 ? "Lỗi trích xuất nội dung CV" : "Không có lỗi trích xuất")</p></article>
             <a class="kpi kpi-link" href="/jobs" data-kpi="jobs"><div class="kpi-head"><h2>Vị trí đang tuyển</h2><span class="kpi-symbol" aria-hidden="true">▤</span></div><strong class="kpi-number">@DashboardText.Number(data.ActiveJobs)</strong><p>Hiện tại · không lọc ngày <span aria-hidden="true">↗</span></p></a>
             <a class="kpi kpi-link ai-kpi" href="/runs?status=Running" data-kpi="running"><div class="kpi-head"><h2>Lượt đang chấm</h2><span class="kpi-symbol" aria-hidden="true">↻</span></div><strong class="kpi-number">@DashboardText.Number(data.RunningRuns)</strong><p>Đang chờ hoặc chấm · toàn hệ thống <span aria-hidden="true">↗</span></p></a>
-            <a class="kpi kpi-link flag-kpi @(data.FlaggedUnresolved > 0 ? "has-flags" : "")" href="@DashboardText.FlaggedLink(data)" data-kpi="flagged"><div class="kpi-head"><h2>Cần xem kỹ</h2><span class="kpi-symbol" aria-hidden="true">⚑</span></div><strong class="kpi-number">@DashboardText.Number(data.FlaggedUnresolved)</strong><p>Hồ sơ Mới / Đang xem chưa xử lý <span aria-hidden="true">↗</span></p></a>
+            <a class="kpi kpi-link flag-kpi @(data.FlaggedUnresolved > 0 ? "has-flags" : "")" href="@DashboardText.FlaggedLink(data)" data-kpi="flagged"><div class="kpi-head"><h2>Cần xem kỹ</h2><span class="kpi-symbol" aria-hidden="true">⚑</span></div><strong class="kpi-number">@DashboardText.Number(data.FlaggedUnresolved)</strong><p>Mới / Đang xem có cảnh báo hoặc cờ HR@(data.ManualFlagsOpen > 0 ? $" · {DashboardText.Number(data.ManualFlagsOpen)} cờ HR" : "") <span aria-hidden="true">↗</span></p></a>
         </section>
         <p class="cohort-note">@(workspace.Filter!.JobId is null ? "Tổng CV theo ngày tải lên; hồ sơ và các phân tích theo ngày ứng tuyển. Một CV có thể ứng tuyển nhiều vị trí." : "Tổng CV là số CV khác nhau trong các hồ sơ của vị trí và khoảng ngày đã chọn.")</p>
         @if (data.IsEmpty && !workspace.Filter.HasAny)
@@ -59,6 +60,8 @@
         else
         {
             @if (data.IsEmpty) { <div class="filter-empty" role="status"><div><strong>Không có hồ sơ trong khoảng đã chọn</strong><p>Thử khoảng ngày khác. Số vị trí và lượt đang chấm vẫn phản ánh trạng thái hiện tại.</p></div><button type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Xóa bộ lọc</button></div> }
+            @* SCApp v2: biểu đồ chính đặt trước các biểu đồ phụ (phễu, lý do loại, thời gian, lượt chấm). *@
+            <div class="dashboard-panel trend-panel"><TrendChart Data="workspace.ShownTrend" Loading="workspace.TrendLoading" Error="@workspace.TrendError" OnRetry="RefreshAsync" />@if (workspace.Filter!.From is null) { <p class="trend-scope">Khi chọn "Tất cả" thời gian, biểu đồ hiển thị 30 ngày gần nhất; các số liệu khác tính trên toàn bộ thời gian.</p> }</div>
             <div class="panel-grid">
                 <div class="dashboard-panel"><StageFunnel Steps="data.Funnel" Total="data.TotalApplications" Rejected="data.RejectedCount" OnHold="data.OnHoldCount" /></div>
                 <div class="dashboard-panel"><RejectReasonChart Reasons="data.RejectReasons" Total="data.RejectedCount" /></div>

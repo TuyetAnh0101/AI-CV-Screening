@@ -7,6 +7,8 @@ public class EvaluationRun
     public string RunType { get; set; } = string.Empty;   // Screening | PromptTest
     public int PromptVersionId { get; set; }
     public int? EvaluationSetId { get; set; }             // PromptTest: bắt buộc; Screening: để null
+    /// <summary>SCApp v2: EvaluationSets.Revision lúc tạo lượt PromptTest; null với lượt cũ hoặc Screening.</summary>
+    public int? EvaluationSetRevision { get; set; }
     public string ModelName { get; set; } = string.Empty;
     public decimal Temperature { get; set; }
     public decimal KeywordWeight { get; set; }

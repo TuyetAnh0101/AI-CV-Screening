@@ -490,8 +490,8 @@ public class ResultsUiTests
         var text = r.TableText;
         AssertOrder(text, "Nguyễn Văn An", "Trần Thị Bình", "Lê Hoàng Cường", "Lý Văn Minh");
         var failedRow = text[text.IndexOf("Lý Văn Minh", StringComparison.Ordinal)..];
-        // B8: bắt buộc —, kinh nghiệm —, thanh điểm "KW — · AI —", điểm cuối —, nhãn "Lỗi xử lý" (không có điểm 0 giả)
-        Assert.StartsWith("Lý Văn Minh CV_14.pdf Trích xuất nội dung CV thất bại. — — KW — · AI — — Lỗi xử lý Chưa có điểm", failedRow);
+        // B8 + SCApp v2: điểm cuối —, "KW — · AI —", nhãn "Lỗi xử lý" (không có điểm 0 giả). Kỹ năng/kinh nghiệm chuyển vào panel Xem nhanh.
+        Assert.StartsWith("Lý Văn Minh CV_14.pdf Trích xuất nội dung CV thất bại. — KW — · AI — Lỗi xử lý Chưa có điểm", failedRow);
         Assert.Contains("01 VA Nguyễn Văn An", text);
         Assert.Contains("Rất phù hợp Dự đoán Đạt", text);
         Assert.Contains("Tiềm năng Dự đoán Không đạt", text);

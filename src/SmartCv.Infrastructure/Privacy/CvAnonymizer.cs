@@ -82,6 +82,11 @@ public sealed class CvAnonymizer(SmartCvDbContext db, ICvFileStorage storage, IL
             var evaluationIds = evaluations.Select(e => e.EvaluationId);
             await db.EvaluationSkills.Where(s => evaluationIds.Contains(s.EvaluationId)).ExecuteUpdateAsync(s => s.SetProperty(x => x.Evidence, (string?)null), ct);
             var cleared = await evaluations.ExecuteUpdateAsync(s => s.SetProperty(e => e.Reasoning, (string?)null).SetProperty(e => e.AiRawResponse, (string?)null).SetProperty(e => e.ErrorMessage, (string?)null), ct);
+            // SCApp v2: ghi chú cờ thủ công của HR có thể nhắc thông tin cá nhân; xóa cùng giao dịch ẩn danh.
+            await db.ApplicationFlags.Where(f => appIds.Contains(f.ApplicationId))
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.Note, (string?)null).SetProperty(f => f.ResolutionNote, (string?)null), ct);
+            await db.ApplicationFlagEvents.Where(e => appIds.Contains(e.Flag.ApplicationId))
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.Note, (string?)null), ct);
             var now = Utc(nowUtc);
             var hash = AnonymizedHash(cvId);
             await db.Cvs.Where(c => c.CvId == cvId).ExecuteUpdateAsync(s => s.SetProperty(c => c.CandidateId, (int?)null).SetProperty(c => c.ExtractedText, (string?)null).SetProperty(c => c.ExtractionError, (string?)null).SetProperty(c => c.OriginalFileName, RetentionRules.AnonymizedFileName).SetProperty(c => c.StoredPath, RemovedPath).SetProperty(c => c.FileHash, hash).SetProperty(c => c.AnonymizedAt, now), ct);

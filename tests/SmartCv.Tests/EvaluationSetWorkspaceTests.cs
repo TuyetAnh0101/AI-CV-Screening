@@ -92,7 +92,7 @@ public class EvaluationSetWorkspaceTests
         var server=new Server();using var services=new ServiceCollection().AddLogging().AddSingleton(Api(server)).BuildServiceProvider();
         await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
         var html=await renderer.Dispatcher.InvokeAsync(async()=>WebUtility.HtmlDecode((await renderer.RenderComponentAsync<EvaluationSetManager>()).ToHtmlString()));
-        Assert.Contains("Chưa có bộ CV đánh giá",html);Assert.Contains("Tên bộ CV mới",html);Assert.Contains("1. Lưu tên bộ",html);
+        Assert.Contains("Chưa có bộ CV đánh giá",html);Assert.Contains("Tên bộ CV mới",html);Assert.Contains("Tạo bộ CV",html);
         Assert.Contains("Không cần upload lại",html);Assert.Equal(0,server.Posts);
     }
 }

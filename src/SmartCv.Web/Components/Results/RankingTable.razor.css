@@ -387,3 +387,55 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--sc-brand
     .bulk-bar .btn { flex: 1 1 auto; }
     .decision-intro { margin: 12px 16px 0; }
 }
+
+/* ---------- SCApp v2: bộ lọc gộp, menu thao tác, chip cờ ---------- */
+.ranking-tools { grid-template-columns: minmax(0, 1fr) auto; }
+.sort { display: flex; align-items: center; gap: 8px; }
+.sort-label { font-size: 12px; font-weight: 600; color: var(--sc-ink-500); white-space: nowrap; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; padding: 12px 20px 14px; border-bottom: 1px solid var(--sc-line-200); }
+.filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.filter-bar .stage-filters { padding: 0; border: 0; }
+.filter-bar .quick { padding: 0; }
+.attention-filters .flag-filter { color: #92400e; background: #fffbeb; border-color: #fcd34d; }
+.attention-filters .flag-filter.on { background: #fef3c7; box-shadow: 0 0 0 1px #d97706; }
+.attention-filters .manual-filter { color: var(--sc-error); border-color: #fecdd3; }
+.attention-filters .manual-filter.on { background: var(--sc-error-bg); box-shadow: 0 0 0 1px var(--sc-error); }
+.bulk-label { font-size: 12px; color: var(--sc-brand-100); }
+.name-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.manual-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--sc-error-bg); color: var(--sc-error); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.who-text .must { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; font-weight: 600; width: fit-content; }
+.who-text .must.must-ok { color: var(--fit-excellent); } .who-text .must.must-missing { color: var(--fit-potential); } .who-text .must.must-none { color: var(--text-muted); font-weight: 500; }
+.who-text .must .must-icon { flex: none; }
+.must-icon { font-weight: 700; }
+.c-final .parts { display: block; margin-top: 2px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.rank-table tr.needs-review td:first-child { box-shadow: inset 3px 0 #f59e0b; }
+.c-actions { width: 56px; text-align: right; }
+.row-menu { position: relative; display: inline-block; }
+.menu-btn { width: 40px; height: 40px; border: 1px solid var(--sc-line-200); border-radius: 10px; background: var(--sc-surface-0); color: var(--sc-ink-700); font-size: 18px; line-height: 1; }
+.menu-btn[aria-expanded="true"], .menu-btn:hover:not(:disabled) { border-color: var(--sc-brand-700); color: var(--sc-brand-700); }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: grid; min-width: 230px; padding: 6px; border: 1px solid var(--sc-line-200); border-radius: 12px; background: #fff; box-shadow: 0 16px 40px -12px rgba(15, 42, 42, .3); text-align: left; }
+.menu > button, .menu > a { display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: none; color: var(--text-main); font-size: 13px; text-align: left; text-decoration: none; min-height: 40px; }
+.menu > button:hover:not(:disabled), .menu > a:hover { background: var(--sc-brand-50); color: var(--sc-brand-800); }
+.menu > button:disabled { opacity: .5; }
+:is(.menu-btn, .menu > button, .menu > a, .manual-filter):focus-visible { outline: 3px solid var(--sc-brand-600); outline-offset: 2px; }
+.rank-table .c-stage { min-width: 170px; width: 170px; }
+.rank-table .c-fit { min-width: 140px; }
+.rank-table .c-final { width: 96px; }
+@media (max-width: 1199.98px) {
+    .filter-bar { gap: 10px 16px; }
+}
+@media (max-width: 767.98px) {
+    .filter-bar { padding: 12px 16px; }
+    .filter-group { width: 100%; }
+    .filter-group .filter-label { flex-basis: 100%; }
+    .filter-bar .quick { overflow-x: visible; flex-wrap: wrap; }
+    .rank-table .c-final { grid-column: 1; grid-row: 3; width: auto; }
+    .rank-table .c-fit { grid-column: 2; grid-row: 3; text-align: left; }
+    .rank-table .c-fit::before { display: block !important; }
+    .rank-table .c-actions { grid-column: 2; grid-row: 1; width: auto; text-align: right; }
+    .rank-table .c-rank { grid-column: 1; grid-row: 1; padding-left: 36px; }
+    .rank-table .c-select { grid-column: 1; grid-row: 1; width: 32px; padding-left: 0; }
+    .menu { right: 0; min-width: min(260px, calc(100vw - 48px)); }
+    .ranking-tools { grid-template-columns: minmax(0, 1fr); }
+    .sort { width: 100%; } .sort select { flex: 1; }
+}

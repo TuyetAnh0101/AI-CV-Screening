@@ -1,9 +1,9 @@
 @*
-    B7: bảng xếp hạng ứng viên của MỘT job trong MỘT lượt chấm (dữ liệu từ GET /api/runs/{id}/ranking, A13).
-    Tìm kiếm không dấu, lọc nhanh và sắp xếp chạy ngay trên trình duyệt, không gọi lại API.
-    CV chưa có điểm luôn nằm cuối, điểm hiện "—" (không gán 0).
-    B8: nhãn 4 mức (FitBadge), thanh điểm keyword/điểm cuối/ngưỡng Đạt (ScoreBar), cột kỹ năng bắt buộc đủ/thiếu.
-    B9: liên kết chi tiết giữ nguyên lượt chấm và vị trí. Chưa có dải tiến độ B10.
+    B7/B8/B34 + SCApp v2: bảng xếp hạng ứng viên của MỘT job trong MỘT lượt chấm (GET /api/runs/{id}/ranking, A13).
+    Tìm kiếm không dấu, lọc và sắp xếp chạy trên trình duyệt. CV chưa có điểm luôn nằm cuối, điểm hiện "—".
+    SCApp v2: chỉ giữ 6 cột chính; thanh điểm, kỹ năng chi tiết, kinh nghiệm, lịch sử nằm trong panel "Xem nhanh".
+    Ba khái niệm tách rõ: Dự đoán AI (điểm/mức) · Cờ (cảnh báo tự động ⚠ / cờ HR ⚑) · Giai đoạn do HR quyết định.
+    "Cần xem kỹ" = hồ sơ Mới/Đang xem có cảnh báo tự động hoặc cờ HR đang mở (giống Tổng quan).
 *@
 @using SmartCv.Core.Constants
 @inject ApplicationApiClient ApplicationApi
@@ -15,17 +15,10 @@
     <div class="ranking-head">
         <div>
             <h2 id="ranking-title" tabindex="-1">Bảng xếp hạng ứng viên</h2>
-            <p>Mặc định sắp theo điểm cuối giảm dần · CV chưa có điểm nằm cuối bảng</p>
+            <p>Mặc định sắp theo điểm cuối giảm dần · CV chưa có điểm nằm cuối · Ngưỡng Đạt @RankingView.Score(PassThreshold) · AI gợi ý, HR quyết định giai đoạn</p>
         </div>
-        <ul class="legend" aria-label="Chú giải thanh điểm">
-            <li><span class="lg lg-kw" aria-hidden="true"></span>Điểm keyword</li>
-            <li><span class="lg lg-final" aria-hidden="true"></span>Điểm cuối (màu theo mức)</li>
-            <li><span class="lg lg-pass" aria-hidden="true"></span>Ngưỡng Đạt @RankingView.Score(PassThreshold)</li>
-        </ul>
         <AnonymousToggle />
     </div>
-
-    <div class="decision-intro"><span class="decision-mark" aria-hidden="true">✓</span><span><strong>Không bỏ lỡ ứng viên phù hợp</strong><br />AI gợi ý mức phù hợp. HR quyết định giai đoạn hồ sơ.</span></div>
 
     @if (IssueCount > 0)
     {
@@ -45,20 +38,8 @@
                 <button type="button" class="search-clear" @onclick="ClearSearch" aria-label="Xóa từ khóa tìm kiếm">×</button>
             }
         </div>
-
-        <div class="quick" role="group" aria-label="Lọc nhanh">
-            @foreach (var (value, label) in RankingView.Filters)
-            {
-                var on = filter == value;
-                <button type="button" class="quick-btn @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
-                        disabled="@(busy || pending is not null)" @onclick="() => SetFitFilter(value)">
-                    @label <span class="count">@Apply(StageFilteredItems, value).Count</span>
-                </button>
-            }
-        </div>
-
         <label class="sort">
-            <span class="visually-hidden">Sắp xếp</span>
+            <span class="sort-label">Sắp xếp</span>
             <select class="form-select" @bind="sort" aria-label="Sắp xếp bảng xếp hạng" disabled="@(busy || pending is not null)">
                 @foreach (var (value, label) in RankingView.Sorts.Where(s => !Anonymity.Enabled || s.Value != RankingSort.NameAsc))
                 {
@@ -68,17 +49,35 @@
         </label>
     </div>
 
-    <div class="stage-filters" role="group" aria-label="Lọc giai đoạn hồ sơ">
-        <span class="filter-label">Giai đoạn</span>
-        <button id="stage-filter-all" type="button" class="stage-filter @(stageFilter is null ? "on" : null)" aria-pressed="@(stageFilter is null ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(null)">Tất cả <span>@StageCount(null)</span></button>
-        @foreach (var stage in ApplicationStages.All)
-        {
-            <button id="stage-filter-@stage" type="button" class="stage-filter @StageText.Css(stage) @(stageFilter == stage ? "on" : null)" aria-pressed="@(stageFilter == stage ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(stage)">
-                <i class="stage-dot" aria-hidden="true"></i>@StageText.Name(stage) <span>@StageCount(stage)</span>
-            </button>
-        }
-        <button id="flag-filter" type="button" class="stage-filter flag-filter @(flaggedOnly ? "on" : null)" aria-pressed="@flaggedOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="ToggleFlaggedAsync">⚑ Cần xem kỹ <span>@FlaggedCount</span></button>
+    <div class="filter-bar">
+        <div class="filter-group quick" role="group" aria-label="Lọc nhanh">
+            <span class="filter-label">Dự đoán AI</span>
+            @foreach (var (value, label) in RankingView.Filters)
+            {
+                var on = filter == value;
+                <button type="button" class="quick-btn @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")"
+                        disabled="@(busy || pending is not null)" @onclick="() => SetFitFilter(value)">
+                    @label <span class="count">@Apply(StageFilteredItems, value).Count</span>
+                </button>
+            }
+        </div>
+        <div class="filter-group stage-filters" role="group" aria-label="Lọc giai đoạn hồ sơ">
+            <span class="filter-label">Giai đoạn HR</span>
+            <button id="stage-filter-all" type="button" class="stage-filter @(stageFilter is null ? "on" : null)" aria-pressed="@(stageFilter is null ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(null)">Tất cả <span>@StageCount(null)</span></button>
+            @foreach (var stage in ApplicationStages.All)
+            {
+                <button id="stage-filter-@stage" type="button" class="stage-filter @StageText.Css(stage) @(stageFilter == stage ? "on" : null)" aria-pressed="@(stageFilter == stage ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(stage)">
+                    <i class="stage-dot" aria-hidden="true"></i>@StageText.Name(stage) <span>@StageCount(stage)</span>
+                </button>
+            }
+        </div>
+        <div class="filter-group attention-filters" role="group" aria-label="Lọc hồ sơ cần xem kỹ">
+            <span class="filter-label">Cần chú ý</span>
+            <button id="flag-filter" type="button" class="stage-filter flag-filter @(flaggedOnly ? "on" : null)" aria-pressed="@flaggedOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="ToggleFlaggedAsync" title="Hồ sơ Mới / Đang xem có cảnh báo tự động hoặc cờ HR đang mở">⚑ Cần xem kỹ <span>@NeedsReviewCount</span></button>
+            <button id="manual-filter" type="button" class="stage-filter manual-filter @(manualOnly ? "on" : null)" aria-pressed="@manualOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="ToggleManualOnly" title="Hồ sơ HR đã đánh dấu cần kiểm tra (mọi giai đoạn)">Cờ HR <span>@ManualCount</span></button>
+        </div>
     </div>
+
     @if (message is not null)
     {
         <div class="stage-notice @(messageIsError ? "is-error" : "is-success")" role="@(messageIsError ? "alert" : "status")">
@@ -95,6 +94,7 @@
     {
         <div class="bulk-bar" role="group" aria-label="Thao tác hàng loạt">
             <span class="bulk-count">Đã chọn <strong>@selected.Count</strong> hồ sơ <small>· tối đa 200</small></span>
+            <span class="bulk-label">Chuyển giai đoạn:</span>
             <button id="bulk-shortlist" type="button" class="btn sc-btn-primary" disabled="@TableLocked" @onclick="() => RequestBulkAsync(ApplicationStages.Shortlisted)">Qua vòng CV</button>
             <button id="bulk-hold" type="button" class="btn sc-btn-secondary" disabled="@TableLocked" @onclick="() => RequestBulkAsync(ApplicationStages.OnHold)">Dự phòng</button>
             <button id="bulk-reject" type="button" class="btn bulk-reject" disabled="@TableLocked" @onclick="() => RequestBulkAsync(ApplicationStages.Rejected)">Loại…</button>
@@ -125,13 +125,11 @@
                     <tr>
                         <th scope="col" class="c-select"><span class="visually-hidden">Chọn hồ sơ</span></th>
                         <th scope="col" class="c-rank">Hạng</th>
-                        <th scope="col">Ứng viên</th>
-                        <th scope="col" class="c-num">Bắt buộc</th>
-                        <th scope="col" class="c-num">Kinh nghiệm</th>
-                        <th scope="col" class="c-bar">Điểm keyword / AI</th>
-                        <th scope="col" class="c-num">Điểm cuối</th>
-                        <th scope="col">Mức phù hợp</th>
-                        <th scope="col" class="c-stage">Giai đoạn</th>
+                        <th scope="col" class="c-who-h">Ứng viên</th>
+                        <th scope="col" class="c-num">Điểm</th>
+                        <th scope="col" class="c-fit-h">Dự đoán AI</th>
+                        <th scope="col" class="c-stage">Giai đoạn HR</th>
+                        <th scope="col" class="c-actions"><span class="visually-hidden">Thao tác</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -141,7 +139,8 @@
                         var scored = !failed && RankingView.IsScored(r);
                         var keywordOnly = r.ScoreSource == ScoreSources.KeywordOnly;
                         var must = MustHaveDisplay.From(r.MatchedMustHave, r.TotalMustHave, scored);
-                        <tr class="@RowClass(r, scored) @(selected.Contains(r.ApplicationId) ? "is-selected" : null)" @key="r.EvaluationId">
+                        var manual = ManualFlagOf(r);
+                        <tr class="@RowClass(r, scored) @(selected.Contains(r.ApplicationId) ? "is-selected" : null) @(NeedsReviewOf(r) ? "needs-review" : null)" @key="r.EvaluationId">
                             <td class="c-select"><input type="checkbox" @key="(r.ApplicationId, selectVersion, selected.Contains(r.ApplicationId))" aria-label="@($"Chọn hồ sơ {r.ApplicationId}: {NameOf(r)}")" checked="@selected.Contains(r.ApplicationId)" disabled="@TableLocked" @onchange="e => Toggle(r.ApplicationId, e)" /></td>
                             <td class="c-rank" data-label="Hạng">
                                 <span class="rank @(scored && r.Rank == 1 ? "gold" : null)">@RankingView.RankText(scored ? r.Rank : null)</span>
@@ -150,50 +149,21 @@
                                 <div class="who">
                                     <span class="avatar" aria-hidden="true">@Anonymity.Initials(r)</span>
                                     <span class="who-text">
-                                        <a class="name" href="@DetailUrl(r.EvaluationId)">@NameOf(r)</a>
-                                        <ReviewFlagsBadge Flags="r.ReviewFlags" />
+                                        <span class="name-line"><a class="name" href="@DetailUrl(r.EvaluationId)">@NameOf(r)</a><ReviewFlagsBadge Flags="r.ReviewFlags" />@if (manual is not null) { <span class="manual-chip" title="@($"Cờ HR: {manual.ReasonName}")"><span aria-hidden="true">⚑</span> Cờ HR<span class="visually-hidden">: @manual.ReasonName</span></span> }</span>
                                         <span class="file" title="@Anonymity.FileName(r.FileName)">@Anonymity.FileName(r.FileName)</span>
+                                        @if (must is not null)
+                                        {
+                                            <span class="must @must.CssClass" title="@must.Detail"><span class="must-icon" aria-hidden="true">@(must.CssClass == "must-ok" ? "✓" : must.CssClass == "must-missing" ? "!" : "–")</span> Bắt buộc @must.Text<span class="visually-hidden"> · @must.Detail</span></span>
+                                        }
                                         @if (failed) { <span class="processing-error">@Anonymity.Text(Display.SafeError(r.ErrorMessage))</span> }
                                     </span>
                                 </div>
                             </td>
-                            <td class="c-must" data-label="Bắt buộc">
-                                @if (must is null)
-                                {
-                                    <span class="muted">—</span>
-                                }
-                                else
-                                {
-                                    <span class="must @must.CssClass" title="@must.Detail">
-                                        <span class="must-text">
-                                            <span class="must-icon" aria-hidden="true">@(must.CssClass == "must-ok" ? "✓" : must.CssClass == "must-missing" ? "!" : "–")</span>
-                                            @must.Text
-                                        </span>
-                                        @if (must.ShowDots)
-                                        {
-                                            <span class="dots" aria-hidden="true">
-                                                @for (var i = 0; i < must.Total; i++)
-                                                {
-                                                    <span class="d @(i < must.Matched ? "on" : null)"></span>
-                                                }
-                                            </span>
-                                        }
-                                        <span class="visually-hidden">@must.Detail</span>
-                                    </span>
-                                }
-                            </td>
-                            <td class="c-num" data-label="Kinh nghiệm">@RankingView.Years(r.YearsExperience)</td>
-                            <td class="c-bar" data-label="Điểm keyword / AI">
-                                <ScoreBar Keyword="@(scored ? r.KeywordScore : null)" Final="@(scored ? r.FinalScore : null)" Threshold="PassThreshold" ScoreSource="@r.ScoreSource" />
-                                <span class="parts">
-                                    KW @RankingView.Score(scored ? r.KeywordScore : null) · AI
-                                    <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(scored && !keywordOnly ? r.AiScore : null)</span>
-                                </span>
-                            </td>
-                            <td class="c-num c-final" data-label="Điểm cuối">
+                            <td class="c-num c-final" data-label="Điểm">
                                 <strong class="final">@RankingView.Score(scored ? r.FinalScore : null)</strong>
+                                <span class="parts">KW @RankingView.Score(scored ? r.KeywordScore : null) · AI <span title="@(keywordOnly ? "AI chưa chấm được CV này, điểm cuối chỉ tính theo từ khóa." : null)">@RankingView.Score(scored && !keywordOnly ? r.AiScore : null)</span></span>
                             </td>
-                            <td class="c-fit" data-label="Mức phù hợp">
+                            <td class="c-fit" data-label="Dự đoán AI">
                                 <FitBadge FitLabel="@Anonymity.Label(r.FitLabel)" FinalScore="r.FinalScore" Status="@(failed ? EvaluationStatuses.Failed : r.Status)" ScoreSource="@r.ScoreSource" Message="@Anonymity.Text(r.ErrorMessage)" />
                                 @if (scored)
                                 {
@@ -204,7 +174,7 @@
                                     <span class="no-score">Chưa có điểm</span>
                                 }
                             </td>
-                            <td class="c-stage" data-label="Giai đoạn">
+                            <td class="c-stage" data-label="Giai đoạn HR">
                                 <select id="stage-select-@r.ApplicationId" class="stage-select @StageText.Css(StageOf(r))" aria-label="@($"Giai đoạn hồ sơ {r.ApplicationId}: {NameOf(r)}")" value="@StageOf(r)" disabled="@TableLocked" @key="(r.ApplicationId, selectVersion, StageOf(r))" @onchange="e => RequestRowAsync(r, e)">
                                     @foreach (var stage in ApplicationStages.All) { <option value="@stage">@StageText.Name(stage)</option> }
                                 </select>
@@ -212,6 +182,26 @@
                                 {
                                     <button id="stage-reason-@r.ApplicationId" type="button" class="reason-edit" disabled="@TableLocked" aria-label="@($"Đổi lý do loại hồ sơ {r.ApplicationId}")" @onclick="() => RequestRowAsync(r, new ChangeEventArgs { Value = ApplicationStages.Rejected })">@StageText.Reason(reason) <span aria-hidden="true">↗</span></button>
                                 }
+                            </td>
+                            <td class="c-actions">
+                                <div class="row-menu">
+                                    <button id="row-menu-@r.ApplicationId" type="button" class="menu-btn" aria-haspopup="true" aria-expanded="@(openMenu == r.ApplicationId ? "true" : "false")" aria-label="@($"Thao tác cho hồ sơ {r.ApplicationId}: {NameOf(r)}")" disabled="@(busy || pending is not null)" @onclick="() => ToggleMenu(r.ApplicationId)">⋯</button>
+                                    @if (openMenu == r.ApplicationId)
+                                    {
+                                        <div class="menu" role="menu" @onkeydown="MenuKey">
+                                            <button id="menu-view-@r.ApplicationId" type="button" role="menuitem" @onclick="() => OpenDrawer(r)">Xem nhanh chi tiết</button>
+                                            <a role="menuitem" href="@DetailUrl(r.EvaluationId)">Mở trang chi tiết</a>
+                                            @if (manual is null)
+                                            {
+                                                <button id="menu-flag-@r.ApplicationId" type="button" role="menuitem" disabled="@TableLocked" @onclick="() => OpenFlagAsync(r, new(ManualFlagDialog.FlagMode.Create, null))">⚑ Đánh dấu cần kiểm tra</button>
+                                            }
+                                            else
+                                            {
+                                                <button id="menu-resolve-@r.ApplicationId" type="button" role="menuitem" disabled="@TableLocked" @onclick="() => OpenFlagAsync(r, new(ManualFlagDialog.FlagMode.Resolve, manual))">✓ Đánh dấu cờ đã xử lý</button>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
@@ -222,6 +212,7 @@
             {
                 <div class="table-empty" role="status">
                     <p class="empty-title">Không có CV nào khớp bộ lọc</p>
+                    @if (flaggedOnly && stageFilter is not (null or ApplicationStages.New or ApplicationStages.Reviewing)) { <p>"Cần xem kỹ" chỉ gồm hồ sơ ở giai đoạn Mới hoặc Đang xem. Dùng "Cờ HR" để xem cờ ở mọi giai đoạn.</p> }
                     <button type="button" class="btn sc-btn-secondary" @onclick="ResetFilters">Xóa bộ lọc</button>
                 </div>
             }
@@ -232,6 +223,18 @@
     }
 </section>
 
+@if (drawerRow is { } d && Items.FirstOrDefault(i => i.ApplicationId == d.ApplicationId) is { } current)
+{
+    <CandidateDrawer Row="current" Name="@NameOf(current)" FileName="@Anonymity.FileName(current.FileName)" FitLabel="@Anonymity.Label(current.FitLabel)" ErrorText="@Anonymity.Text(current.ErrorMessage)"
+                     Stage="@StageOf(current)" RejectReason="@ReasonOf(current)" ManualFlag="ManualFlagOf(current)" PassThreshold="PassThreshold" Failed="IsFailed(current)"
+                     Anonymous="Anonymity.Enabled" Locked="TableLocked" DetailUrl="@DetailUrl(current.EvaluationId)" HistoryVersion="historyVersion"
+                     OnClose="CloseDrawer" OnFlagAction="request => OpenFlagAsync(current, request)" OnStageChange="e => RequestRowAsync(current, e)" />
+}
+@if (flagRequest is { } fr && Items.FirstOrDefault(i => i.ApplicationId == flagRowId) is { } flagRow)
+{
+    <ManualFlagDialog Mode="fr.Mode" Current="fr.Flag" Subject="@($"{NameOf(flagRow)} · Hồ sơ #{flagRow.ApplicationId}")" Actor="@ActorState.Actor" Busy="busy" Anonymous="Anonymity.Enabled"
+                      Error="@flagError" OnConfirm="ConfirmFlagAsync" OnCancel="CancelFlag" />
+}
 @if (pending is not null && showDecisionDialog)
 {
     <StageDialog ToStage="@pending.ToStage" Title="@DialogTitle" Actor="@ActorState.Actor" InitialReason="@DialogReason" Busy="busy" OnConfirm="ConfirmDecisionAsync" OnCancel="CancelPendingAsync" />
@@ -273,6 +276,7 @@
         filter = RankingFilter.All;
         stageFilter = null;
         flaggedOnly = false;
+        manualOnly = false;
         selected.Clear();
         await OnFlaggedFilterChanged.InvokeAsync(false);
     }

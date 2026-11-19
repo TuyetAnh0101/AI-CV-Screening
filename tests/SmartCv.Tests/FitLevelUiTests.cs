@@ -353,7 +353,8 @@ public class FitLevelUiTests
 
         var text = table.Text;
         Assert.Contains("Ngưỡng Đạt 65", text);                               // chú giải lấy ngưỡng của lượt chấm
-        Assert.Equal(4, table.StyleOf("pass-line").Count(s => s == "left:65%"));
+        // SCApp v2: thanh điểm (kèm vạch ngưỡng) chuyển vào panel "Xem nhanh"; bảng chỉ còn điểm số. ScoreBar có test riêng ở trên.
+        Assert.Empty(table.StyleOf("pass-line"));
         Assert.True(table.HasClass("fit-excellent") && table.HasClass("fit-potential") && table.HasClass("fit-good"));
         Assert.Contains("Phù hợp Chỉ keyword", text);
         Assert.Contains("KW 72 · AI —", text);

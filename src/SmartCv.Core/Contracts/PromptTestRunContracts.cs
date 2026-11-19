@@ -35,6 +35,13 @@ public class PromptTestRunDto
     /// <summary>A41: khoảng tin cậy 95% (Wilson) của AccuracyPercent, đơn vị %, làm tròn 2 chữ số; null khi chưa có tỷ lệ đúng.</summary>
     public decimal? AccuracyLow { get; init; }
     public decimal? AccuracyHigh { get; init; }
+
+    /// <summary>SCApp v2: phiên bản bộ CV lúc tạo lượt; null với lượt tạo trước v2.</summary>
+    public int? EvaluationSetRevision { get; init; }
+    /// <summary>SCApp v2: phiên bản bộ CV hiện tại.</summary>
+    public int CurrentSetRevision { get; init; }
+    /// <summary>true khi thành viên hoặc nhãn HR của bộ đã đổi sau khi tạo lượt này. Lượt trước v2 (không có phiên bản): false.</summary>
+    public bool SetChangedSinceRun => EvaluationSetRevision is { } revision && revision != CurrentSetRevision;
 }
 
 public sealed class PromptTestProgressDto : PromptTestRunDto

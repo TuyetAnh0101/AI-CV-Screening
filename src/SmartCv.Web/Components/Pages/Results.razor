@@ -40,7 +40,6 @@
                             <li class="chip"><span>Mô hình</span> <code class="tech">@meta.Model</code></li>
                             <li class="chip"><span>Tạo lúc</span> @RankingView.VnTime(meta.CreatedAt)</li>
                         }
-                        <li class="chip"><span>Ngưỡng Đạt</span> @RankingView.Score(ranking.PassThreshold)</li>
                     </ul>
                 }
                 else
@@ -114,32 +113,33 @@
             {
                 <div class="notice is-warn" role="status">@pollingWarning</div>
             }
-            <aside class="attention" aria-label="Cần chú ý">
-                <strong>! Cần chú ý</strong>
-                <span>@ranking!.Items.Count(IsFailed) lỗi xử lý · @ranking.Items.Count(i => !IsFailed(i) && i.Status == EvaluationStatuses.Completed && i.ScoreSource == ScoreSources.KeywordOnly) chỉ keyword</span>
-                <small>Trong vị trí đang chọn · CV lỗi được tính riêng, không cộng vào Chỉ keyword.</small>
-            </aside>
+            @* SCApp v2: 4 số liệu không trùng nhau. "Cần chú ý" (lỗi/chỉ keyword) gộp vào thẻ đầu; "Cần xem kỹ" cùng định nghĩa với Tổng quan. *@
+            var failedCount = ranking!.Items.Count(IsFailed);
+            var keywordOnlyCount = ranking.Items.Count(i => !IsFailed(i) && i.Status == EvaluationStatuses.Completed && i.ScoreSource == ScoreSources.KeywordOnly);
+            var needsReview = ranking.Items.Count(i => SmartCv.Core.Evaluation.ReviewAttention.NeedsReview(i.Stage, i.ReviewFlags.Count > 0, i.ManualFlag is { Status: ManualFlagStatuses.Open }));
+            var decided = ranking.Items.Count(i => !SmartCv.Core.Evaluation.ReviewAttention.IsOpenStage(i.Stage));
             <section class="kpis" aria-label="Tóm tắt vị trí">
                 <div class="kpi">
                     <span class="kpi-label">CV trong vị trí</span>
                     <span class="kpi-value">@summary.Total</span>
                     <span class="kpi-hint">@summary.Scored đã có điểm · @summary.Unscored chưa có điểm</span>
+                    <span class="kpi-hint @(failedCount + keywordOnlyCount > 0 ? "kpi-warn" : null)">@failedCount lỗi xử lý · @keywordOnlyCount chỉ keyword</span>
                 </div>
                 <div class="kpi">
-                    <span class="kpi-label">Dự đoán Đạt (≥ @RankingView.Score(ranking!.PassThreshold))</span>
+                    <span class="kpi-label">Dự đoán Đạt (≥ @RankingView.Score(ranking.PassThreshold))</span>
                     <span class="kpi-value">@summary.PassCount<small> / @summary.Total</small></span>
-                    <span class="kpi-hint">Theo ngưỡng của lượt chấm</span>
-                </div>
-                <div class="kpi">
-                    <span class="kpi-label">Điểm cao nhất</span>
-                    <span class="kpi-value">@RankingView.Score(summary.Top?.FinalScore)</span>
-                    <span class="kpi-hint">@(summary.Top is null ? "Chưa có CV nào có điểm" : Anonymity.Name(summary.Top.CandidateName, summary.Top.Rank, summary.Top.ApplicationId))</span>
+                    <span class="kpi-hint">AI gợi ý theo ngưỡng của lượt chấm, chưa phải quyết định HR</span>
                 </div>
                 <div class="kpi">
                     <span class="kpi-label">Điểm trung bình</span>
                     <span class="kpi-value">@RankingView.Score(summary.Average)</span>
-                    <span class="kpi-hint">@(summary.Scored == 0 ? "Chưa có CV nào có điểm" : $"Tính trên {summary.Scored} CV có điểm")</span>
+                    <span class="kpi-hint">@(summary.Scored == 0 ? "Chưa có CV nào có điểm" : $"Tính trên {summary.Scored} CV có điểm · cao nhất {RankingView.Score(summary.Top?.FinalScore)}")</span>
                 </div>
+                <button id="kpi-needs-review" type="button" class="kpi kpi-action @(needsReview > 0 ? "kpi-attention" : null)" aria-pressed="@(FlaggedQuery ? "true" : "false")" @onclick="() => FlaggedChanged(!FlaggedQuery)">
+                    <span class="kpi-label">⚑ Cần xem kỹ</span>
+                    <span class="kpi-value">@needsReview</span>
+                    <span class="kpi-hint">Mới / Đang xem có cảnh báo hoặc cờ HR · @decided đã có quyết định</span>
+                </button>
             </section>
 
             <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" StageFilter="@StageQuery" OnStageFilterChanged="StageChanged" />

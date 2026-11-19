@@ -50,7 +50,7 @@ public class JobTitleIndexTests
         Assert.Equal(29, model.FindEntityType(typeof(JobSkill))!.GetSeedData().Count());
         Assert.Equal(52, model.FindEntityType(typeof(JobSkillAlias))!.GetSeedData().Count());
         var incoming = model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()).Where(fk => fk.PrincipalEntityType == job).ToArray();
-        Assert.Equal(2, incoming.Length);
+        Assert.Equal(3, incoming.Length);   // Applications, JobSkills và (SCApp v2) EvaluationSets.JobId — ON DELETE SET NULL
         Assert.All(incoming, fk => Assert.Equal(new[] { nameof(Job.JobId) }, fk.PrincipalKey.Properties.Select(p => p.Name)));
     }
 

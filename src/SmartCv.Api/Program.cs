@@ -96,6 +96,7 @@ app.MapCandidateEndpoints(); // A24: internal candidate management, same Develop
 app.MapRetentionEndpoints();
 app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
 app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.
+app.MapManualFlagEndpoints(); // SCApp v2: cờ "Cần kiểm tra lại" thủ công của HR (không đổi giai đoạn).
 app.MapDashboardEndpoints(); // A19: chỉ số nội bộ, cùng chốt Development và feature gate của HR.
 app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
 app.MapAiPreviewEndpoints();   // A10/A41: POST /api/applications/{id}/ai-preview, GET .../ai-preview/quota (chỉ Development, có giới hạn tần suất)

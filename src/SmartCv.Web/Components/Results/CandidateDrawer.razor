@@ -1,0 +1,136 @@
+@*
+    SCApp v2: panel chi tiết một ứng viên trong bảng xếp hạng. Thông tin chuyên sâu (thanh điểm, kỹ năng bắt buộc,
+    kinh nghiệm, cảnh báo tự động, cờ HR + lịch sử, lịch sử giai đoạn) nằm ở đây thay vì chen thêm cột vào bảng.
+    Ba nhóm được tách rõ: (1) Dự đoán AI · (2) Cờ / cảnh báo · (3) Quyết định HR (giai đoạn).
+*@
+@using SmartCv.Core.Constants
+@inject ApplicationApiClient ApplicationApi
+@implements IDisposable
+
+<div class="drawer-backdrop" @onclick="CloseAsync"></div>
+<aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" @onkeydown="KeyAsync">
+    <header>
+        <div><p class="eyebrow">Hạng @RankingView.RankText(Scored ? Row.Rank : null) · Hồ sơ #@Row.ApplicationId</p><h2 id="drawer-title" tabindex="-1" @ref="title">@Name</h2><p class="file">@FileName</p></div>
+        <button id="drawer-close" type="button" class="close" aria-label="Đóng chi tiết" @onclick="CloseAsync">×</button>
+    </header>
+
+    <section aria-labelledby="drawer-ai">
+        <h3 id="drawer-ai">Dự đoán AI <small>gợi ý, không phải quyết định</small></h3>
+        <div class="ai-grid">
+            <div class="score-big"><span>Điểm cuối</span><strong>@RankingView.Score(Scored ? Row.FinalScore : null)</strong><small>Ngưỡng Đạt @RankingView.Score(PassThreshold)</small></div>
+            <div class="ai-fit"><FitBadge FitLabel="@FitLabel" FinalScore="Row.FinalScore" Status="@(Failed ? EvaluationStatuses.Failed : Row.Status)" ScoreSource="@Row.ScoreSource" Message="@ErrorText" />
+                <span class="pass @(Row.PredictedPass == true ? "is-pass" : null)">@(Scored ? Row.PredictedPass == true ? "Dự đoán Đạt" : "Dự đoán Không đạt" : "Chưa có điểm")</span></div>
+        </div>
+        <ScoreBar Keyword="@(Scored ? Row.KeywordScore : null)" Final="@(Scored ? Row.FinalScore : null)" Threshold="PassThreshold" ScoreSource="@Row.ScoreSource" />
+        <dl class="facts">
+            <div><dt>Điểm keyword</dt><dd>@RankingView.Score(Scored ? Row.KeywordScore : null)</dd></div>
+            <div><dt>Điểm AI</dt><dd>@RankingView.Score(Scored && Row.ScoreSource != ScoreSources.KeywordOnly ? Row.AiScore : null)</dd></div>
+            <div><dt>Kinh nghiệm</dt><dd>@RankingView.Years(Row.YearsExperience)</dd></div>
+            <div><dt>Kỹ năng bắt buộc</dt><dd>@(Must?.Text ?? "—")</dd></div>
+        </dl>
+        @if (Row.ScoreSource == ScoreSources.KeywordOnly) { <p class="note">AI chưa chấm được CV này; điểm cuối chỉ tính theo từ khóa.</p> }
+    </section>
+
+    <section aria-labelledby="drawer-flags">
+        <h3 id="drawer-flags">Cờ &amp; cảnh báo</h3>
+        <div class="flag-block auto">
+            <h4>Cảnh báo tự động <small>hệ thống tính từ kết quả chấm</small></h4>
+            @if (Row.ReviewFlags.Count == 0) { <p class="muted">Không có cảnh báo tự động.</p> }
+            else { <ul>@foreach (var warning in Row.ReviewFlags) { <li>@warning.Message</li> }</ul> }
+        </div>
+        <div class="flag-block manual @(ManualFlag is not null ? "open" : null)">
+            <h4>Cờ HR <small>HR chủ động đánh dấu cần kiểm tra</small></h4>
+            @if (ManualFlag is { } flag)
+            {
+                <p><strong>@flag.ReasonName</strong> · @ManualFlagStatuses.DisplayName(flag.Status)</p>
+                @if (!string.IsNullOrWhiteSpace(flag.Note)) { <p class="quote">@(Anonymous ? "Ghi chú được ẩn khi bật Ẩn danh." : flag.Note)</p> }
+                <p class="muted">Gắn bởi @(Anonymous ? "HR" : flag.CreatedBy) · @RankingView.VnTime(flag.CreatedAt)</p>
+                <button id="drawer-resolve" type="button" class="btn sc-btn-primary" disabled="@Locked" @onclick="() => OnFlagAction.InvokeAsync(new(ManualFlagDialog.FlagMode.Resolve, flag))">Đánh dấu đã xử lý</button>
+            }
+            else
+            {
+                <p class="muted">Chưa có cờ đang mở.</p>
+                <button id="drawer-flag" type="button" class="btn sc-btn-secondary" disabled="@Locked" @onclick="() => OnFlagAction.InvokeAsync(new(ManualFlagDialog.FlagMode.Create, null))">⚑ Đánh dấu cần kiểm tra</button>
+                @if (LastResolved is { } resolved) { <button id="drawer-reopen" type="button" class="btn sc-btn-secondary" disabled="@Locked" @onclick="() => OnFlagAction.InvokeAsync(new(ManualFlagDialog.FlagMode.Reopen, resolved))">Mở lại cờ gần nhất</button> }
+            }
+            @if (history is { Events.Count: > 0 } h)
+            {
+                <details><summary>Lịch sử cờ (@h.Events.Count)</summary>
+                    <ol class="history">@foreach (var e in h.Events) { <li><strong>@e.ActionName</strong> · @(Anonymous ? "HR" : e.Actor) · @RankingView.VnTime(e.CreatedAt)@if (!string.IsNullOrWhiteSpace(e.Note)) { <span>@(Anonymous ? "Ghi chú được ẩn." : e.Note)</span> }</li> }</ol>
+                </details>
+            }
+            @if (historyError is not null) { <p class="muted" role="status">@historyError</p> }
+        </div>
+    </section>
+
+    <section aria-labelledby="drawer-stage">
+        <h3 id="drawer-stage">Quyết định HR</h3>
+        <label class="stage-field">Giai đoạn tuyển dụng
+            <select id="drawer-stage-@Row.ApplicationId" class="stage-select @StageText.Css(Stage)" value="@Stage" disabled="@Locked" @onchange="e => OnStageChange.InvokeAsync(e)">
+                @foreach (var stage in ApplicationStages.All) { <option value="@stage">@StageText.Name(stage)</option> }
+            </select>
+        </label>
+        @if (Stage == ApplicationStages.Rejected && RejectReason is not null) { <p class="muted">Lý do loại: @StageText.Reason(RejectReason)</p> }
+        @if (events is not null) { <StageTimeline Events="events" Anonymous="Anonymous" /> }
+    </section>
+
+    <footer><a class="btn sc-btn-secondary" href="@DetailUrl">Mở trang chi tiết đầy đủ ↗</a></footer>
+</aside>
+
+@code {
+    [Parameter, EditorRequired] public RankingItemDto Row { get; set; } = default!;
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string FileName { get; set; } = "";
+    [Parameter] public string? FitLabel { get; set; }
+    [Parameter] public string? ErrorText { get; set; }
+    [Parameter] public string Stage { get; set; } = ApplicationStages.New;
+    [Parameter] public string? RejectReason { get; set; }
+    [Parameter] public ManualFlagDto? ManualFlag { get; set; }
+    [Parameter] public decimal PassThreshold { get; set; }
+    [Parameter] public bool Failed { get; set; }
+    [Parameter] public bool Anonymous { get; set; }
+    [Parameter] public bool Locked { get; set; }
+    [Parameter] public string DetailUrl { get; set; } = "";
+    /// <summary>Tăng sau mỗi lần cờ hoặc giai đoạn đổi để tải lại lịch sử.</summary>
+    [Parameter] public int HistoryVersion { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<ManualFlagDialog.FlagRequest> OnFlagAction { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> OnStageChange { get; set; }
+    public ManualFlagDto? LastResolved => history?.Flags.FirstOrDefault(f => f.Status == ManualFlagStatuses.Resolved);
+    private bool Scored => !Failed && RankingView.IsScored(Row);
+    private MustHaveDisplay? Must => MustHaveDisplay.From(Row.MatchedMustHave, Row.TotalMustHave, Scored);
+    private ApplicationFlagsResponse? history;
+    private List<ApplicationEventDto>? events;
+    private string? historyError;
+    private int loadedVersion = -1, loadedId;
+    private ElementReference title;
+    private bool focused;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedVersion == HistoryVersion && loadedId == Row.ApplicationId) return;
+        loadedVersion = HistoryVersion; loadedId = Row.ApplicationId;
+        try
+        {
+            var flags = ApplicationApi.GetFlagsAsync(Row.ApplicationId, lifetime.Token);
+            var stages = ApplicationApi.GetEventsAsync(Row.ApplicationId, lifetime.Token);
+            var (f, s) = (await flags, await stages);
+            history = f.IsSuccess ? f.Data : null;
+            events = s.IsSuccess ? s.Data : null;
+            historyError = f.IsSuccess && s.IsSuccess ? null : "Chưa tải được lịch sử cờ hoặc giai đoạn. Đóng rồi mở lại để thử lại.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focused || !RendererInfo.IsInteractive) return;
+        focused = true;
+        try { await title.FocusAsync(); } catch (InvalidOperationException) { } catch (Microsoft.JSInterop.JSException) { }
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+    private Task KeyAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CloseAsync() : Task.CompletedTask;
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

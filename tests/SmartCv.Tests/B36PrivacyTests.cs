@@ -105,9 +105,11 @@ public class B36PrivacyTests
         typeof(RankingTable).GetProperty("Anonymity",BindingFlags.NonPublic|BindingFlags.Instance)!.SetValue(table,new AnonymityState());
         void Set(string key,object value)=>typeof(RankingTable).GetField(key,BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(table,value);
         List<RankingItemDto> Visible()=>(List<RankingItemDto>)typeof(RankingTable).GetProperty("VisibleRows",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(table)!;
-        Set("flaggedOnly",true);Assert.Equal(new[]{1,3},Visible().Select(r=>r.EvaluationId));
+        // SCApp v2: "Cần xem kỹ" = Mới/Đang xem có cảnh báo hoặc cờ HR (giống Tổng quan); hồ sơ 3 đã Loại nên không còn trong bộ lọc.
+        Set("flaggedOnly",true);Assert.Equal(new[]{1},Visible().Select(r=>r.EvaluationId));
         Set("filter",RankingFilter.Pass);Assert.Equal(1,Assert.Single(Visible()).EvaluationId);
         Set("stageFilter","Rejected");Assert.Empty(Visible());Set("filter",RankingFilter.All);
+        Assert.Empty(Visible());Set("flaggedOnly",false);   // SCApp v2: hồ sơ đã Loại không "cần xem kỹ"; tắt lọc để xem
         Assert.Equal(3,Assert.Single(Visible()).EvaluationId);Set("search","Secret");Assert.Empty(Visible());
         Set("search","#2");Assert.Equal(3,Assert.Single(Visible()).EvaluationId);
     }

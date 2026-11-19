@@ -1,0 +1,21 @@
+.flag-backdrop { position:fixed; inset:0; background:rgba(10,46,45,.45); z-index:1050; }
+.flag-dialog { position:fixed; z-index:1051; left:50%; top:50%; transform:translate(-50%, -50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 64px -16px rgba(10,46,45,.45); display:grid; }
+header { padding:20px 20px 0; }
+h2 { font:600 18px var(--sc-font-display); margin:0 0 4px; outline:none; }
+header p { margin:0; color:var(--text-muted); font-size:13px; overflow-wrap:anywhere; }
+.flag-body { padding:16px 20px; display:grid; gap:14px; }
+fieldset { border:0; padding:0; margin:0; display:grid; gap:6px; }
+legend { font-size:13px; font-weight:600; margin-bottom:6px; }
+.reason { display:flex; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-size:13px; cursor:pointer; min-height:44px; }
+.reason.on { border-color:var(--brand); background:var(--sc-brand-50); }
+.reason input { accent-color:var(--brand); width:18px; height:18px; }
+.reason:focus-within { outline:3px solid var(--brand-accent); outline-offset:1px; }
+.field { display:grid; gap:6px; font-size:12px; font-weight:600; color:var(--sc-ink-700); }
+textarea, input { width:100%; border:1px solid var(--border); border-radius:8px; padding:9px 10px; font:400 13px var(--sc-font-body); min-height:40px; }
+textarea:focus-visible, input:focus-visible, button:focus-visible { outline:3px solid var(--brand-accent); outline-offset:2px; }
+.current-flag { background:var(--fit-potential-bg); color:var(--sc-ink-700); padding:12px; border-radius:10px; display:grid; gap:4px; font-size:13px; }
+.current-flag p { margin:0; overflow-wrap:anywhere; } .current-flag small { color:var(--text-muted); }
+.flag-error { margin:0; color:var(--fit-poor); background:var(--fit-poor-bg); padding:10px 12px; border-radius:8px; font-size:13px; }
+.flag-hint { margin:0; color:var(--text-muted); font-size:12px; line-height:1.6; }
+footer { display:flex; justify-content:flex-end; gap:10px; padding:0 20px 20px; flex-wrap:wrap; }
+@media (max-width: 480px) { footer .btn { flex:1 1 100%; } }

@@ -23,6 +23,8 @@ public sealed class EvaluationSetWorkspace(PromptApiClient api)
     public int SetId { get; private set; }
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
+    public string Purpose { get; set; } = "";      // SCApp v2: mục tiêu của bộ
+    public int? JobId { get; set; }                 // SCApp v2: vị trí tuyển dụng chính
     public string LabeledBy { get; set; } = "";
     public string? Error { get; private set; }
     public string? Message { get; private set; }
@@ -103,13 +105,13 @@ public sealed class EvaluationSetWorkspace(PromptApiClient api)
     {
         if (Busy || CreationUncertain) return;
         Error = Message = null;
-        if (string.IsNullOrWhiteSpace(Name) || Name.Trim().Length > 150 || Description.Length > 500)
-        { Error = "Nhập tên bộ từ 1–150 ký tự và mô tả tối đa 500 ký tự."; return; }
+        if (string.IsNullOrWhiteSpace(Name) || Name.Trim().Length > 150 || Description.Length > 500 || Purpose.Length > 300)
+        { Error = "Nhập tên bộ từ 1–150 ký tự, mô tả tối đa 500 ký tự và mục tiêu tối đa 300 ký tự."; return; }
         Busy = true;
         try
         {
             CreationUncertain = true;
-            var result = await api.CreateEvaluationSetAsync(new() { Name = Name.Trim(), Description = Description }, ct);
+            var result = await api.CreateEvaluationSetAsync(new() { Name = Name.Trim(), Description = Description, Purpose = Purpose, JobId = JobId is > 0 ? JobId : null }, ct);
             if (!result.IsSuccess)
             {
                 if (result.StatusCode is 400 or 409 or 429) CreationUncertain = false;
@@ -119,7 +121,8 @@ public sealed class EvaluationSetWorkspace(PromptApiClient api)
             CreationUncertain = false; SetId = result.Data!.EvaluationSetId;
             Sets = Sets.Where(s => s.EvaluationSetId != SetId).Prepend(result.Data).ToList(); Loaded = true;
             await LoadRowsAsync(ct);
-            Message = "Đã lưu tên bộ CV. Tiếp theo, chọn hồ sơ và gán nhãn HR rồi lưu nhãn; bộ chưa có nhãn chưa thể chạy.";
+            Message = $"Đã tạo bộ \"{result.Data.Name}\". Tiếp theo: chọn CV đã quét để thêm vào bộ, rồi gán nhãn HR.";
+            Name = Description = Purpose = ""; JobId = null;
         }
         finally { Busy = false; }
     }

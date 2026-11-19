@@ -89,3 +89,7 @@ select:disabled { background:var(--sc-surface-50); }
 @media(max-width:600px) { h1 { font-size:24px; } .dashboard { gap:16px; } .dashboard-filters,.dashboard-panel { padding:18px 16px; } .heading-actions { width:100%; } .heading-actions .btn { flex:1; } .filter-footer { align-items:start; } .quick-ranges { width:100%; } .quick-ranges button { flex:1; } .kpi { padding:16px 14px; } .kpi-symbol { display:none; } .kpi p { min-height:36px; } .scope-line { margin:0; } .onboarding { padding:22px 18px; gap:12px; } .onboarding-symbol { display:none; } .recent-runs header { align-items:start; } }
 @media(max-width:600px) { .kpi-grid,.kpi-grid.large-values { grid-template-columns:minmax(0,1fr); } .kpi { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; } .kpi-number { white-space:nowrap; text-align:right; } .kpi p { grid-column:1/-1; min-height:0; margin:0; } }
 @media(max-width:380px) { .kpi-grid { gap:10px; } .kpi { padding:14px 12px; } .run-list li>a { grid-template-columns:34px minmax(0,1fr) 12px; gap:7px; } }
+
+/* SCApp v2: biểu đồ xu hướng toàn chiều rộng, trên các biểu đồ phụ */
+.trend-panel { margin-bottom: 20px; }
+.trend-scope { margin: 10px 0 0; color: var(--text-muted); font-size: 11px; }

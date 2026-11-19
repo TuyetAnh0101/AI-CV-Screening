@@ -49,7 +49,7 @@ public sealed record DashboardFilter(int? JobId = null, DateOnly? From = null, D
     public DashboardFilter Quick(int? days, DateTime? utcNow = null)
     {
         if (days is null) return this with { From = null, To = null };
-        if (days is not (7 or 30)) throw new ArgumentOutOfRangeException(nameof(days));
+        if (days is not (7 or 30 or 90)) throw new ArgumentOutOfRangeException(nameof(days));
         var today = VietnamTime.Today(utcNow);
         return this with { From = today.AddDays(1 - days.Value), To = today };
     }

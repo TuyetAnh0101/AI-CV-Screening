@@ -54,7 +54,8 @@ public static partial class EvaluationSetEndpoints
             .DisableAntiforgery();
         group.MapGet("/{id:int}/labels/template", TemplateAsync).WithName("HrLabelTemplate").WithSummary("File CSV mẫu");
         group.MapDelete("/{id:int}/labels/{applicationId:int}", DeleteLabelAsync).WithName("DeleteHrLabel")
-            .WithSummary("Bỏ nhãn một hồ sơ");
+            .WithSummary("Bỏ nhãn một hồ sơ (hồ sơ vẫn ở trong bộ, trạng thái Chưa đánh giá)");
+        MapMemberEndpoints(group);   // SCApp v2
         return app;
     }
 
@@ -71,10 +72,28 @@ public static partial class EvaluationSetEndpoints
                 LabelCount = s.HrLabels.Count(),
                 PassCount = s.HrLabels.Count(h => h.IsPass),
                 UnreadyCount = s.HrLabels.Count(h => h.Application.Cv.ExtractionStatus != ExtractionStatuses.Completed
-                    || h.Application.Cv.ExtractedText == null || h.Application.Cv.ExtractedText.Trim() == "")
+                    || h.Application.Cv.ExtractedText == null || h.Application.Cv.ExtractedText.Trim() == ""),
+                // SCApp v2: thành viên = dòng thành viên hoặc nhãn (dữ liệu trước v2)
+                Purpose = s.Purpose, JobId = s.JobId, JobTitle = s.Job == null ? null : s.Job.Title,
+                MemberCount = db.Applications.Count(a => a.EvaluationSetMemberships.Any(m => m.EvaluationSetId == s.EvaluationSetId)
+                    || a.HrLabels.Any(h => h.EvaluationSetId == s.EvaluationSetId)),
+                MemberUnreadyCount = db.Applications.Count(a => (a.EvaluationSetMemberships.Any(m => m.EvaluationSetId == s.EvaluationSetId)
+                        || a.HrLabels.Any(h => h.EvaluationSetId == s.EvaluationSetId))
+                    && (a.Cv.AnonymizedAt != null || a.Cv.ExtractionStatus != ExtractionStatuses.Completed
+                        || a.Cv.ExtractedText == null || a.Cv.ExtractedText.Trim() == "")),
+                Revision = s.Revision, RunCount = s.EvaluationRuns.Count(),
+                CreatedAt = s.CreatedAt, UpdatedAt = s.UpdatedAt
             })
             .ToListAsync(ct);
-        return TypedResults.Ok(list);
+        // UnlabeledCount và ngày UTC được tính sau khi đọc.
+        return TypedResults.Ok(list.Select(s => new EvaluationSetDto
+        {
+            EvaluationSetId = s.EvaluationSetId, Name = s.Name, Description = s.Description, LabelCount = s.LabelCount,
+            PassCount = s.PassCount, UnreadyCount = s.UnreadyCount, Purpose = s.Purpose, JobId = s.JobId, JobTitle = s.JobTitle,
+            MemberCount = s.MemberCount, UnlabeledCount = Math.Max(0, s.MemberCount - s.LabelCount),
+            MemberUnreadyCount = s.MemberUnreadyCount, Revision = s.Revision, RunCount = s.RunCount,
+            CreatedAt = Utc(s.CreatedAt), UpdatedAt = s.UpdatedAt is { } u ? Utc(u) : null
+        }).ToList());
     }
 
     // ---------- POST /api/evaluation-sets ----------
@@ -87,10 +106,19 @@ public static partial class EvaluationSetEndpoints
         if (name.Length == 0) return Problem(400, "Thiếu tên", "Hãy đặt tên bộ CV đánh giá.");
         if (name.Length > 150) return Problem(400, "Tên quá dài", "Tên bộ tối đa 150 ký tự.");
         if (description is { Length: > 500 }) return Problem(400, "Mô tả quá dài", "Mô tả tối đa 500 ký tự.");
+        var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? null : request.Purpose.Trim();
+        if (purpose is { Length: > EvaluationSetRules.MaxPurposeLength })
+            return Problem(400, "Mục tiêu quá dài", $"Mục tiêu tối đa {EvaluationSetRules.MaxPurposeLength} ký tự.");
+        string? jobTitle = null;
+        if (request.JobId is { } jobId)
+        {
+            jobTitle = await db.Jobs.AsNoTracking().Where(j => j.JobId == jobId).Select(j => j.Title).FirstOrDefaultAsync(ct);
+            if (jobTitle is null) return Problem(400, "Vị trí không tồn tại", $"Không có vị trí tuyển dụng #{jobId}.");
+        }
         if (await db.EvaluationSets.AnyAsync(s => s.Name == name, ct))
             return Problem(409, "Trùng tên", $"Đã có bộ CV đánh giá tên \"{name}\".");
 
-        var set = new EvaluationSet { Name = name, Description = description, CreatedAt = DateTime.UtcNow };
+        var set = new EvaluationSet { Name = name, Description = description, Purpose = purpose, JobId = request.JobId, CreatedAt = DateTime.UtcNow };
         db.EvaluationSets.Add(set);
         try
         {
@@ -103,7 +131,8 @@ public static partial class EvaluationSetEndpoints
 
         return TypedResults.Created($"/api/evaluation-sets/{set.EvaluationSetId}", new EvaluationSetDto
         {
-            EvaluationSetId = set.EvaluationSetId, Name = set.Name, Description = set.Description
+            EvaluationSetId = set.EvaluationSetId, Name = set.Name, Description = set.Description,
+            Purpose = set.Purpose, JobId = set.JobId, JobTitle = jobTitle, Revision = set.Revision, CreatedAt = Utc(set.CreatedAt)
         });
     }
 
@@ -113,7 +142,11 @@ public static partial class EvaluationSetEndpoints
     {
         var set = await db.EvaluationSets.AsNoTracking()
             .Where(s => s.EvaluationSetId == id)
-            .Select(s => new { s.EvaluationSetId, s.Name, s.Description, s.CreatedAt, RunCount = s.EvaluationRuns.Count() })
+            .Select(s => new
+            {
+                s.EvaluationSetId, s.Name, s.Description, s.CreatedAt, RunCount = s.EvaluationRuns.Count(),
+                s.Purpose, s.JobId, JobTitle = s.Job == null ? null : s.Job.Title, s.Revision, s.UpdatedAt
+            })
             .FirstOrDefaultAsync(ct);
         if (set is null) return NotFoundSet(id);
 
@@ -131,8 +164,12 @@ public static partial class EvaluationSetEndpoints
             })
             .ToListAsync(ct);
 
+        var members = await LoadMembersAsync(db, id, ct);
         return TypedResults.Ok(new EvaluationSetDetailDto
         {
+            Purpose = set.Purpose, JobId = set.JobId, JobTitle = set.JobTitle, Revision = set.Revision,
+            UpdatedAt = set.UpdatedAt is { } updated ? Utc(updated) : null,
+            Members = members, Readiness = ReadinessOf(members),
             EvaluationSetId = set.EvaluationSetId,
             Name = set.Name,
             Description = set.Description,
@@ -157,12 +194,23 @@ public static partial class EvaluationSetEndpoints
 
     // ---------- GET /api/evaluation-sets/{id}/applications ----------
     private static async Task<Results<Ok<List<LabelCandidateDto>>, ProblemHttpResult>> CandidatesAsync(
-        int id, int? jobId, SmartCvDbContext db, CancellationToken ct)
+        int id, int? jobId, SmartCvDbContext db, CancellationToken ct,
+        string? stage = null, string? from = null, string? to = null, bool? notInSet = null)
     {
         if (!await db.EvaluationSets.AnyAsync(s => s.EvaluationSetId == id, ct)) return NotFoundSet(id);
+        // SCApp v2: lọc cho bước "Chọn CV đã quét" (Job, giai đoạn, ngày ứng tuyển theo lịch Việt Nam, chưa thuộc bộ).
+        if (stage is { Length: > 0 } && !ApplicationStages.IsValid(stage))
+            return Problem(400, "Bộ lọc không hợp lệ", "Giai đoạn không hợp lệ.");
+        var (period, periodError) = SmartCv.Core.Dashboard.DashboardPeriod.Parse(from, to);
+        if (period is null) return Problem(400, "Khoảng ngày không hợp lệ", periodError!);
 
         var q = db.Applications.AsNoTracking();
         if (jobId is { } j) q = q.Where(a => a.JobId == j);
+        if (stage is { Length: > 0 }) q = q.Where(a => a.Stage == stage);
+        if (period.FromUtc is { } start) q = q.Where(a => a.CreatedAt >= start);
+        if (period.ToUtc is { } end) q = q.Where(a => a.CreatedAt < end);
+        if (notInSet == true)
+            q = q.Where(a => !a.EvaluationSetMemberships.Any(m => m.EvaluationSetId == id) && !a.HrLabels.Any(h => h.EvaluationSetId == id));
 
         var list = await q
             .OrderBy(a => a.Job.Title).ThenBy(a => a.ApplicationId)
@@ -176,7 +224,11 @@ public static partial class EvaluationSetEndpoints
                 JobId = a.JobId,
                 JobTitle = a.Job.Title,
                 ExtractionStatus = a.Cv.ExtractionStatus,
-                CurrentLabel = a.HrLabels.Where(h => h.EvaluationSetId == id).Select(h => (bool?)h.IsPass).FirstOrDefault()
+                CurrentLabel = a.HrLabels.Where(h => h.EvaluationSetId == id).Select(h => (bool?)h.IsPass).FirstOrDefault(),
+                IsMember = a.EvaluationSetMemberships.Any(m => m.EvaluationSetId == id) || a.HrLabels.Any(h => h.EvaluationSetId == id),
+                Stage = a.Stage,
+                AppliedAt = DateTime.SpecifyKind(a.CreatedAt, DateTimeKind.Utc),
+                IsAnonymized = a.Cv.AnonymizedAt != null
             })
             .ToListAsync(ct);
         return TypedResults.Ok(list);
@@ -295,6 +347,10 @@ public static partial class EvaluationSetEndpoints
         if (label is null) return Problem(404, "Không tìm thấy", $"Hồ sơ {applicationId} chưa có nhãn trong bộ #{id}.");
 
         db.HrLabels.Remove(label);
+        // SCApp v2: hồ sơ vẫn là thành viên ("Chưa đánh giá"); bảo đảm có dòng thành viên cho dữ liệu trước v2.
+        if (!await db.EvaluationSetMembers.AnyAsync(m => m.EvaluationSetId == id && m.ApplicationId == applicationId, ct))
+            db.EvaluationSetMembers.Add(new EvaluationSetMember { EvaluationSetId = id, ApplicationId = applicationId, AddedBy = label.LabeledBy, AddedAt = label.LabeledAt });
+        if (await db.EvaluationSets.FirstOrDefaultAsync(s => s.EvaluationSetId == id, ct) is { } set) BumpRevision(set, DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
         await db.RecalculateSetAccuracyAsync(id, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
@@ -338,6 +394,11 @@ public static partial class EvaluationSetEndpoints
 
         int added = 0, updated = 0, unchanged = 0;
         var now = DateTime.UtcNow;
+        // SCApp v2: nhãn gắn cho thành viên; hồ sơ chưa thuộc bộ được thêm làm thành viên (giữ hành vi A15 cũ).
+        var memberIds = (await db.EvaluationSetMembers.AsNoTracking().Where(m => m.EvaluationSetId == setId && ids.Contains(m.ApplicationId))
+            .Select(m => m.ApplicationId).ToListAsync(ct)).ToHashSet();
+        foreach (var appId in ids.Where(a => !memberIds.Contains(a)))
+            db.EvaluationSetMembers.Add(new EvaluationSetMember { EvaluationSetId = setId, ApplicationId = appId, AddedBy = by, AddedAt = now });
         foreach (var l in input)
         {
             var note = string.IsNullOrWhiteSpace(l.Note) ? null : l.Note.Trim();
@@ -360,6 +421,8 @@ public static partial class EvaluationSetEndpoints
                 added++;
             }
         }
+        if (added + updated > 0 && await db.EvaluationSets.FirstOrDefaultAsync(s => s.EvaluationSetId == setId, ct) is { } labeledSet)
+            BumpRevision(labeledSet, now);
         await db.SaveChangesAsync(ct);
         // Re-read current HR labels after saving, while the A15 set lock is still held.
         var recalculated = added + updated > 0 ? await db.RecalculateSetAccuracyAsync(setId, ct) : [];

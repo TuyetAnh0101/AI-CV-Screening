@@ -1,0 +1,241 @@
+@*
+    SCApp v2: xu hướng tuyển dụng — MỘT biểu đồ đường kết hợp, chung trục thời gian X:
+      · Đường 1 (Deep Teal, liền, chấm đặc, trục TRÁI, đơn vị "hồ sơ"): số hồ sơ ứng tuyển mới theo ngày/tuần (UTC+7).
+      · Đường 2 (Mint, nét đứt, chấm rỗng, trục PHẢI, đơn vị "%"): tỷ lệ hồ sơ CỦA CÙNG NHÓM đã qua vòng CV.
+    Hai trục dùng chung 4 vạch lưới (0–25–50–75–100% chiều cao) nên lưới không chồng hai lớp. Mỗi trục có tiêu đề + mẫu nét
+    của đường tương ứng; đường không chỉ phân biệt bằng màu mà còn bằng kiểu nét và kiểu chấm.
+    Đường/lưới vẽ bằng SVG co giãn (stroke không giãn); chữ, chấm và chú thích là HTML định vị theo % nên luôn sắc nét,
+    cỡ chữ cố định trên mọi màn hình. Mốc không có hồ sơ thì đường tỷ lệ bị ngắt (không coi là 0%).
+    SVG/HTML thuần, không thêm thư viện. Có bảng số liệu cho trình đọc màn hình.
+*@
+@using System.Globalization
+
+<section class="trend" aria-labelledby="trend-title">
+    <header class="trend-head">
+        <div class="trend-title">
+            <h2 id="trend-title">Xu hướng hồ sơ ứng tuyển</h2>
+            <p>@Subtitle</p>
+        </div>
+        @if (Data is { } d)
+        {
+            <dl class="trend-totals">
+                <div><dt>Hồ sơ mới</dt><dd>@DashboardText.Number(d.TotalApplications)</dd></div>
+                <div><dt>Qua vòng CV</dt><dd>@DashboardText.Percent(d.PassRatePercent) <small>(@DashboardText.Number(d.TotalPassed))</small></dd></div>
+            </dl>
+        }
+    </header>
+
+    @if (Loading && Data is null)
+    {
+        <div class="trend-skeleton" role="status"><span class="visually-hidden">Đang tải xu hướng...</span></div>
+    }
+    else if (Error is not null && Data is null)
+    {
+        <div class="trend-empty" role="alert"><strong>Chưa tải được xu hướng</strong><p>@Error</p>@if (OnRetry.HasDelegate) { <button type="button" class="btn sc-btn-secondary" @onclick="OnRetry">Thử lại</button> }</div>
+    }
+    else if (Data is { } data)
+    {
+        @if (Error is not null) { <p class="trend-warn" role="status">@Error Đang hiển thị số liệu lần tải trước.</p> }
+        @if (data.TotalApplications == 0)
+        {
+            <div class="trend-empty" role="status"><strong>Không có hồ sơ ứng tuyển trong khoảng này</strong><p>Chọn khoảng ngày dài hơn hoặc vị trí khác.</p></div>
+        }
+        else
+        {
+            var points = data.Points;
+            var n = points.Count;
+            var max = NiceMax(points.Max(p => p.Applications));
+            var unit = data.Bucket == "week" ? "tuần" : "ngày";
+            var ticks = Ticks(n, Math.Max(1, (int)Math.Ceiling(n / 8.0)));
+            var showDots = n <= 45;
+            <ul class="trend-legend" aria-label="Chú giải">
+                <li><span class="key key-apps" aria-hidden="true"></span>Hồ sơ mới mỗi @unit <small>· trục trái, đơn vị hồ sơ</small></li>
+                <li><span class="key key-rate" aria-hidden="true"></span>Tỷ lệ qua vòng CV <small>· trục phải, đơn vị %</small></li>
+            </ul>
+            <div class="chart" tabindex="0" role="group" aria-label="@($"Biểu đồ kết hợp: số hồ sơ mới mỗi {unit} (trục trái) và tỷ lệ qua vòng CV (trục phải, %). Dùng phím mũi tên trái phải để xem từng mốc.")"
+                 @onmouseleave="() => active = null" @onkeydown="e => Key(e, n)" @onfocus="() => active ??= n - 1">
+                <span class="axis-title left"><i class="key key-apps" aria-hidden="true"></i>Hồ sơ</span>
+                <span class="axis-title right">%<i class="key key-rate" aria-hidden="true"></i></span>
+                <div class="plot">
+                    <svg class="lines" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                        <defs>
+                            <linearGradient id="@gradientId" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" class="area-top" />
+                                <stop offset="100%" class="area-bottom" />
+                            </linearGradient>
+                        </defs>
+                        @for (var g = 0; g <= 4; g++)
+                        {
+                            <line class="@(g == 0 ? "baseline" : "grid")" x1="0" x2="1000" y1="@F(100 - g * 25)" y2="@F(100 - g * 25)" />
+                        }
+                        @if (active is { } a && a < n)
+                        {
+                            <line class="cross" x1="@F(X(a, n))" x2="@F(X(a, n))" y1="0" y2="100" />
+                        }
+                        <path class="area" d="@AreaPath(points, max)" fill="url(#@gradientId)" />
+                        <path class="line-apps" d="@AppsPath(points, max)" />
+                        <path class="line-rate" d="@RatePath(points)" />
+                    </svg>
+                    @if (showDots || active is not null)
+                    {
+                        @for (var i = 0; i < n; i++)
+                        {
+                            if (!showDots && active != i) continue;
+                            var p = points[i];
+                            <span class="dot dot-apps @(active == i ? "on" : null)" style="@Pos(X(i, n), AppsY(p.Applications, max))"></span>
+                            if (p.PassRatePercent is { } rate)
+                            {
+                                <span class="dot dot-rate @(active == i ? "on" : null)" style="@Pos(X(i, n), RateY(rate))"></span>
+                            }
+                        }
+                    }
+                    <div class="hits">
+                        @for (var i = 0; i < n; i++)
+                        {
+                            var idx = i;
+                            <span class="hit" title="@Tip(points[i])" @onmouseenter="() => active = idx"></span>
+                        }
+                    </div>
+                    @if (active is { } t && t < n)
+                    {
+                        var p = points[t];
+                        var x = X(t, n) / 10;
+                        <div class="tip @(x > 50 ? "tip-left" : "tip-right") @(x < 18 ? "tip-start" : x > 82 ? "tip-end" : null)" style="left:@F(x)%" role="status" aria-live="polite">
+                            <strong>@Range(p)</strong>
+                            <span><i class="key key-apps" aria-hidden="true"></i>Hồ sơ mới <b>@DashboardText.Number(p.Applications)</b></span>
+                            <span><i class="key key-rate" aria-hidden="true"></i>Qua vòng CV <b>@DashboardText.Percent(p.PassRatePercent)</b> <small>(@DashboardText.Number(p.PassedCvRound)/@DashboardText.Number(p.Applications))</small></span>
+                        </div>
+                    }
+                </div>
+                <div class="y-labels left" aria-hidden="true">@for (var g = 0; g <= 4; g++) { <span style="top:@F(100 - g * 25)%">@DashboardText.Number(max * g / 4)</span> }</div>
+                <div class="y-labels right" aria-hidden="true">@for (var g = 0; g <= 4; g++) { <span style="top:@F(100 - g * 25)%">@(g * 25)%</span> }</div>
+                <div class="x-labels" aria-hidden="true">
+                    @for (var k = 0; k < ticks.Count; k++)
+                    {
+                        var i = ticks[k];
+                        <span class="@(k % 2 == 1 && k != ticks.Count - 1 ? "minor" : null)" style="left:@F(X(i, n) / 10)%">@Short(points[i].Start)</span>
+                    }
+                </div>
+            </div>
+            <p class="trend-note">Ngày theo giờ Việt Nam (UTC+7)@(data.Bucket == "week" ? ", tuần bắt đầu Thứ Hai" : ""). Mỗi hồ sơ (một CV nộp một vị trí) tính một lần theo ngày nộp. Tỷ lệ của nhóm mới nộp thường thấp vì HR chưa kịp xem. Mốc không có hồ sơ không có tỷ lệ (đường ngắt).</p>
+            <details class="trend-table">
+                <summary>Xem dạng bảng</summary>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Bảng xu hướng">
+                    <table>
+                        <thead><tr><th scope="col">@(data.Bucket == "week" ? "Tuần" : "Ngày")</th><th scope="col">Hồ sơ mới</th><th scope="col">Đã qua vòng CV</th><th scope="col">Tỷ lệ</th></tr></thead>
+                        <tbody>@foreach (var p in points) { <tr><th scope="row">@Range(p)</th><td>@DashboardText.Number(p.Applications)</td><td>@DashboardText.Number(p.PassedCvRound)</td><td>@DashboardText.Percent(p.PassRatePercent)</td></tr> }</tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public DashboardTrendDto? Data { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    private int? active;
+    private readonly string gradientId = "trend-area-" + Guid.NewGuid().ToString("N")[..8];
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    private string Subtitle => Data is null ? "Hồ sơ mới và tỷ lệ qua vòng CV của cùng nhóm"
+        : $"{Data.From:dd/MM/yyyy} – {Data.To:dd/MM/yyyy} · theo {(Data.Bucket == "week" ? "tuần" : "ngày")} · tỷ lệ tính trên chính nhóm hồ sơ nộp trong mốc đó";
+
+    /// <summary>Trục bắt đầu từ 0, đỉnh làm tròn lên bội số dễ đọc chia hết cho 4 vạch.</summary>
+    public static int NiceMax(int value)
+    {
+        if (value <= 4) return 4;
+        var raw = value / 4.0;                                   // bước giữa hai vạch
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var steps = magnitude >= 10 ? new[] { 1, 2, 2.5, 5, 10 } : new[] { 1.0, 2, 5, 10 };   // bước luôn là số nguyên
+        var step = steps.Select(m => m * magnitude).First(s => s >= raw);
+        return (int)Math.Round(step * 4);
+    }
+
+    // Toạ độ trong khung vẽ 1000 × 100 (SVG co giãn); HTML dùng cùng toạ độ dưới dạng %.
+    private static double X(int i, int n) => (i + 0.5) * 1000.0 / Math.Max(n, 1);
+    private static double AppsY(int value, int max) => 100 - 100.0 * value / max;
+    private static double RateY(decimal rate) => 100 - (double)Math.Clamp(rate, 0, 100);
+    private static string F(double v) => v.ToString("0.##", Inv);
+    private static string Pos(double x, double y) => $"left:{F(x / 10)}%;top:{F(y)}%";
+
+    private static string AppsPath(IReadOnlyList<TrendPointDto> points, int max) =>
+        Smooth(points.Select((p, i) => ((double, double)?)(X(i, points.Count), AppsY(p.Applications, max))).ToList());
+
+    /// <summary>Vùng nền nhạt dưới đường hồ sơ mới (cùng đường cong), đóng về đường gốc.</summary>
+    private static string AreaPath(IReadOnlyList<TrendPointDto> points, int max)
+    {
+        var line = AppsPath(points, max);
+        if (line.Length == 0) return "";
+        var n = points.Count;
+        return $"{line} L{F(X(n - 1, n))},100 L{F(X(0, n))},100 Z";
+    }
+
+    /// <summary>Mốc không có hồ sơ không có tỷ lệ: đường bị ngắt, không nối qua hay coi là 0%.</summary>
+    private static string RatePath(IReadOnlyList<TrendPointDto> points) =>
+        Smooth(points.Select((p, i) => p.PassRatePercent is { } r ? ((double, double)?)(X(i, points.Count), RateY(r)) : null).ToList());
+
+    /// <summary>
+    /// Đường cong đơn điệu (Fritsch–Carlson): mềm mại nhưng không vọt quá giá trị thật giữa hai điểm
+    /// (không tạo đỉnh/đáy giả, không vượt 0–100%). null = ngắt đoạn.
+    /// </summary>
+    public static string Smooth(IReadOnlyList<(double X, double Y)?> pts)
+    {
+        var sb = new System.Text.StringBuilder();
+        var run = new List<(double X, double Y)>();
+        void Flush()
+        {
+            if (run.Count == 0) return;
+            sb.Append('M').Append(F(run[0].X)).Append(',').Append(F(run[0].Y)).Append(' ');
+            if (run.Count == 1) { sb.Append('L').Append(F(run[0].X + 0.01)).Append(',').Append(F(run[0].Y)).Append(' '); run.Clear(); return; }
+            var m = run.Count;
+            var d = new double[m - 1];
+            for (var i = 0; i < m - 1; i++) d[i] = (run[i + 1].Y - run[i].Y) / (run[i + 1].X - run[i].X);
+            var t = new double[m];
+            t[0] = d[0]; t[m - 1] = d[m - 2];
+            for (var i = 1; i < m - 1; i++) t[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+            for (var i = 0; i < m - 1; i++)
+            {
+                if (d[i] == 0) { t[i] = 0; t[i + 1] = 0; continue; }
+                var a = t[i] / d[i]; var b = t[i + 1] / d[i]; var s = a * a + b * b;
+                if (s > 9) { var k = 3 / Math.Sqrt(s); t[i] = k * a * d[i]; t[i + 1] = k * b * d[i]; }
+            }
+            for (var i = 0; i < m - 1; i++)
+            {
+                var h = (run[i + 1].X - run[i].X) / 3;
+                sb.Append('C').Append(F(run[i].X + h)).Append(',').Append(F(run[i].Y + t[i] * h)).Append(' ')
+                  .Append(F(run[i + 1].X - h)).Append(',').Append(F(run[i + 1].Y - t[i + 1] * h)).Append(' ')
+                  .Append(F(run[i + 1].X)).Append(',').Append(F(run[i + 1].Y)).Append(' ');
+            }
+            run.Clear();
+        }
+        foreach (var p in pts) { if (p is { } v) run.Add(v); else Flush(); }
+        Flush();
+        return sb.ToString().Trim();
+    }
+
+    /// <summary>Nhãn trục cách đều; mốc cuối luôn có nhãn, thay nhãn liền trước nếu quá sát (tránh chồng chữ).</summary>
+    public static List<int> Ticks(int count, int every)
+    {
+        var ticks = new List<int>();
+        for (var i = 0; i < count; i += every) ticks.Add(i);
+        if (count > 1 && ticks[^1] != count - 1)
+        {
+            if (count - 1 - ticks[^1] < Math.Max(1, every * 0.6)) ticks[^1] = count - 1;
+            else ticks.Add(count - 1);
+        }
+        return ticks;
+    }
+    private static string Short(DateOnly d) => d.ToString("dd/MM", Inv);
+    private static string Range(TrendPointDto p) => p.Start == p.End ? p.Start.ToString("dd/MM/yyyy", Inv) : $"{p.Start:dd/MM} – {p.End:dd/MM/yyyy}";
+    private static string Tip(TrendPointDto p) => $"{Range(p)}: {p.Applications} hồ sơ mới, qua vòng CV {DashboardText.Percent(p.PassRatePercent)} ({p.PassedCvRound}/{p.Applications})";
+    private void Key(KeyboardEventArgs e, int count)
+    {
+        if (count == 0) return;
+        if (e.Key == "ArrowLeft") active = Math.Max(0, (active ?? count) - 1);
+        else if (e.Key == "ArrowRight") active = Math.Min(count - 1, (active ?? -1) + 1);
+        else if (e.Key == "Escape") active = null;
+    }
+}

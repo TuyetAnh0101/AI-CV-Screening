@@ -3,10 +3,10 @@
 @inject PromptApiClient Api
 
 <section id="prompt-test-panel" class="prompt-test" aria-label="Chạy đánh giá">
-    <header><h2>Chạy đánh giá</h2><p>Đánh giá phiên bản đã lưu trên bộ CV có nhãn HR. Kết quả Screening và phiên bản đang dùng được giữ nguyên.</p></header>
+    <header><p class="eyebrow">Bước 5</p><h2>Chạy đánh giá</h2><p>Đánh giá phiên bản đã lưu trên bộ CV có nhãn HR. Kết quả Screening và phiên bản đang dùng được giữ nguyên.</p></header>
     <div class="test-form">
         <label>Phiên bản prompt<select aria-label="Phiên bản prompt đánh giá" @bind="promptId" disabled="@(flow.Locked || confirm)"><option value="0">Chọn phiên bản</option>@foreach (var v in Versions) { <option value="@v.PromptVersionId">@v.VersionName @(v.IsActive ? "(đang dùng)" : "")</option> }</select></label>
-        <label>Bộ CV đánh giá<select aria-label="Bộ CV đánh giá" value="@setId" @onchange="ChangeSetAsync" disabled="@(flow.Locked || confirm)"><option value="0">Chọn bộ CV</option>@foreach (var s in flow.Sets) { <option value="@s.EvaluationSetId">@s.Name (@s.LabelCount CV)</option> }</select></label>
+        <label>Bộ CV đánh giá<select aria-label="Bộ CV đánh giá" value="@setId" @onchange="ChangeSetAsync" disabled="@(flow.Locked || confirm)"><option value="0">Chọn bộ CV</option>@foreach (var s in flow.Sets) { <option value="@s.EvaluationSetId">@s.Name (@s.LabelCount CV có nhãn)</option> }</select></label>
         <button class="btn sc-btn-primary" type="button" disabled="@(flow.Locked || confirm || !Valid)" @onclick="() => confirm = true">@(flow.Starting ? "Đang tạo..." : flow.Running ? "Đang chạy..." : "Chạy đánh giá")</button>
     </div>
     @if (flow.Checking && !flow.SetsLoaded) { <p role="status">Đang tải bộ CV đánh giá...</p> }
@@ -14,14 +14,15 @@
     else if (flow.SetsLoaded && flow.Sets.Count == 0) { <div class="confirm-run" role="status"><strong>Chưa có bộ CV đánh giá</strong><p>Bạn cần tạo bộ CV và gán nhãn HR để đo độ chính xác của AI. Có thể dùng CV đã upload và gán vào Job.</p><a class="btn sc-btn-secondary" href="#evaluation-set-manager">Tạo bộ CV đánh giá</a></div> }
     @if (SelectedSet is { } set)
     {
-        <p class="set-info">@set.Description · Tổng @set.LabelCount CV có nhãn HR · @set.PassCount Đạt · @(set.LabelCount - set.PassCount) Không đạt</p>
+        <p class="set-info">@(string.IsNullOrWhiteSpace(set.Description) ? "" : set.Description + " · ")@set.MemberCount hồ sơ trong bộ · @set.LabelCount có nhãn HR · @set.PassCount Đạt · @(set.LabelCount - set.PassCount) Không đạt · phiên bản bộ @set.Revision</p>
+        @if (set.UnlabeledCount > 0) { <p class="set-info">@set.UnlabeledCount hồ sơ chưa gán nhãn sẽ không được đưa vào lượt chạy.</p> }
         @if (!PromptTestFlow.ValidSet(set)) { <p class="test-error">Bộ CV phải có nhãn của cả hai loại Đạt và Không đạt, với số lượng hợp lệ.</p> }
         @if (set.UnreadyCount > 0) { <p class="test-error">@set.UnreadyCount hồ sơ chưa sẵn sàng: cần trích xuất hoàn tất và có nội dung chữ.</p> }
     }
     else if (!flow.Checking) { <p class="set-info">Chọn bộ CV có nhãn HR để bắt đầu. Bộ trống không thể chạy.</p> }
     @if (confirm)
     {
-        <div class="confirm-run" role="alert"><p>Chạy phiên bản <strong>@Versions.FirstOrDefault(v => v.PromptVersionId == promptId)?.VersionName</strong> trên @SelectedSet?.LabelCount CV của <strong>@SelectedSet?.Name</strong>? Lượt chạy có thể gọi Gemini và tiêu tốn quota. Nội dung nháp chưa lưu không được sử dụng.</p><button class="btn sc-btn-secondary" @onclick="() => confirm = false">Hủy</button> <button class="btn sc-btn-primary" @onclick="StartAsync">Xác nhận chạy đánh giá</button></div>
+        <div class="confirm-run" role="alert"><p>Chạy phiên bản <strong>@Versions.FirstOrDefault(v => v.PromptVersionId == promptId)?.VersionName</strong> trên @SelectedSet?.LabelCount CV có nhãn HR của <strong>@SelectedSet?.Name</strong>@(SelectedSet is { UnlabeledCount: > 0 } u ? $" ({u.UnlabeledCount} hồ sơ chưa gán nhãn không được chạy)" : "")? Lượt chạy có thể gọi Gemini và tiêu tốn quota. Nội dung nháp chưa lưu không được sử dụng.</p><button class="btn sc-btn-secondary" @onclick="() => confirm = false">Hủy</button> <button class="btn sc-btn-primary" @onclick="StartAsync">Xác nhận chạy đánh giá</button></div>
     }
     @if (flow.Error is not null)
     { <div class="test-error" role="alert">@flow.Error <button type="button" class="btn sc-btn-secondary" disabled="@(flow.Checking || flow.Starting)" @onclick="RetryAsync">Kiểm tra lại trạng thái</button></div> }
@@ -33,6 +34,7 @@
             <div class="progress-track" role="progressbar" aria-label="Tiến độ đánh giá prompt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@PromptTestFlow.Percent(run).ToString(CultureInfo.InvariantCulture)"><span style="width: @(PromptTestFlow.Percent(run).ToString(CultureInfo.InvariantCulture))%"></span></div>
             <div class="run-heading"><span>@PromptTestFlow.Percent(run).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))%</span><span>Mô hình: @run.ModelName</span></div>
             @if (run.Status == "Completed") { <p class="accuracy">Tỷ lệ đúng: <strong>@(run.AccuracyPercent is null ? "—" : RankingView.Score(run.AccuracyPercent) + "%")</strong> · @run.CorrectCount/@run.TotalLabeledCount hồ sơ còn nhãn HR · @run.UnscoredCount chưa có dự đoán hợp lệ</p> }
+            @if (run.Status == "Completed" && run.SetChangedSinceRun) { <p class="test-error" role="note">Bộ CV hoặc nhãn HR đã thay đổi sau lượt này (phiên bản bộ @run.EvaluationSetRevision → @run.CurrentSetRevision). Tỷ lệ đúng được tính lại theo nhãn hiện tại nhưng danh sách hồ sơ vẫn là danh sách lúc chạy; hãy chạy lại trước khi so sánh.</p> }
             @if (run.Status == "Failed") { <p>Lượt đánh giá thất bại. Không tự chạy lại AI.</p> }
             @if (run.FailedItems > 0) { <p>Một số CV lỗi; có thể do đọc file, AI hoặc quota. Kết quả lỗi được giữ riêng.</p> }
             @if (run is PromptTestProgressDto detail)

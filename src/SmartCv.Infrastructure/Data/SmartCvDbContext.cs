@@ -21,6 +21,9 @@ public class SmartCvDbContext : DbContext
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
     public DbSet<EvaluationSet> EvaluationSets => Set<EvaluationSet>();
     public DbSet<HrLabel> HrLabels => Set<HrLabel>();
+    public DbSet<EvaluationSetMember> EvaluationSetMembers => Set<EvaluationSetMember>();
+    public DbSet<ApplicationFlag> ApplicationFlags => Set<ApplicationFlag>();
+    public DbSet<ApplicationFlagEvent> ApplicationFlagEvents => Set<ApplicationFlagEvent>();
     public DbSet<EvaluationRun> EvaluationRuns => Set<EvaluationRun>();
     public DbSet<Evaluation> Evaluations => Set<Evaluation>();
     public DbSet<EvaluationSkill> EvaluationSkills => Set<EvaluationSkill>();

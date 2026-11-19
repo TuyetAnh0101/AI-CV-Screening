@@ -40,13 +40,22 @@ public sealed class RankingResponse
     public Dictionary<string, int> LevelCounts { get; init; } = new();  // số CV theo mức (biểu đồ B11)
     public Dictionary<string, int> StageCounts { get; init; } = new();
     public int PassCount { get; init; }
-    public int FlaggedCount { get; init; }
+    public int FlaggedCount { get; init; }                         // số CV có cảnh báo tự động (mọi giai đoạn, giữ nguyên từ B11)
+    public int ManualFlagCount { get; init; }                      // SCApp v2: số CV có cờ thủ công đang mở
+    public int NeedsReviewCount { get; init; }                     // SCApp v2: "Cần xem kỹ" — xem RankingItemDto.NeedsReview
     public List<RankingItemDto> Items { get; init; } = [];
 }
 
 public sealed class RankingItemDto
 {
     public List<ReviewFlagDto> ReviewFlags { get; init; } = [];
+    /// <summary>SCApp v2: cờ thủ công đang mở của HR (null nếu không có). Tách khỏi ReviewFlags (cảnh báo tự động).</summary>
+    public ManualFlagDto? ManualFlag { get; init; }
+    /// <summary>
+    /// SCApp v2 — định nghĩa DUY NHẤT của "Cần xem kỹ", dùng chung với Tổng quan:
+    /// hồ sơ còn ở Mới / Đang xem VÀ (có cảnh báo tự động HOẶC có cờ thủ công đang mở).
+    /// </summary>
+    public bool NeedsReview { get; init; }
     public string Stage { get; init; } = "New";
     public string? RejectReason { get; init; }
     public DateTime? StageUpdatedAt { get; init; }

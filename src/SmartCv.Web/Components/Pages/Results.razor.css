@@ -225,3 +225,12 @@
 .processing-indicator { animation: processing-pulse 1.8s ease-in-out infinite; }
 @keyframes processing-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .processing-indicator { animation: none; } }
+
+/* SCApp v2: thẻ "Cần xem kỹ" là nút lọc; cảnh báo lỗi/chỉ keyword gộp vào thẻ đầu. */
+.kpi-action { text-align: left; font: inherit; cursor: pointer; border: 1px solid var(--border); }
+.kpi-action:hover { border-color: #fcd34d; }
+.kpi-action[aria-pressed="true"] { border-color: #d97706; box-shadow: 0 0 0 1px #d97706; background: #fffbeb; }
+.kpi-action:focus-visible { outline: 3px solid var(--brand-accent); outline-offset: 2px; }
+.kpi-attention .kpi-value { color: #b45309; }
+.kpi-warn { color: #b45309; font-weight: 600; }
+.kpi .kpi-hint { white-space: normal; overflow-wrap: anywhere; }

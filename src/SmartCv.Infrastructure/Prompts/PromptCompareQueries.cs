@@ -25,7 +25,8 @@ public sealed record PromptCompareRunInfo(
     int ProcessedItems,
     int FailedItems,
     DateTime CreatedAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    int? EvaluationSetRevision = null);   // SCApp v2: phiên bản bộ lúc tạo lượt (null: lượt trước v2)
 
 /// <summary>
 /// A17: đọc hai lượt PromptTest ĐÃ LƯU và dựng <see cref="PromptCompareDto"/>.
@@ -131,7 +132,7 @@ public static class PromptCompareQueries
             Verdict = comparison.Verdict,
             Summary = comparison.Summary,
             IsFairComparison = comparison.IsFairComparison,
-            Warnings = [.. comparison.Warnings],
+            Warnings = [.. comparison.Warnings, .. RevisionWarnings(baseRun, candidateRun)],
             Conclusive = comparison.Conclusive,             // A41
             ConclusionNote = comparison.ConclusionNote,     // A41
             Items = items
@@ -201,7 +202,19 @@ public static class PromptCompareQueries
             r.RunId, r.RunType, r.Status, r.PromptVersionId, r.PromptVersion.VersionName,
             r.EvaluationSetId, r.EvaluationSet == null ? null : r.EvaluationSet.Name,
             r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold,
-            r.TotalItems, r.ProcessedItems, r.FailedItems, r.CreatedAt, r.CompletedAt));
+            r.TotalItems, r.ProcessedItems, r.FailedItems, r.CreatedAt, r.CompletedAt, r.EvaluationSetRevision));
+
+    /// <summary>
+    /// SCApp v2: hai lượt trên CÙNG bộ nhưng tạo ở hai phiên bản bộ khác nhau (thành viên hoặc nhãn đã đổi giữa hai lần chạy).
+    /// Danh sách CV lệch đã có cảnh báo riêng của A17; đây là cảnh báo bổ sung để HR biết dữ liệu tham chiếu không còn y hệt.
+    /// </summary>
+    internal static IEnumerable<string> RevisionWarnings(PromptCompareRunInfo baseRun, PromptCompareRunInfo candidateRun)
+    {
+        if (baseRun.EvaluationSetId != candidateRun.EvaluationSetId) yield break;
+        // Lượt tạo trước v2 (null) không có phiên bản: A17 vẫn so danh sách CV từng lượt; không thêm cảnh báo suy đoán.
+        if (baseRun.EvaluationSetRevision is { } before && candidateRun.EvaluationSetRevision is { } after && before != after)
+            yield return $"Bộ CV đã thay đổi giữa hai lượt (phiên bản bộ {before} → {after}): thành viên hoặc nhãn HR không còn y hệt. Hãy chạy lại cả hai phiên bản prompt trên bộ hiện tại trước khi kết luận.";
+    }
 
     private static int ChangeRank(string change) => change switch
     {

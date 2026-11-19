@@ -31,7 +31,8 @@ public partial class RankingTable
     [Parameter] public EventCallback<bool> OnFlaggedFilterChanged { get; set; }
     private bool? lastFlaggedFilter;
     [Parameter] public int FlaggedCount { get; set; }
-    private IEnumerable<RankingItemDto> FlagFilteredItems => Items.Where(r => !flaggedOnly || r.ReviewFlags.Count > 0);
+    // SCApp v2: "Cần xem kỹ" dùng chung định nghĩa với Tổng quan; "Cờ HR" lọc cờ thủ công ở mọi giai đoạn.
+    private IEnumerable<RankingItemDto> FlagFilteredItems => Items.Where(r => (!flaggedOnly || NeedsReviewOf(r)) && (!manualOnly || ManualFlagOf(r) is not null));
     private IEnumerable<RankingItemDto> StageFilteredItems => FlagFilteredItems.Where(r => stageFilter is null || StageOf(r) == stageFilter);
     private List<RankingItemDto> VisibleRows => Apply(StageFilteredItems, filter);
     private List<RankingItemDto> Apply(IEnumerable<RankingItemDto> rows, RankingFilter fit) => Anonymity.Sort(rows.Where(r => Anonymity.Matches(r, search) && RankingView.MatchesFilter(r, fit)), sort).ToList();
@@ -54,6 +55,7 @@ public partial class RankingTable
         if (ReferenceEquals(lastItems, Items)) return;
         lastItems = Items;
         overrides.Clear();
+        manualOverrides.Clear();   // dữ liệu mới từ API đã gồm cờ thủ công hiện tại
         needsSync = false; // A successful manual refresh or poll is authoritative as well.
         selected.IntersectWith(VisibleRows.Select(r => r.ApplicationId));
     }
@@ -172,6 +174,7 @@ public partial class RankingTable
             }
             // Never retry a write automatically, including timeout or disconnected requests.
             pending = null;
+            historyVersion++;
             selectVersion++;
             StateHasChanged();
             needsSync = !await SynchronizeAsync();

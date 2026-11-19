@@ -16,6 +16,12 @@ public sealed class DashboardWorkspace(DashboardApiClient api, JobApiClient jobA
     public bool Loading { get; private set; }
     public string? Error { get; private set; }
     public bool ShowData => Data is not null && DataFilter == Filter && Filter is not null;
+    // SCApp v2: xu hướng tải song song, cùng bộ lọc; lỗi xu hướng không chặn phần tóm tắt.
+    public DashboardTrendDto? Trend { get; private set; }
+    public DashboardFilter? TrendFilter { get; private set; }
+    public string? TrendError { get; private set; }
+    public bool TrendLoading { get; private set; }
+    public DashboardTrendDto? ShownTrend => TrendFilter == Filter && Filter is not null ? Trend : null;
     private readonly CancellationTokenSource lifetime = new();
     private CancellationTokenSource? request;
     private int generation;
@@ -47,6 +53,8 @@ public sealed class DashboardWorkspace(DashboardApiClient api, JobApiClient jobA
         request?.Cancel(); request?.Dispose(); request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         var ct = request.Token; var current = ++generation;
         Filter = filter; Loading = true; Error = null;
+        TrendLoading = true; TrendError = null;
+        var trendTask = LoadTrendAsync(filter, current, ct);
         try
         {
             var result = await api.GetSummaryAsync(filter, ct);
@@ -70,6 +78,27 @@ public sealed class DashboardWorkspace(DashboardApiClient api, JobApiClient jobA
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         finally { if (!disposed && current == generation) Loading = false; }
+        await trendTask;
+    }
+
+    private async Task LoadTrendAsync(DashboardFilter filter, int current, CancellationToken ct)
+    {
+        try
+        {
+            var result = await api.GetTrendAsync(filter, ct);
+            if (disposed || current != generation) return;
+            if (!result.IsSuccess)
+            {
+                TrendError = result.StatusCode == 400 ? result.ErrorMessage ?? "Khoảng ngày chưa hợp lệ cho biểu đồ." : "Chưa tải được dữ liệu xu hướng. Hãy làm mới để thử lại.";
+                return;
+            }
+            var data = result.Data!;
+            if (data.JobId != filter.JobId || (filter.From is { } f && data.From != f) || (filter.To is { } t && data.To != t))
+            { TrendError = "Số liệu xu hướng không khớp bộ lọc đang chọn. Hãy làm mới."; return; }
+            Trend = data; TrendFilter = filter;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        finally { if (!disposed && current == generation) TrendLoading = false; }
     }
 
     public void Dispose()

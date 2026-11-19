@@ -37,6 +37,10 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<bool>> DeleteAsync(string url, CancellationToken ct = default) =>
         SendAsync<bool>(() => Http.DeleteAsync(url, ct), url, ct, delete: true);
 
+    // SCApp v2: DELETE trả về JSON (ví dụ số thành viên còn lại sau khi bỏ hồ sơ khỏi bộ).
+    protected Task<ApiResult<T>> DeleteJsonAsync<T>(string url, CancellationToken ct = default) =>
+        SendAsync<T>(() => Http.DeleteAsync(url, ct), url, ct);
+
     private async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, string url, CancellationToken ct, bool delete = false, bool sensitive = false)
     {
         try

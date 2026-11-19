@@ -50,7 +50,9 @@ public static class PromptTestEndpoints
             await using var transaction = await EvaluationSetWriteScope.BeginAsync(db, request.EvaluationSetId, ct);
             if (!await db.PromptVersions.AnyAsync(p => p.PromptVersionId == request.PromptVersionId, ct))
                 return Problem(404, "Không tìm thấy prompt", "Phiên bản prompt không tồn tại.");
-            if (!await db.EvaluationSets.AnyAsync(s => s.EvaluationSetId == request.EvaluationSetId, ct))
+            var setRevision = await db.EvaluationSets.AsNoTracking().Where(s => s.EvaluationSetId == request.EvaluationSetId)
+                .Select(s => (int?)s.Revision).FirstOrDefaultAsync(ct);
+            if (setRevision is null)
                 return Problem(404, "Không tìm thấy bộ CV", "Bộ CV đánh giá không tồn tại.");
 
             var labels = await db.HrLabels.AsNoTracking().Where(h => h.EvaluationSetId == request.EvaluationSetId)
@@ -80,7 +82,8 @@ public static class PromptTestEndpoints
             var run = new EvaluationRun
             {
                 RunType = RunTypes.PromptTest, PromptVersionId = request.PromptVersionId,
-                EvaluationSetId = request.EvaluationSetId, ModelName = opt.ModelName, Temperature = opt.Temperature,
+                EvaluationSetId = request.EvaluationSetId, EvaluationSetRevision = setRevision, // SCApp v2: snapshot phiên bản bộ
+                ModelName = opt.ModelName, Temperature = opt.Temperature,
                 KeywordWeight = opt.KeywordWeight, AiWeight = opt.AiWeight, PassThreshold = opt.PassThreshold,
                 Status = RunStatuses.Queued, TotalItems = labels.Count, CreatedAt = now,
                 Evaluations = labels.Select(h => new Evaluation

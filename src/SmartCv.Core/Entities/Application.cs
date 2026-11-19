@@ -18,5 +18,7 @@ public class Application
     public Job Job { get; set; } = null!;
     public ICollection<Evaluation> Evaluations { get; set; } = new List<Evaluation>();
     public ICollection<HrLabel> HrLabels { get; set; } = new List<HrLabel>();
+    public ICollection<EvaluationSetMember> EvaluationSetMemberships { get; set; } = new List<EvaluationSetMember>();
+    public ICollection<ApplicationFlag> Flags { get; set; } = new List<ApplicationFlag>();
     public ICollection<ApplicationEvent> Events { get; set; } = new List<ApplicationEvent>();
 }
