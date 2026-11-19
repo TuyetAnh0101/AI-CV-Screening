@@ -31,7 +31,7 @@ internal static class A28TestSupport
     {
         var config = new Dictionary<string, string?> { ["Auth:LoginAttemptsPerMinute"] = "100" };
         if (settings is not null) foreach (var pair in settings) config[pair.Key] = pair.Value;
-        return TestSupport.ApiFactory(settings: config).WithWebHostBuilder(builder =>
+        return TestSupport.ApiFactory(settings: config, authenticated: false).WithWebHostBuilder(builder =>
         {
             if (logs is not null) builder.ConfigureLogging(logging => { logging.ClearProviders(); logging.AddProvider(logs); });
             if (fault is not null)

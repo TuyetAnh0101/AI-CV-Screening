@@ -1,6 +1,7 @@
 namespace SmartCv.Core.Auth;
 
-public sealed record UserSessionState(bool IsActive, string SecurityStamp);
+public sealed record UserSessionState(bool IsActive, string SecurityStamp,
+    string? Role = null, bool? MustChangePassword = null, string? FullName = null, string? Email = null);
 
 public static class SessionRules
 {

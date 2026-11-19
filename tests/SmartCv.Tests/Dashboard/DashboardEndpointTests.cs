@@ -55,9 +55,13 @@ public class DashboardEndpointTests
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]
-    public void Existing_startup_guard_refuses_enabling_unauthenticated_HR_in_other_environments(string environment)
+    public async Task A29_requires_authentication_in_other_environments_and_allows_authorized_HR(string environment)
     {
         using var factory = Factory(environment, true);
-        Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/dashboard/summary")).StatusCode);
+        using var secured = TestSupport.ApiFactory(environment, new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
+        using var anonymous = secured.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/dashboard/summary")).StatusCode);
     }
 }

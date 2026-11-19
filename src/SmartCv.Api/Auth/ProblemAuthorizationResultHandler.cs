@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
+using SmartCv.Core.Auth;
 
 namespace SmartCv.Api.Auth;
 
@@ -17,6 +18,12 @@ public sealed class ProblemAuthorizationResultHandler : IAuthorizationMiddleware
         }
         if (result.Forbidden)
         {
+            if (context.User.HasClaim(SmartCvClaims.MustChangePassword, "true"))
+            {
+                await AuthProblems.Problem(403, "password_change_required", "Cần đổi mật khẩu",
+                    "Bạn phải đổi mật khẩu trước khi sử dụng chức năng nghiệp vụ.").ExecuteAsync(context);
+                return;
+            }
             await AuthProblems.Problem(403, "access_denied", "Không có quyền", "Tài khoản không có quyền thực hiện thao tác này.").ExecuteAsync(context);
             return;
         }

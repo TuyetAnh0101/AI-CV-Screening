@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using SmartCv.Core.Auth;
 using SmartCv.Core.Options;
 
 namespace SmartCv.Api.Auth;
@@ -10,6 +11,7 @@ namespace SmartCv.Api.Auth;
 public static class AuthPolicies
 {
     public const string SignedIn = "SignedIn";
+    public const string Admin = "Admin";
 }
 
 public static class AuthSetup
@@ -40,7 +42,7 @@ public static class AuthSetup
                     try
                     {
                         var validator = context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();
-                        if (await validator.ValidateAsync(context.Principal!, context.HttpContext.RequestAborted) is { } reason) context.Fail(reason);
+                        if (await validator.ValidateAsync(context.Principal!, context.HttpContext.RequestAborted, requireFresh: true) is { } reason) context.Fail(reason);
                     }
                     catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
                     {
@@ -51,7 +53,17 @@ public static class AuthSetup
                 }
             };
         });
-        services.AddAuthorization(o => o.AddPolicy(AuthPolicies.SignedIn, policy => policy.RequireAuthenticatedUser()));
+        services.AddAuthorization(o =>
+        {
+            // Fail closed for newly mapped endpoints, including controllers and routes outside the main group.
+            var business = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr)
+                .RequireAssertion(c => !c.User.HasClaim(SmartCvClaims.MustChangePassword, "true")).Build();
+            o.DefaultPolicy = business;
+            o.FallbackPolicy = business;
+            o.AddPolicy(AuthPolicies.Admin, new AuthorizationPolicyBuilder(business).RequireRole(UserRoles.Admin).Build());
+            // A30's password-change flow is not implemented here; /me remains available to describe the state.
+            o.AddPolicy(AuthPolicies.SignedIn, policy => policy.RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr));
+        });
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
         services.AddRateLimiter(o => o.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimit));
         return services;
@@ -61,7 +73,7 @@ public static class AuthSetup
     {
         app.Use(async (context, next) =>
         {
-            if (context.Request.Path.StartsWithSegments("/api/auth")) context.Response.Headers.CacheControl = "no-store";
+            if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
             await next(context);
         });
         app.UseAuthentication(); app.UseAuthorization(); app.UseRateLimiter();

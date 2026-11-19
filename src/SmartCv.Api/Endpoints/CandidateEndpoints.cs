@@ -9,17 +9,16 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Privacy;
 using SmartCv.Infrastructure.Candidates;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Api.Auth;
 
 namespace SmartCv.Api.Endpoints;
 
 /// <summary>A24 – API ứng viên. No automatic contact extraction, attachment or merge.</summary>
 public static partial class CandidateEndpoints
 {
-    public static WebApplication MapCandidateEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapCandidateEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
-        if (!app.Environment.IsDevelopment())
-            throw new InvalidOperationException("Không được bật API ứng viên ngoài Development khi chưa có xác thực (M6).");
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
 
         var group = app.MapGroup("/api/candidates").WithTags("Candidates").AddEndpointFilter<CandidateApiFilter>();
         group.MapGet("/", ListAsync).WithName("ListCandidates").ProducesProblem(400);
@@ -165,7 +164,7 @@ public static partial class CandidateEndpoints
             .ToListAsync(ct);
         var byApp = events.GroupBy(e => e.ApplicationId).ToDictionary(g => g.Key, g => g.Select(e => new ApplicationEventDto
         {
-            EventId = e.EventId, ApplicationId = e.ApplicationId, FromStage = e.FromStage, ToStage = e.ToStage,
+            EventId = e.EventId, UserId = e.UserId, ApplicationId = e.ApplicationId, FromStage = e.FromStage, ToStage = e.ToStage,
             RejectReason = e.RejectReason, Note = e.Note, Actor = e.Actor, CreatedAt = Utc(e.CreatedAt)
         }).ToList());
         var duplicates = await CandidateQueries.FindDuplicatesAsync(db, candidate.Email, candidate.PhoneNumber, id, ct);
@@ -205,8 +204,6 @@ public static partial class CandidateEndpoints
         if (request is null) return InvalidBody();
         if (request.TargetCandidateId < 1 || request.TargetCandidateId == id)
             return Invalid(new() { ["targetCandidateId"] = ["Chọn một ứng viên khác hợp lệ để giữ lại."] });
-        if (request.Actor is { Length: > 100 })
-            return Invalid(new() { ["actor"] = ["Người thao tác tối đa 100 ký tự."] });
         await using var write = await CandidateWriteScope.BeginAsync(db, ct);
         var source = await db.Candidates.Include(c => c.Cvs).FirstOrDefaultAsync(c => c.CandidateId == id, ct);
         if (source is null) return NotFound(id);
@@ -220,6 +217,8 @@ public static partial class CandidateEndpoints
         db.Candidates.Remove(source);
         await db.SaveChangesAsync(ct);
         await write.CommitAsync(ct);
+        http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("CandidateMerge")
+            .LogInformation("Merged candidate {SourceId} into {TargetId} by user {UserId}", id, target.CandidateId, http.User.GetUserId());
         return TypedResults.Ok(new MergeCandidateResultDto
         {
             TargetCandidateId = target.CandidateId, RemovedCandidateId = id, CvsMoved = moved

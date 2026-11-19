@@ -15,24 +15,24 @@ namespace SmartCv.Api.Endpoints;
 ///   GET    /api/applications?jobId=1 | ?cvId=   danh sách hồ sơ (bắt buộc lọc theo job hoặc CV)
 ///   DELETE /api/applications/{id}              bỏ gắn (chỉ khi hồ sơ chưa được chấm, chưa có nhãn HR)
 /// Các API này trả tên file / tên ứng viên (dữ liệu cá nhân) nên dùng chung chốt chặn với API CV:
-/// chỉ có ở Development khi CvUpload:Endpoint:Enabled = true, cho đến khi có xác thực (M6).
+/// được bật qua CvUpload:Endpoint:Enabled và bảo vệ bằng JWT + quyền HR/Admin (A29).
 /// </summary>
 public static class ApplicationEndpoints
 {
     public const int MaxCvsPerRequest = 100;
 
-    public static WebApplication MapApplicationEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapApplicationEndpoints(this IEndpointRouteBuilder app)
     {
-        var endpointOptions = app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
+        var endpointOptions = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
 
-        // Môi trường khác Development mà bật Enabled thì MapCvEndpoints đã dừng ứng dụng lúc khởi động.
-        if (!endpointOptions.Enabled || !app.Environment.IsDevelopment())
+        // A29: feature flag remains independent of the authenticated HR/Admin boundary.
+        if (!endpointOptions.Enabled)
         {
-            app.Logger.LogInformation("API hồ sơ ứng tuyển (/api/applications) đang TẮT: chỉ bật ở Development khi chưa có xác thực (M6).");
+            app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("ApplicationEndpoints").LogInformation("API hồ sơ ứng tuyển đang TẮT: CvUpload:Endpoint:Enabled = false.");
             return app;
         }
 
-        // M6: thêm .RequireAuthorization(...) cho cả nhóm.
+        // A29: the whole group inherits authorization from MapSmartCvApi.
         var group = app.MapGroup("/api/applications").WithTags("Applications");
 
         group.MapPost("/", CreateAsync)

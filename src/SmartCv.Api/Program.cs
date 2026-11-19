@@ -1,3 +1,4 @@
+using SmartCv.Api;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -83,7 +84,7 @@ await app.SeedAdminAsync();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 
 app.UseHttpsRedirection();
@@ -92,24 +93,7 @@ app.UseSmartCvAuth();
 app.UseMiddleware<SqlReadCancellationMiddleware>();
 app.UseMiddleware<CvPrivacyReadMiddleware>();
 
-app.MapControllers();
-app.MapAuthEndpoints();
-app.MapEvaluationEndpoints();
-app.MapRunEndpoints(); // A12: persist run settings before background scoring.
-app.MapCvEndpoints();
-app.MapCandidateEndpoints(); // A24: internal candidate management, same Development/HR gate as CVs.
-app.MapRetentionEndpoints();
-app.MapApplicationEndpoints();   // A8: POST/GET/DELETE /api/applications (chỉ Development, cùng chốt chặn với API CV)
-app.MapApplicationStageEndpoints(); // A35: quyết định của HR và lịch sử chỉ thêm.
-app.MapManualFlagEndpoints(); // SCApp v2: cờ "Cần kiểm tra lại" thủ công của HR (không đổi giai đoạn).
-app.MapDashboardEndpoints(); // A19: chỉ số nội bộ, cùng chốt Development và feature gate của HR.
-app.MapScoringPreviewEndpoints();   // A9: GET /api/applications/{id}/keyword-score (chỉ Development, cùng chốt chặn với API hồ sơ)
-app.MapAiPreviewEndpoints();   // A10/A41: POST /api/applications/{id}/ai-preview, GET .../ai-preview/quota (chỉ Development, có giới hạn tần suất)
-app.MapJobEndpoints();   // GET /api/health, /api/jobs, /api/jobs/{id} (dùng cho giao diện SmartCv.Web)
-app.MapJobSkillEndpoints(); // A22: internal skill/alias writes share the A21 Development gate.
-app.MapPromptEndpoints(); // A14
-app.MapEvaluationSetEndpoints(); // A15: HR labels and CSV import.
-app.MapPromptTestEndpoints(); // A15: queue and inspect persisted prompt-test results.
+app.MapSmartCvApi();
 
 app.Run();
 

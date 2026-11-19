@@ -31,33 +31,23 @@ public static partial class CvEndpoints
     /// <summary>
     /// Đăng ký POST /api/cvs/upload.
     /// An toàn mặc định: endpoint chỉ được tạo khi CvUpload:Endpoint:Enabled = true (appsettings.Development.json).
-    /// Khi chưa có xác thực (M6), bật ở môi trường khác Development làm ứng dụng dừng ngay lúc khởi động,
-    /// để API tải CV không bao giờ bị mở công khai do cấu hình nhầm.
+    /// A29: mọi môi trường đều yêu cầu JWT và quyền HR/Admin qua MapSmartCvApi.
     /// </summary>
-    public static WebApplication MapCvEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapCvEndpoints(this IEndpointRouteBuilder app)
     {
-        var endpointOptions = app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
-        var uploadOptions = app.Services.GetRequiredService<IOptions<CvUploadOptions>>().Value;
+        var endpointOptions = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
+        var uploadOptions = app.ServiceProvider.GetRequiredService<IOptions<CvUploadOptions>>().Value;
 
         if (!endpointOptions.Enabled)
         {
-            app.Logger.LogInformation(
+            app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("CvEndpoints").LogInformation(
                 "API tải CV (POST /api/cvs/upload) đang TẮT: CvUpload:Endpoint:Enabled = false.");
             return app;
         }
 
-        if (!app.Environment.IsDevelopment())
-        {
-            // M6: khi đã có xác thực, bỏ đoạn kiểm tra này và thêm .RequireAuthorization(...) cho endpoint bên dưới.
-            throw new InvalidOperationException(
-                $"Không được bật API tải CV ở môi trường '{app.Environment.EnvironmentName}' khi chưa có xác thực (M6). " +
-                "Đặt CvUpload:Endpoint:Enabled = false, hoặc chỉ bật trong môi trường Development.");
-        }
-
         var group = app.MapGroup("/api/cvs").WithTags("CVs");
 
-        // A23: kho CV trả tên, email ứng viên và tìm trong nội dung CV, nên dùng chung chốt chặn Development ở trên
-        // (M6: thêm .RequireAuthorization(...)). CvPrivacyReadMiddleware giữ khóa đọc A39 và đặt Cache-Control: no-store.
+        // A29 supplies HR/Admin authorization; CvPrivacyReadMiddleware keeps the A39 read lease and no-store.
         group.MapGet("/", ListAsync)
             .WithName("ListCvs")
             .WithSummary("Kho CV: tìm theo tên file, tên / email ứng viên, nội dung CV; lọc theo job, giai đoạn, nguồn, trạng thái")
@@ -79,13 +69,10 @@ public static partial class CvEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status413PayloadTooLarge)
             .ProducesProblem(StatusCodes.Status429TooManyRequests)
-            // Antiforgery chỉ có tác dụng khi trình duyệt tự gửi cookie đăng nhập. API chưa có đăng nhập và
-            // được Blazor gọi từ phía máy chủ bằng HttpClient (không cookie), nên không có phiên để bị CSRF.
-            // Truy cập được kiểm soát bằng việc chỉ bật ở Development (ở trên) cho đến khi có xác thực (M6).
+            // JWT is supplied explicitly as a Bearer header; ambient authentication cookies are not used.
             .DisableAntiforgery();
 
-        // A6: xem lại CV đã lưu. Hai API này trả dữ liệu cá nhân (tên, nội dung CV), nên dùng chung chốt chặn ở trên:
-        // chỉ có ở Development cho đến khi có xác thực (M6). M6: thêm .RequireAuthorization(...) cho cả nhóm.
+        // A6: CV metadata and content inherit the authenticated HR/Admin boundary.
         group.MapGet("/{id:guid}", GetCvAsync)
             .WithName("GetCv")
             .WithSummary("Thông tin một CV, trạng thái đọc chữ và các job đã ứng tuyển");
@@ -95,7 +82,7 @@ public static partial class CvEndpoints
             .WithSummary("Xem file CV gốc (thêm ?download=true để tải về)")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        // A42: chữ đã đọc + chất lượng cho B38 "Xem chữ đã đọc". Trả nội dung CV nên cùng chốt chặn Development ở trên;
+        // A42: chữ đã đọc + chất lượng cho B38, cùng quyền HR/Admin;
         // CvPrivacyReadMiddleware giữ khóa đọc A39 và đặt Cache-Control: no-store cho mọi route /api/cvs.
         group.MapGet("/{id:guid}/text", GetCvTextAsync)
             .WithName("GetCvText")
@@ -103,7 +90,7 @@ public static partial class CvEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status410Gone);
 
-        // A7: đọc lại chữ. Cùng chốt chặn Development như trên; giới hạn tần suất như API tải lên vì OCR tốn CPU.
+        // A7: đọc lại chữ. Cùng quyền HR/Admin; giới hạn tần suất như API tải lên vì OCR tốn CPU.
         group.MapPost("/{id:guid}/extract", ReExtractAsync)
             .WithName("ReExtractCv")
             .WithSummary("Đặt lại trạng thái Pending và xếp CV vào hàng đợi đọc chữ")
@@ -112,7 +99,7 @@ public static partial class CvEndpoints
             // Không có cookie/phiên đăng nhập nên không có nguy cơ CSRF (giống API tải lên ở trên).
             .DisableAntiforgery();
 
-        // A24: same Development gate and A39 privacy middleware as the existing CV API.
+        // A24: same HR/Admin policy and A39 privacy middleware as the existing CV API.
         group.MapPut("/{id:guid}/candidate", AttachCandidateAsync)
             .WithName("AttachCandidate").Accepts<AttachCandidateRequest>("application/json").AddEndpointFilter<CandidateApiFilter>()
             .ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);

@@ -15,7 +15,7 @@ public sealed record CandidateErasureAttempt(CandidateErasureOutcome Outcome, Er
 /// <summary>One SQL transaction for withdrawal, all CV tombstones, contact deletion and the audit row.</summary>
 public sealed class CandidateErasureService(SmartCvDbContext db, CvAnonymizer anonymizer, TimeProvider clock)
 {
-    public async Task<CandidateErasureAttempt> EraseAsync(int id, EraseCandidateRequest request, CancellationToken ct)
+    public async Task<CandidateErasureAttempt> EraseAsync(int id, EraseCandidateRequest request, CancellationToken ct, int? userId = null)
     {
         if (CandidateErasePlan.Validate(request.Confirm, request.HandledBy, request.Note).Count > 0)
             throw new ArgumentException("Validate the erasure request before processing.");
@@ -69,7 +69,7 @@ public sealed class CandidateErasureService(SmartCvDbContext db, CvAnonymizer an
                 {
                     ApplicationId = app.ApplicationId, FromStage = step.FromStage, ToStage = ApplicationStages.Rejected,
                     RejectReason = RejectReasons.CandidateWithdrew, Note = CandidateErasePlan.EventNote,
-                    Actor = request.HandledBy!.Trim(), CreatedAt = now
+                    Actor = request.HandledBy!.Trim(), UserId = userId, CreatedAt = now
                 });
                 app.Stage = ApplicationStages.Rejected;
                 app.RejectReason = RejectReasons.CandidateWithdrew;

@@ -123,7 +123,7 @@ public class EvaluationSetEndpointTests
         var savedGood = before.Labels.Single(l => l.ApplicationId == seed.GoodId);
         Assert.Equal("Ứng viên thử nghiệm", savedGood.CandidateName);
         Assert.Equal("đánh-giá.pdf", savedGood.FileName);
-        Assert.Equal("HR ban đầu", savedGood.LabeledBy);
+        Assert.Equal(StartupGatedApiFactory.RegressionActor, savedGood.LabeledBy);
         Assert.Equal("Đạt kỹ năng", savedGood.Note);
         Assert.Equal(DateTimeKind.Utc, savedGood.LabeledAt.Kind);
         using var second = await client.PutAsJsonAsync($"/api/evaluation-sets/{seed.SetId}/labels", new SaveHrLabelsRequest
@@ -145,8 +145,6 @@ public class EvaluationSetEndpointTests
     }
 
     [Theory]
-    [InlineData("missing-person")]
-    [InlineData("long-person")]
     [InlineData("empty")]
     [InlineData("unknown")]
     [InlineData("duplicate")]

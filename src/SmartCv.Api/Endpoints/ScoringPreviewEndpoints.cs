@@ -14,20 +14,20 @@ namespace SmartCv.Api.Endpoints;
 /// A9: XEM TRƯỚC điểm keyword của một hồ sơ, KHÔNG lưu gì, KHÔNG gọi AI:
 ///   GET /api/applications/{id}/keyword-score
 /// API trả tên file và trích đoạn CV (dữ liệu cá nhân) nên dùng chung chốt chặn với API hồ sơ (A8):
-/// chỉ có ở Development khi CvUpload:Endpoint:Enabled = true, cho đến khi có xác thực (M6).
+/// được bật qua CvUpload:Endpoint:Enabled và bảo vệ bằng JWT + quyền HR/Admin (A29).
 /// </summary>
 public static class ScoringPreviewEndpoints
 {
-    public static WebApplication MapScoringPreviewEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapScoringPreviewEndpoints(this IEndpointRouteBuilder app)
     {
-        var endpointOptions = app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
-        if (!endpointOptions.Enabled || !app.Environment.IsDevelopment())
+        var endpointOptions = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
+        if (!endpointOptions.Enabled)
         {
-            app.Logger.LogInformation("API xem trước điểm keyword đang TẮT: chỉ bật ở Development khi chưa có xác thực (M6).");
+            app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("ScoringPreviewEndpoints").LogInformation("API xem trước điểm keyword đang TẮT: CvUpload:Endpoint:Enabled = false.");
             return app;
         }
 
-        // M6: thêm .RequireAuthorization(...).
+        // A29: authorization is inherited from MapSmartCvApi.
         app.MapGet("/api/applications/{id:int}/keyword-score", PreviewAsync)
             .WithTags("Applications")
             .WithName("PreviewKeywordScore")

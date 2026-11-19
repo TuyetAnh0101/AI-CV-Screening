@@ -1,5 +1,6 @@
 using System.Globalization;
-using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
+using SmartCv.Api.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -12,39 +13,23 @@ namespace SmartCv.Api.Endpoints;
 
 public static class RetentionEndpoints
 {
-    public static WebApplication MapRetentionEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapRetentionEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Environment.IsDevelopment() || !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
-            return app; // Same fail-closed boundary as CV endpoints until authenticated HR authorization is available.
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
+            return app; // Feature flag retained; MapSmartCvApi and Admin policies enforce authorization.
         var group = app.MapGroup("/api/retention").WithTags("Retention");
-        group.AddEndpointFilter(AuthorizedOperator);
         group.MapGet("/settings", (IOptions<RetentionOptions> options) => Results.Ok(new { options.Value.Months, options.Value.AutoAnonymize, options.Value.CheckIntervalHours, options.Value.BatchSize }));
-        group.MapPost("/run", RunAsync);
-        app.MapPost("/api/cvs/{id:guid}/anonymize", AnonymizeAsync).WithTags("CVs").AddEndpointFilter(AuthorizedOperator);
+        group.MapPost("/run", RunAsync).RequireAuthorization(AuthPolicies.Admin);
+        app.MapPost("/api/cvs/{id:guid}/anonymize", AnonymizeAsync).WithTags("CVs").RequireAuthorization(AuthPolicies.Admin);
         // A42: GET /api/cvs/{id}/text (chữ đã đọc + chất lượng) nằm ở CvEndpoints và vẫn trả 410 cho CV đã ẩn danh hóa.
         return app;
     }
 
     public static IResult Gone() => Results.Problem(statusCode: 410, title: "CV đã được ẩn danh hóa", detail: "File gốc và nội dung CV không còn được cung cấp. Điểm và lịch sử quyết định được giữ nguyên.");
-    private static async ValueTask<object?> AuthorizedOperator(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
-    {
-        if (context.HttpContext.RequestServices.GetService<IAuthenticationSchemeProvider>() is { } schemes && (await schemes.GetAllSchemesAsync()).Any())
-        {
-            var user = context.HttpContext.User;
-            if (user.Identity?.IsAuthenticated != true)
-                return Results.Problem(statusCode: 401, title: "Cần đăng nhập để quản lý dữ liệu CV");
-            if (!user.IsInRole("HR") && !user.IsInRole("Admin"))
-                return Results.Problem(statusCode: 403, title: "Cần quyền HR hoặc Admin");
-        }
 
-        return await next(context);
-    }
-
-    private static async Task<IResult> AnonymizeAsync(Guid id, CvAnonymizer anonymizer, CancellationToken ct, [FromBody] AnonymizeRequest? request = null)
+    private static async Task<IResult> AnonymizeAsync(Guid id, ClaimsPrincipal user, CvAnonymizer anonymizer, CancellationToken ct, [FromBody] AnonymizeRequest? request = null)
     {
-        var actor = request?.Actor?.Trim() ?? "HR";
-        if (actor.Length is 0 or > 100 || actor.Any(char.IsControl))
-            return Results.Problem(statusCode: 400, title: "Tên người thực hiện không hợp lệ", detail: "Nhập tối đa 100 ký tự, không chứa ký tự điều khiển.");
+        var actor = user.ActorName();
         AnonymizeAttempt result;
         try
         {
@@ -64,7 +49,7 @@ public static class RetentionEndpoints
         };
     }
 
-    private static async Task<IResult> RunAsync(RetentionProcessor processor, CancellationToken ct, bool dryRun = true, string? asOf = null)
+    private static async Task<IResult> RunAsync(RetentionProcessor processor, ClaimsPrincipal user, ILogger<RetentionProcessor> logger, CancellationToken ct, bool dryRun = true, string? asOf = null)
     {
         var now = DateTime.UtcNow;
         if (asOf is not null)
@@ -79,7 +64,9 @@ public static class RetentionEndpoints
             return Results.Problem(statusCode: 400, title: "Không xử lý thật theo ngày tương lai", detail: "Chỉ dùng ngày tương lai khi dryRun=true.");
         try
         {
-            return Results.Ok(await processor.RunOnceAsync(now, dryRun, ct));
+            var result = await processor.RunOnceAsync(now, dryRun, ct);
+            logger.LogInformation("Retention run by user {UserId}; dry run {DryRun}", user.GetUserId(), dryRun);
+            return Results.Ok(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

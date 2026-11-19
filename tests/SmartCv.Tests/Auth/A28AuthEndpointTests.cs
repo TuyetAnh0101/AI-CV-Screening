@@ -194,8 +194,12 @@ public class A28AuthEndpointTests
         http.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(user));
         await A28TestSupport.WithDb(factory, async db => { var stored = await db.Users.SingleAsync(); stored.FullName = "Updated synthetic"; stored.Role = "HR"; await db.SaveChangesAsync(); });
         using var me = await http.GetAsync("/api/auth/me");
-        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        var dto = (await me.Content.ReadFromJsonAsync<MeDto>())!;
+        Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode); // A29 rejects stale role claims.
+        user.Role = "HR";
+        http.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(user));
+        using var freshMe = await http.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, freshMe.StatusCode);
+        var dto = (await freshMe.Content.ReadFromJsonAsync<MeDto>())!;
         Assert.Equal(("Updated synthetic", "HR"), (dto.FullName, dto.Role));
     }
 
@@ -282,6 +286,8 @@ public class A28AuthEndpointTests
         using var limited = await Login(http, "absent@example.invalid", "synthetic9");
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.NotNull(limited.Headers.RetryAfter); Assert.Equal("login_rate_limited", (await Json(limited)).GetProperty("code").GetString());
+        var uploadUser = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        http.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(uploadUser));
         using var firstUpload = await http.PostAsync("/api/cvs/upload", new MultipartFormDataContent());
         using var secondUpload = await http.PostAsync("/api/cvs/upload", new MultipartFormDataContent());
         Assert.Equal(HttpStatusCode.TooManyRequests, secondUpload.StatusCode);
@@ -318,7 +324,7 @@ public class A28AuthEndpointTests
     }
 
     [Fact]
-    public async Task Existing_privacy_filters_require_a_real_HR_token_while_other_Development_routes_keep_their_gate()
+    public async Task Privacy_and_business_routes_require_a_real_HR_token_after_A29()
     {
         using var factory = A28TestSupport.Factory(); using var anonymous = factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/retention/settings")).StatusCode);
@@ -326,17 +332,19 @@ public class A28AuthEndpointTests
         using var hr = await TestSupport.ClientWithSyntheticHrAsync(factory);
         Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/retention/settings")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/data-requests")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync("/api/jobs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/jobs")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/jobs")).StatusCode);
     }
 
     [Fact]
-    public void Only_me_has_new_authorization_metadata_and_no_A29_fallback_or_A30_routes_exist()
+    public void A29_protects_business_routes_and_keeps_A30_routes_absent()
     {
         using var factory = A28TestSupport.Factory();
         var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
         var protectedRoutes = routes.Where(e => e.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0).ToList();
-        Assert.Equal("/api/auth/me", Assert.Single(protectedRoutes).RoutePattern.RawText);
+        Assert.Contains(protectedRoutes, e => e.RoutePattern.RawText == "/api/auth/me");
+        Assert.Contains(protectedRoutes, e => e.RoutePattern.RawText?.TrimEnd('/') == "/api/jobs");
         Assert.DoesNotContain(routes, e => e.RoutePattern.RawText?.Contains("change-password") == true || e.RoutePattern.RawText?.StartsWith("/api/users") == true);
-        Assert.Null(factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.FallbackPolicy);
+        Assert.NotNull(factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.FallbackPolicy);
     }
 }

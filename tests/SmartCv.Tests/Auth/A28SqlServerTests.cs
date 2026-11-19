@@ -22,6 +22,8 @@ public class A28SqlServerTests
     [A28ReadOnlyAppDbFact]
     public async Task Inspect_configured_Development_database_without_seeding_or_schema_or_data_writes()
     {
+        // A29 fail-safe: the only scope allowed to reach SmartCvDb; every statement below is a SELECT.
+        using var readOnlyInspection = ApplicationDatabaseGuard.AllowReadOnlyApplicationInspection();
         var config = new ConfigurationBuilder().SetBasePath(TestSupport.RepoFile("src/SmartCv.Api"))
             .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
             .AddUserSecrets(typeof(Program).Assembly, optional: true).AddEnvironmentVariables().Build();

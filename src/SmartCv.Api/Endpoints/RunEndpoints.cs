@@ -18,11 +18,10 @@ namespace SmartCv.Api.Endpoints;
 
 public static partial class RunEndpoints
 {
-    public static WebApplication MapRunEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapRunEndpoints(this IEndpointRouteBuilder app)
     {
-        // Same access boundary as Applications until authentication is implemented.
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        // A29: authenticated business group, with the existing feature flag.
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/runs").WithTags("Runs");
         group.MapPost("/", StartAsync).RequireRateLimiting(CvUploadRateLimiting.PolicyName).DisableAntiforgery();
         group.MapGet("/", ListAsync);

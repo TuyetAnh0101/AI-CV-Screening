@@ -241,7 +241,7 @@ public class ScappWorkflowV2Tests
         using var created = await client.PostAsJsonAsync($"/api/applications/{seed.Ready1}/flags", new CreateManualFlagRequest { Reason = ManualFlagReasons.ScoreDoubt, Note = "Điểm AI thấp bất thường", Actor = "HR - A" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var flag = (await created.Content.ReadFromJsonAsync<ManualFlagDto>())!;
-        Assert.Equal((ManualFlagStatuses.Open, "HR - A"), (flag.Status, flag.CreatedBy));
+        Assert.Equal((ManualFlagStatuses.Open, StartupGatedApiFactory.RegressionActor), (flag.Status, flag.CreatedBy));
 
         using var duplicate = await client.PostAsJsonAsync($"/api/applications/{seed.Ready1}/flags", new CreateManualFlagRequest { Reason = ManualFlagReasons.SecondOpinion, Actor = "HR - B" });
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
@@ -254,7 +254,7 @@ public class ScappWorkflowV2Tests
         using var resolved = await client.PostAsJsonAsync($"/api/applications/flags/{flag.FlagId}/resolve", new ChangeManualFlagRequest { Actor = "HR - B", Note = "Đã đối chiếu CV", ExpectedVersion = flag.Version });
         Assert.Equal(HttpStatusCode.OK, resolved.StatusCode);
         var done = (await resolved.Content.ReadFromJsonAsync<ManualFlagDto>())!;
-        Assert.Equal((ManualFlagStatuses.Resolved, "HR - B"), (done.Status, done.ResolvedBy));
+        Assert.Equal((ManualFlagStatuses.Resolved, StartupGatedApiFactory.RegressionActor), (done.Status, done.ResolvedBy));
         Assert.NotEqual(flag.Version, done.Version);
 
         // Bấm "Đã xử lý" lần hai với phiên bản cũ → 409, không ghi đè

@@ -19,7 +19,9 @@ public static class AuthEndpoints
     {
         var group = app.MapGroup("/api/auth").WithTags("Auth");
         group.MapPost("/login", LoginAsync).AllowAnonymous().RequireRateLimiting(AuthSetup.LoginRateLimit)
-            .Accepts<LoginRequest>("application/json").Produces<LoginResponse>().ProducesValidationProblem()
+            // Login parses and validates content type itself. Accepts metadata would select a synthetic
+            // 415 endpoint without AllowAnonymous, causing the A29 fallback to turn this client error into 401.
+            .Produces<LoginResponse>().ProducesValidationProblem()
             .WithName("Login").WithSummary("Đăng nhập bằng email và mật khẩu");
         group.MapGet("/me", MeAsync).RequireAuthorization(AuthPolicies.SignedIn)
             .WithName("Me").WithSummary("Thông tin tài khoản hiện tại");

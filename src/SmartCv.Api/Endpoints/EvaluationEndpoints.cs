@@ -18,10 +18,9 @@ namespace SmartCv.Api.Endpoints;
 /// </summary>
 public static class EvaluationEndpoints
 {
-    public static WebApplication MapEvaluationEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapEvaluationEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         app.MapGet("/api/evaluations/{id:int}", GetAsync)
             .WithTags("Evaluations")
             .WithName("GetEvaluation")

@@ -1,3 +1,4 @@
+using SmartCv.Api.Auth;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Data.SqlClient;
@@ -14,22 +15,21 @@ using SmartCv.Infrastructure.Data;
 
 namespace SmartCv.Api.Endpoints;
 
-/// <summary>A21: public Job reads retain their contract; HR writes/statistics use the existing Development gate.</summary>
+/// <summary>A29: Job reads/statistics require HR/Admin; management writes require Admin.</summary>
 public static class JobEndpoints
 {
     private const long MaxBodyBytes = 256 * 1024;
     private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerDefaults.Web) { NumberHandling = JsonNumberHandling.Strict };
     private static readonly string[] RequestFields = ["title", "description", "minGpa", "minYearsExperience", "headcount", "closingDate", "skills"];
 
-    public static WebApplication MapJobEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapJobEndpoints(this IEndpointRouteBuilder app)
     {
         // Giao diện gọi để biết API còn sống không (hiện huy hiệu "Đã kết nối API")
         app.MapGet("/api/health", () => TypedResults.Ok(new { status = "ok", time = DateTime.UtcNow }))
             .WithTags("Health")
-            .WithName("Health");
+            .WithName("Health").AllowAnonymous();
 
-        var internalAccess = app.Environment.IsDevelopment()
-            && app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled;
+        var internalAccess = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled;
         var group = app.MapGroup("/api/jobs").WithTags("Jobs").AddEndpointFilter(async (context, next) =>
         {
             context.HttpContext.Response.Headers.CacheControl = "no-store";
@@ -45,12 +45,12 @@ public static class JobEndpoints
 
         if (internalAccess)
         {
-            group.MapPost("/", CreateAsync).WithName("CreateJob").Produces<JobDto>(201).ProducesProblem(400).ProducesProblem(409);
-            group.MapPut("/{id:int}", UpdateAsync).WithName("UpdateJob").Produces<JobDto>().ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
+            group.MapPost("/", CreateAsync).WithName("CreateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>(201).ProducesProblem(400).ProducesProblem(409);
+            group.MapPut("/{id:int}", UpdateAsync).WithName("UpdateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
             group.MapPost("/{id:int}/deactivate", (int id, SmartCvDbContext db, TimeProvider clock, CancellationToken ct) =>
-                SetActiveAsync(id, false, db, clock, ct)).WithName("DeactivateJob").Produces<JobDto>().ProducesProblem(404);
+                SetActiveAsync(id, false, db, clock, ct)).WithName("DeactivateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(404);
             group.MapPost("/{id:int}/activate", (int id, SmartCvDbContext db, TimeProvider clock, CancellationToken ct) =>
-                SetActiveAsync(id, true, db, clock, ct)).WithName("ActivateJob").Produces<JobDto>().ProducesProblem(404);
+                SetActiveAsync(id, true, db, clock, ct)).WithName("ActivateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(404);
         }
 
         return app;

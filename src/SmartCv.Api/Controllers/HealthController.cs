@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authorization;
+using SmartCv.Api.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -9,6 +11,7 @@ using SmartCv.Infrastructure.Data;
 namespace SmartCv.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = AuthPolicies.Admin)]
 [Route("api/health")]
 public class HealthController(
     SmartCvDbContext db,

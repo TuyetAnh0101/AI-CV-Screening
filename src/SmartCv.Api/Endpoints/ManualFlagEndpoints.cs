@@ -8,6 +8,9 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Evaluation;
 using SmartCv.Infrastructure.Data;
 
+using System.Security.Claims;
+using SmartCv.Api.Auth;
+
 namespace SmartCv.Api.Endpoints;
 
 /// <summary>
@@ -18,14 +21,13 @@ namespace SmartCv.Api.Endpoints;
 ///   POST /api/applications/flags/{flagId}/resolve       đánh dấu đã xử lý (ExpectedVersion bắt buộc, 409 khi lệch)
 ///   POST /api/applications/flags/{flagId}/reopen        mở lại (ExpectedVersion bắt buộc, 409 khi lệch)
 /// KHÔNG đổi giai đoạn tuyển dụng, KHÔNG ghi ApplicationEvents, KHÔNG gọi AI.
-/// Cùng ranh giới tạm thời với A35 (Development + CvUpload:Enabled) cho tới khi có xác thực thật.
+/// A29: cùng policy HR/Admin với A35; giữ feature flag CvUpload:Endpoint:Enabled.
 /// </summary>
 public static class ManualFlagEndpoints
 {
-    public static WebApplication MapManualFlagEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapManualFlagEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/applications").WithTags("ManualFlags");
         group.MapGet("/flag-reasons", Reasons).WithName("ManualFlagReasons").WithSummary("Lý do đánh dấu cần kiểm tra");
         group.MapGet("/{id:int}/flags", GetAsync).WithName("ApplicationFlags").WithSummary("Cờ thủ công và lịch sử của một hồ sơ");
@@ -67,9 +69,9 @@ public static class ManualFlagEndpoints
 
     // ---------- POST /api/applications/{id}/flags ----------
     private static async Task<Results<Created<ManualFlagDto>, ProblemHttpResult>> CreateAsync(
-        int id, CreateManualFlagRequest request, SmartCvDbContext db, CancellationToken ct)
+        int id, CreateManualFlagRequest request, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct)
     {
-        var error = ManualFlagRules.ValidateCreate(request.Reason, request.Note, request.Actor);
+        var error = ManualFlagRules.ValidateCreate(request.Reason, request.Note, user.ActorName());
         if (error is not null) return Problem(400, "Dữ liệu không hợp lệ", error);
         var app = await db.Applications.AsNoTracking().Where(a => a.ApplicationId == id)
             .Select(a => new { a.ApplicationId, Anonymized = a.Cv.AnonymizedAt != null }).FirstOrDefaultAsync(ct);
@@ -79,7 +81,7 @@ public static class ManualFlagEndpoints
             return OpenConflict(id);
 
         var now = DateTime.UtcNow;
-        var actor = request.Actor.Trim();
+        var actor = user.ActorName();
         var note = ManualFlagRules.Clean(request.Note);
         var flag = new ApplicationFlag
         {
@@ -98,15 +100,15 @@ public static class ManualFlagEndpoints
 
     // ---------- POST /api/applications/flags/{flagId}/resolve | reopen ----------
     private static Task<Results<Ok<ManualFlagDto>, ProblemHttpResult>> ResolveAsync(
-        int flagId, ChangeManualFlagRequest request, SmartCvDbContext db, CancellationToken ct) => ChangeAsync(flagId, request, resolve: true, db, ct);
+        int flagId, ChangeManualFlagRequest request, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct) => ChangeAsync(flagId, request, user, resolve: true, db, ct);
 
     private static Task<Results<Ok<ManualFlagDto>, ProblemHttpResult>> ReopenAsync(
-        int flagId, ChangeManualFlagRequest request, SmartCvDbContext db, CancellationToken ct) => ChangeAsync(flagId, request, resolve: false, db, ct);
+        int flagId, ChangeManualFlagRequest request, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct) => ChangeAsync(flagId, request, user, resolve: false, db, ct);
 
     private static async Task<Results<Ok<ManualFlagDto>, ProblemHttpResult>> ChangeAsync(
-        int flagId, ChangeManualFlagRequest request, bool resolve, SmartCvDbContext db, CancellationToken ct)
+        int flagId, ChangeManualFlagRequest request, ClaimsPrincipal user, bool resolve, SmartCvDbContext db, CancellationToken ct)
     {
-        var error = ManualFlagRules.ValidateChange(request.Note, request.Actor);
+        var error = ManualFlagRules.ValidateChange(request.Note, user.ActorName());
         if (error is not null) return Problem(400, "Dữ liệu không hợp lệ", error);
         if (request.ExpectedVersion is null || request.ExpectedVersion == Guid.Empty)
             return Problem(400, "Thiếu phiên bản", "Gửi ExpectedVersion của cờ đang hiển thị để tránh ghi đè thao tác của HR khác.");
@@ -121,7 +123,7 @@ public static class ManualFlagEndpoints
             return OpenConflict(flag.ApplicationId);
 
         var now = DateTime.UtcNow;
-        var actor = request.Actor.Trim();
+        var actor = user.ActorName();
         var note = ManualFlagRules.Clean(request.Note);
         flag.Status = target;
         flag.UpdatedAt = now;

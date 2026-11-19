@@ -34,16 +34,16 @@ public static class AiPreviewEndpoints
     /// <summary>Giờ hiển thị trong thông báo (Việt Nam không đổi giờ theo mùa); cùng quy ước "UTC+7" với giao diện.</summary>
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
 
-    public static WebApplication MapAiPreviewEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapAiPreviewEndpoints(this IEndpointRouteBuilder app)
     {
-        var endpointOptions = app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
-        if (!endpointOptions.Enabled || !app.Environment.IsDevelopment())
+        var endpointOptions = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value;
+        if (!endpointOptions.Enabled)
         {
-            app.Logger.LogInformation("API chấm thử bằng AI đang TẮT: chỉ bật ở Development khi chưa có xác thực (M6).");
+            app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AiPreviewEndpoints").LogInformation("API chấm thử bằng AI đang TẮT: CvUpload:Endpoint:Enabled = false.");
             return app;
         }
 
-        // M6: thêm .RequireAuthorization(...).
+        // A29: authorization is inherited from MapSmartCvApi.
         app.MapPost("/api/applications/{id:int}/ai-preview", PreviewAsync)
             .WithTags("Applications")
             .WithName("PreviewAiScore")
@@ -62,7 +62,7 @@ public static class AiPreviewEndpoints
             // Không có cookie/phiên đăng nhập nên không có nguy cơ CSRF (giống các API hồ sơ).
             .DisableAntiforgery();
 
-        // A41: cùng chốt chặn Development ở trên. Không tốn lượt, không gọi AI, không đọc database.
+        // A41: cùng policy HR/Admin. Không tốn lượt, không gọi AI.
         app.MapGet("/api/applications/ai-preview/quota", Quota)
             .WithTags("Applications")
             .WithName("GetAiPreviewQuota")
