@@ -1,0 +1,25 @@
+@* B24 (A43): nhật ký yêu cầu của ứng viên — vẫn hiện sau khi dữ liệu đã bị xóa (bằng chứng đã xử lý). Không chứa tên / email. *@
+
+@if (Requests.Count == 0)
+{
+    <p class="history-empty">Chưa có yêu cầu xem hay xóa dữ liệu nào.</p>
+}
+else
+{
+    <ol class="request-list" aria-label="Lịch sử yêu cầu, mới nhất trước">
+        @foreach (var r in Requests.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.RequestId))
+        {
+            <li @key="r.RequestId" class="@(r.RequestType == DataRequestTypes.Erase ? "erase" : "export")">
+                <div class="request-head"><strong>@r.RequestTypeName</strong><span>#@r.RequestId</span></div>
+                <span class="request-meta">@RunText.VnDate(r.CreatedAt) @RunText.VnClock(r.CreatedAt) · @(Anonymous ? "HR đã xử lý" : r.HandledBy)</span>
+                @if (!string.IsNullOrWhiteSpace(r.ResultSummary)) { <p>@r.ResultSummary</p> }
+                @if (!string.IsNullOrWhiteSpace(r.Note)) { <p class="request-note">@(Anonymous ? "Ghi chú được ẩn khi bật Ẩn danh." : r.Note)</p> }
+            </li>
+        }
+    </ol>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DataRequestDto> Requests { get; set; } = [];
+    [Parameter] public bool Anonymous { get; set; }
+}

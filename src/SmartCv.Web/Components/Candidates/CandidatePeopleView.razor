@@ -1,0 +1,217 @@
+@*
+    B24: chế độ "Ứng viên" — mỗi dòng là MỘT NGƯỜI (GET /api/candidates), không phải một file CV.
+    Tìm theo tên / email / số (quy tắc A24, chờ 400 ms sau phím cuối), phân trang ở máy chủ.
+    Từ khóa chỉ giữ trong phiên (CandidateHubState), không đưa lên địa chỉ trang vì có thể là thông tin cá nhân; địa chỉ chỉ có số trang.
+    CV chưa gắn người không có trong danh sách này → luôn có lối tắt sang Hồ sơ CV đã lọc "Chưa gắn ứng viên".
+*@
+@using SmartCv.Core.Cvs
+@implements IDisposable
+@inject CandidateApiClient Api
+@inject CvApiClient CvApi
+@inject NavigationManager Nav
+@inject AnonymityState Anonymity
+@inject IServiceProvider Services
+
+<div class="people-view">
+    <section class="toolbar" aria-labelledby="people-search-label">
+        <div class="search-wrap">
+            <label id="people-search-label" for="people-search" class="visually-hidden">Tìm ứng viên</label>
+            <div class="search-box">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+                <input id="people-search" type="search" value="@search" @oninput="SearchAsync" placeholder="Tìm theo tên, email hoặc số điện thoại" autocomplete="off" aria-describedby="people-search-hint" aria-invalid="@(validation is not null ? "true" : "false")" />
+                @if (search.Length > 0) { <button id="people-clear-search" type="button" aria-label="Xóa từ khóa" @onclick="ClearSearchAsync">×</button> }
+            </div>
+            <p id="people-search-hint" class="hint">Tìm trên toàn bộ ứng viên. Tên tìm có dấu; email không phân biệt hoa thường; số điện thoại nhận cả dạng có dấu cách và dạng +84.</p>
+        </div>
+        <div class="toolbar-actions">
+            <button id="people-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button>
+            <button id="people-create" type="button" class="btn sc-btn-primary" @onclick="() => creating = true"><span aria-hidden="true">＋</span> Thêm ứng viên</button>
+        </div>
+    </section>
+
+    @if (unattached is > 0)
+    {
+        <a id="people-unattached" class="unattached-strip" href="/candidates?view=cvs&candidate=none">
+            <span class="strip-icon" aria-hidden="true">!</span>
+            <span><strong>@unattached.Value.ToString("N0") CV chưa gắn ứng viên</strong> không xuất hiện trong danh sách người. Mở Hồ sơ CV để gắn người cho các CV này.</span>
+            <span aria-hidden="true">→</span>
+        </a>
+    }
+
+    <section class="list-card" aria-labelledby="people-list-title" aria-busy="@(workspace.Loading ? "true" : "false")">
+        <header class="list-head">
+            <div><h2 id="people-list-title" tabindex="-1">Danh sách ứng viên <span class="count-chip">@(workspace.Data is { } d ? d.TotalCount.ToString("N0") : "—") người</span></h2>
+                <p>Mỗi dòng là một người · mới tạo trước · số CV và số lần ứng tuyển của người đó</p></div>
+        </header>
+        @if (validation is not null)
+        {
+            <div class="state" role="alert"><span class="state-icon" aria-hidden="true">⌕</span><h3>Kiểm tra từ khóa</h3><p>@validation</p><button type="button" class="btn sc-btn-secondary" @onclick="ClearSearchAsync">Xóa từ khóa</button></div>
+        }
+        else if (waiting || (workspace.Loading && workspace.Data is null))
+        {
+            <div class="loading" role="status"><span>@(waiting ? "Đang chờ nhập xong từ khóa…" : "Đang tải danh sách ứng viên…")</span>@for (var i = 0; i < 4; i++) { <div class="skeleton" aria-hidden="true"></div> }</div>
+        }
+        else if (workspace.Error is not null)
+        {
+            <div class="state error" role="alert"><span class="state-icon" aria-hidden="true">!</span><h3>Chưa tải được danh sách ứng viên</h3><p>@workspace.Error</p><button id="people-retry" type="button" class="btn sc-btn-primary" @onclick="RefreshAsync">Thử lại</button></div>
+        }
+        else if (workspace.Data is { } data)
+        {
+            @if (workspace.PageOutOfRange || (data.Items.Count == 0 && data.Page > 1))
+            {
+                <div class="state" role="status"><span class="state-icon" aria-hidden="true">↩</span><h3>Trang này không còn ứng viên</h3><p>Số người có thể đã thay đổi. Quay về trang đầu để xem kết quả hiện tại.</p><button id="people-first" type="button" class="btn sc-btn-secondary" @onclick="() => GoAsync(1)">Về trang đầu</button></div>
+            }
+            else if (data.Items.Count == 0)
+            {
+                <div class="state" role="status"><span class="state-icon" aria-hidden="true">◎</span>
+                    <h3>@(workspace.Filter?.HasSearch == true ? "Không có ứng viên phù hợp" : "Chưa có ứng viên nào")</h3>
+                    <p>@(workspace.Filter?.HasSearch == true ? "Thử tên, email hoặc số điện thoại khác." : "Ứng viên được tạo khi bạn gắn người cho CV ở chế độ Hồ sơ CV, hoặc thêm thủ công.")</p>
+                    @if (workspace.Filter?.HasSearch == true) { <button type="button" class="btn sc-btn-secondary" @onclick="ClearSearchAsync">Xóa từ khóa</button> }
+                    else { <div class="state-actions"><a class="btn sc-btn-secondary" href="/candidates?view=cvs&candidate=none">Gắn người cho CV</a><a class="btn sc-btn-secondary" href="/upload">Tải CV lên</a></div> }
+                </div>
+            }
+            else
+            {
+                @if (workspace.Loading) { <p class="refreshing" role="status">Đang cập nhật…</p> }
+                <table class="people-table">
+                    <caption class="visually-hidden">Danh sách ứng viên: danh tính, liên hệ, số CV, số hồ sơ ứng tuyển, CV gần nhất và thao tác.</caption>
+                    <thead><tr><th scope="col">Ứng viên</th><th scope="col">Liên hệ</th><th scope="col" class="num">CV</th><th scope="col" class="num">Hồ sơ ứng tuyển</th><th scope="col">CV gần nhất</th><th scope="col"><span class="visually-hidden">Thao tác</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var p in data.Items)
+                        {
+                            var name = CandidateText.Name(p.CandidateId, p.FullName, Anonymity.Enabled);
+                            <tr @key="p.CandidateId">
+                                <td class="who-cell"><div class="who"><span class="avatar" aria-hidden="true">@CandidateText.Initials(p.FullName, Anonymity.Enabled)</span><div><a class="person" href="@($"/candidates/{p.CandidateId}")">@name</a><span class="sub">#@p.CandidateId · tạo @CandidateText.Date(p.CreatedAt)</span></div></div></td>
+                                <td data-label="Liên hệ">@if (Anonymity.Enabled) { <span class="sub">Liên hệ đã ẩn</span> } else { <span class="contact">@Display.Text(p.Email)</span><span class="sub">@CandidateText.Phone(p.PhoneNumber)</span> }</td>
+                                <td class="num" data-label="CV"><strong>@p.CvCount</strong></td>
+                                <td class="num" data-label="Hồ sơ ứng tuyển"><strong>@p.ApplicationCount</strong></td>
+                                <td data-label="CV gần nhất">@CandidateText.Date(p.LastUploadedAt)</td>
+                                <td class="action-cell"><a class="open-link" href="@($"/candidates/{p.CandidateId}")" aria-label="@(Anonymity.Enabled ? $"Mở hồ sơ ứng viên #{p.CandidateId}" : $"Mở hồ sơ {name}")">Xem hồ sơ <span aria-hidden="true">→</span></a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            <footer class="list-foot"><span role="status">@data.TotalCount.ToString("N0") người · Trang @data.Page/@Math.Max(1, data.TotalPages)</span>
+                <nav aria-label="Phân trang ứng viên"><button id="people-prev" type="button" disabled="@(data.Page <= 1 || workspace.Loading)" @onclick="() => GoAsync(data.Page - 1)">← Trước</button><span>@data.Page / @Math.Max(1, data.TotalPages)</span><button id="people-next" type="button" disabled="@(data.Page >= data.TotalPages || workspace.Loading)" @onclick="() => GoAsync(data.Page + 1)">Sau →</button></nav></footer>
+        }
+    </section>
+</div>
+
+@if (creating)
+{
+    <CandidateEditorDialog ReturnFocusId="people-create" OnClose="() => creating = false" OnSaved="CreatedAsync" />
+}
+
+@code {
+    [Parameter] public bool Active { get; set; } = true;
+    [Parameter] public EventCallback<int?> OnTotal { get; set; }
+    private CandidateHubState Hub => hub ??= Services.GetService<CandidateHubState>() ?? new();
+    private CandidateHubState? hub;
+    private CandidateListWorkspace workspace = default!;
+    private readonly Debouncer debouncer = new();
+    private readonly CancellationTokenSource lifetime = new();
+    private string search = "";
+    private string? validation, lastUri;
+    private int? unattached;
+    private int loadedVersion = -1, unattachedVersion = -1;
+    private bool waiting, creating, disposed;
+
+    protected override void OnInitialized()
+    {
+        workspace = new(Api);
+        search = Hub.PeopleSearch;
+        Nav.LocationChanged += LocationChanged;
+        Anonymity.Changed += PrivacyChanged;
+    }
+
+    protected override Task OnParametersSetAsync() =>
+        Active ? SynchronizeAsync(force: loadedVersion >= 0 && loadedVersion != Hub.DataVersion) : Task.CompletedTask;
+
+    protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? Anonymity.EnsureLoadedAsync() : Task.CompletedTask;
+
+    private void LocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var path = Nav.ToBaseRelativePath(e.Location).Split('?', '#')[0].TrimEnd('/');
+        if (Active && path == "candidates" && CandidatesView.FromUri(e.Location) == CandidatesView.People)
+            _ = InvokeAsync(() => SynchronizeAsync());
+    }
+
+    private async Task SynchronizeAsync(bool force = false)
+    {
+        if (disposed || !Active || (!force && lastUri == Nav.Uri)) return;
+        lastUri = Nav.Uri; debouncer.Cancel(); waiting = false;
+        var (page, pageError) = CandidateListFilter.PageFromUri(Nav.Uri);
+        if (page is null) { validation = pageError; workspace.Invalidate(); await OnTotal.InvokeAsync(null); return; }
+        var filter = new CandidateListFilter(search, page.Value);
+        var (valid, error) = filter.Validate();
+        validation = error;
+        if (valid is null) { workspace.Invalidate(); await OnTotal.InvokeAsync(null); return; }
+        Hub.PeopleUrl = valid.Url; Hub.PeopleSearch = search;
+        loadedVersion = Hub.DataVersion;
+        var counting = LoadUnattachedAsync();
+        var loading = workspace.LoadAsync(valid); StateHasChanged(); await loading;
+        if (disposed) return;
+        await OnTotal.InvokeAsync(workspace.Data?.TotalCount);
+        await counting;
+        if (!disposed) StateHasChanged();
+    }
+
+    /// <summary>Một lời gọi nhẹ (1 dòng) để biết số CV chưa gắn người trên TOÀN kho; tải lại sau mỗi thay đổi dữ liệu.</summary>
+    private async Task LoadUnattachedAsync()
+    {
+        if (unattachedVersion == Hub.DataVersion) return;
+        unattachedVersion = Hub.DataVersion;
+        try
+        {
+            var result = await CvApi.ListAsync(new CvLibraryFilter(PageSize: 1, Candidate: CvListQuery.UnattachedCandidate), lifetime.Token);
+            if (!disposed) unattached = result.IsSuccess ? result.Data!.TotalCount : null;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private async Task SearchAsync(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString() ?? "";
+        Hub.PeopleSearch = search;
+        workspace.Invalidate(); debouncer.Cancel(); waiting = false;
+        var (_, error) = new CandidateListFilter(search).Validate();
+        validation = error;
+        if (validation is not null) return;
+        waiting = true;
+        await debouncer.Trigger(() => InvokeAsync(ApplyAsync));
+    }
+
+    /// <summary>Đổi từ khóa → về trang 1. Nếu địa chỉ không đổi (đã ở trang 1) thì tải lại ngay.</summary>
+    private Task ApplyAsync()
+    {
+        debouncer.Cancel(); waiting = false;
+        return Navigate(new CandidateListFilter(search).Url, forceReload: true);
+    }
+
+    private Task Navigate(string url, bool forceReload = false)
+    {
+        if (Nav.ToAbsoluteUri(url).AbsoluteUri == Nav.Uri) return forceReload ? SynchronizeAsync(force: true) : Task.CompletedTask;
+        Nav.NavigateTo(url);
+        return Task.CompletedTask;
+    }
+
+    private Task ClearSearchAsync() { search = ""; Hub.PeopleSearch = ""; validation = null; return ApplyAsync(); }
+    private Task GoAsync(int page) => page < 1 || workspace.Loading ? Task.CompletedTask : Navigate(new CandidateListFilter(search, page).Url, forceReload: true);
+    private Task RefreshAsync() { unattachedVersion = -1; return SynchronizeAsync(force: true); }
+
+    private void CreatedAsync(CandidateDto created)
+    {
+        creating = false;
+        Hub.NotifyDataChanged();
+        Nav.NavigateTo($"/candidates/{created.CandidateId}");
+    }
+
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        disposed = true; Nav.LocationChanged -= LocationChanged; Anonymity.Changed -= PrivacyChanged;
+        debouncer.Dispose(); workspace.Dispose(); lifetime.Cancel(); lifetime.Dispose();
+    }
+}

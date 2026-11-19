@@ -303,3 +303,46 @@ body {
 .fit-badge.is-keyword::before { border-radius: 1px; }
 @keyframes fit-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .fit-badge.is-pending::before { animation: none; } }
+
+/* ===== B24: phần dùng chung trong hộp thoại Ứng viên (nội dung truyền vào ModalShell nên không dùng CSS scoped) ===== */
+.c-fields { display:grid; gap:6px; border:0; margin:0; padding:0; min-width:0; }
+.c-fields label, .c-label { display:block; font-size:12px; font-weight:600; color:var(--sc-ink-700); margin-top:8px; }
+.c-label { margin-bottom:6px; }
+.c-input { width:100%; min-width:0; min-height:42px; padding:9px 10px; border:1px solid var(--sc-line-200); border-radius:8px; background:#fff; color:var(--sc-ink-900); font:400 13px var(--sc-font-body); }
+textarea.c-input { min-height:64px; resize:vertical; }
+.c-input:focus-visible, .c-check input:focus-visible { outline:3px solid var(--sc-brand-700); outline-offset:2px; }
+.c-input[aria-invalid="true"] { border-color:#c2415a; }
+.c-error { color:#aa3045; font-size:12px; line-height:1.5; }
+.c-error:empty { display:none; }
+.c-hint { display:block; color:var(--sc-ink-500); font-size:12px; line-height:1.6; margin:6px 0 0; }
+.req { color:#b42318; }
+.c-alert { margin:14px 0 0; padding:10px 12px; border:1px solid #f2dce1; border-radius:8px; background:#fff1f3; color:#a53044; font-size:12px; line-height:1.7; }
+.c-notice { margin:0 0 12px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.6; }
+.c-notice p { margin:4px 0 0; font-size:12px; }
+.c-notice.warn { background:#fff8e9; border:1px solid #eddfbc; color:#6b4b14; }
+.c-notice.danger { background:#fff1f3; border:1px solid #f2c9d1; color:#8f2335; }
+.c-match-list { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:8px; }
+.c-match-list li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--sc-line-200); border-radius:10px; }
+.c-match-list li > div { min-width:0; overflow-wrap:anywhere; }
+.c-match-list strong { display:block; font-size:14px; }
+.c-match-list span, .c-match-list small { display:block; font-size:12px; color:var(--sc-ink-500); margin-top:2px; }
+.c-match-list .btn { flex:none; font-size:12px; min-height:38px; }
+.c-check { display:flex; gap:8px; align-items:flex-start; margin-top:14px; font-size:13px; line-height:1.5; }
+.c-check input { width:18px; height:18px; margin-top:1px; accent-color:var(--sc-brand-700); flex:none; }
+.c-btn-danger { background:#b42318; border:1px solid #b42318; color:#fff; }
+.c-btn-danger:hover:not(:disabled) { background:#912018; color:#fff; }
+.c-btn-danger:disabled { background:#d9a19b; border-color:#d9a19b; color:#fff; }
+.modal-foot .btn { min-height:42px; font-size:13px; }
+.merge-choice { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; border:0; margin:0; padding:0; }
+.merge-card { position:relative; display:grid; gap:8px; padding:14px; border:1px solid var(--sc-line-200); border-radius:12px; cursor:pointer; min-width:0; }
+.merge-card.on { border-color:var(--sc-brand-700); box-shadow:0 0 0 2px var(--sc-brand-100); background:var(--sc-brand-50); }
+.merge-card input { position:absolute; opacity:0; width:1px; height:1px; }
+.merge-card:focus-within { outline:3px solid var(--sc-brand-accent, #14b8a6); outline-offset:2px; }
+.merge-card strong { font-size:15px; overflow-wrap:anywhere; }
+.merge-card dl { margin:0; display:grid; gap:4px; font-size:12px; }
+.merge-card dl div { display:flex; justify-content:space-between; gap:8px; }
+.merge-card dt { color:var(--sc-ink-500); } .merge-card dd { margin:0; text-align:right; overflow-wrap:anywhere; }
+.merge-tag { font-size:11px; font-weight:600; color:var(--sc-brand-700); }
+.merge-pick { font-size:12px; font-weight:600; color:var(--sc-brand-700); }
+.merge-effects, .erase-effects { margin:0 0 12px; padding-left:18px; display:grid; gap:6px; font-size:13px; line-height:1.6; }
+@media (max-width: 600px) { .merge-choice { grid-template-columns:minmax(0, 1fr); } .c-match-list li { flex-direction:column; align-items:stretch; } .modal-foot .btn { flex:1 1 auto; } }

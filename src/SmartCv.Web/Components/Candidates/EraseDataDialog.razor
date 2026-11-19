@@ -1,0 +1,85 @@
+@*
+    B24 (A43): xóa dữ liệu theo yêu cầu ứng viên — POST /api/candidates/{id}/erase { confirm: true, handledBy, note }.
+    Bước 1 — Kiểm tra: số CV bị ẩn danh hóa, hồ sơ bị rút (đúng CandidateErasePlan của API), những gì được giữ lại.
+    Bước 2 — Xác nhận: gõ "XÓA" (nhận cả "xóa", "XOA") mới bật nút Xóa vĩnh viễn. Không tự gửi lại khi kết quả chưa xác định.
+*@
+@implements IDisposable
+@inject CandidateApiClient Api
+
+<ModalShell Id="erase" Title="@(step == 1 ? "Xóa dữ liệu theo yêu cầu ứng viên" : "Xác nhận xóa vĩnh viễn")" Eyebrow="Quyền của ứng viên với dữ liệu" Danger="true"
+            Description="@(step == 1 ? "Bước 1/2 — Kiểm tra hậu quả trước khi xóa." : "Bước 2/2 — Thao tác không hoàn tác được.")"
+            Busy="busy" FocusId="@(step == 1 ? "erase-handled-by" : "erase-keyword")" ReturnFocusId="@ReturnFocusId" FallbackFocusId="candidate-name" OnClose="OnClose">
+    <ChildContent>
+        @if (step == 1)
+        {
+            var preview = CandidateText.Preview(Candidate);
+            <ul class="erase-effects">
+                <li><b>Ẩn danh hóa @preview.CvsToAnonymize CV</b>: xóa file, chữ đọc được, nhận xét AI, bằng chứng kỹ năng, tên file và liên kết người.@if (preview.CvsAlreadyAnonymized > 0) { <span> (@preview.CvsAlreadyAnonymized CV đã ẩn danh từ trước.)</span> }</li>
+                <li><b>Rút @preview.ApplicationsToWithdraw hồ sơ đang xét</b>@(preview.JobsWithdrawn.Count > 0 ? ": " + string.Join(", ", preview.JobsWithdrawn) : "")@(preview.ApplicationsToWithdraw > 0 ? " → Loại · Ứng viên rút hồ sơ, có ghi lịch sử." : ".")</li>
+                <li><b>Xóa thông tin liên hệ</b> (họ tên, email, số điện thoại) của ứng viên #@Candidate.CandidateId.</li>
+                <li><b>Giữ lại</b> điểm, mức phù hợp, kỹ năng đạt/thiếu, giai đoạn, lịch sử quyết định và nhãn HR — không còn gắn với người nào — để thống kê và đánh giá prompt vẫn đúng.</li>
+                <li><b>Ghi nhật ký yêu cầu</b> (không chứa tên / email) làm bằng chứng đã xử lý.</li>
+            </ul>
+            <label class="c-label" for="erase-handled-by">Người xử lý <span class="req" aria-hidden="true">*</span></label>
+            <input id="erase-handled-by" class="c-input" value="@handledBy" @oninput="e => handledBy = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" placeholder="HR - Họ tên" aria-describedby="erase-handled-hint" />
+            <span id="erase-handled-hint" class="c-hint">Bắt buộc, tối đa 100 ký tự.</span>
+            <label class="c-label" for="erase-note">Ghi chú (kênh nhận yêu cầu, ngày…)</label>
+            <textarea id="erase-note" class="c-input" rows="2" maxlength="500" @bind="note" @bind:event="oninput" placeholder="Ví dụ: Email ứng viên gửi ngày 08/12/2026" aria-describedby="erase-note-hint"></textarea>
+            <span id="erase-note-hint" class="c-hint">Không ghi thông tin cá nhân vào đây: nhật ký được giữ lại sau khi xóa.</span>
+        }
+        else
+        {
+            <div class="c-notice danger" role="note"><strong>Dữ liệu cá nhân của ứng viên #@Candidate.CandidateId sẽ bị xóa vĩnh viễn.</strong><p>Không thể khôi phục file CV, chữ đọc được và thông tin liên hệ sau khi xóa.</p></div>
+            <label class="c-label" for="erase-keyword">Gõ <b>@CandidateText.EraseKeyword</b> để xác nhận</label>
+            <input id="erase-keyword" class="c-input" value="@typed" @oninput="e => typed = e.Value?.ToString() ?? string.Empty" autocomplete="off" disabled="@busy" aria-describedby="erase-keyword-hint" />
+            <span id="erase-keyword-hint" class="c-hint">Nhận cả “xóa” hoặc “XOA”.</span>
+        }
+        @if (error is not null) { <p class="c-alert" role="alert">@error</p> }
+    </ChildContent>
+    <Footer>
+        @if (step == 1)
+        {
+            <button type="button" class="btn sc-btn-secondary" @onclick="OnClose">Hủy</button>
+            <button id="erase-next" type="button" class="btn sc-btn-primary" disabled="@(string.IsNullOrWhiteSpace(handledBy) || handledBy.Trim().Length > 100 || (note?.Length ?? 0) > 500)" @onclick="() => { step = 2; error = null; }">Tiếp tục</button>
+        }
+        else
+        {
+            <button id="erase-back" type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="() => step = 1">Quay lại</button>
+            <button id="erase-submit" type="button" class="btn c-btn-danger" disabled="@(busy || uncertain || !CandidateText.IsEraseConfirmed(typed))" @onclick="EraseAsync">@(busy ? "Đang xóa…" : "Xóa vĩnh viễn")</button>
+        }
+    </Footer>
+</ModalShell>
+
+@code {
+    [Parameter, EditorRequired] public CandidateDetailDto Candidate { get; set; } = default!;
+    [Parameter] public string? Actor { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<EraseCandidateResultDto> OnErased { get; set; }
+    /// <summary>410 = đã xóa trước đó; lỗi chưa xác định → trang tải lại để kiểm tra.</summary>
+    [Parameter] public EventCallback<string> OnUncertain { get; set; }
+    private readonly CancellationTokenSource lifetime = new();
+    private int step = 1;
+    private string handledBy = "", typed = "";
+    private string? note, error;
+    private bool busy, uncertain;
+
+    protected override void OnInitialized() => handledBy = Actor ?? "";
+
+    private async Task EraseAsync()
+    {
+        if (busy || uncertain || !CandidateText.IsEraseConfirmed(typed) || string.IsNullOrWhiteSpace(handledBy)) return;
+        busy = true; error = null;
+        try
+        {
+            var result = await Api.EraseAsync(Candidate.CandidateId, handledBy.Trim(), note, lifetime.Token);
+            if (result.IsSuccess) { await OnErased.InvokeAsync(result.Data!); return; }
+            error = result.ErrorMessage; uncertain = true;   // không bao giờ tự gửi lại lệnh xóa
+            await OnUncertain.InvokeAsync(error!);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

@@ -21,7 +21,7 @@ h2 { margin:0; font-size:17px; font-weight:600; letter-spacing:-.02em; }
 .search-box button { border:0; border-radius:6px; background:transparent; color:var(--sc-ink-700); min-width:32px; height:36px; font-size:22px; }
 .search-box:focus-within { outline:2px solid var(--sc-brand-700); outline-offset:2px; }
 .search-hint { font-size:12px; color:var(--sc-ink-500); line-height:1.7; margin:8px 0 18px; }
-.filter-grid { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:12px; }
+.filter-grid { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr 1fr; gap:12px; }
 .filter-grid label { min-width:0; }
 .filter-grid select { width:100%; min-width:0; height:42px; border:1px solid var(--sc-line-200); background:white; color:var(--sc-ink-900); border-radius:8px; font-size:13px; padding-left:10px; text-overflow:ellipsis; }
 .mobile-filter-toggle { display:none; }
@@ -106,3 +106,14 @@ button:disabled { opacity:.55; cursor:not-allowed; }
     .list-footer button { min-height:42px; } .page-size { display:none; } .search-box { padding-inline:10px; gap:8px; }
 }
 @media(max-width:359px) { .filter-grid { grid-template-columns:1fr; } .heading-actions .btn { padding-inline:9px; } .filter-heading { gap:14px; } .cv-table tr { grid-template-columns:1fr; } .score-cell,.applications-cell { grid-column:1; grid-row:auto; } }
+
+/* B24: tên ứng viên mở hồ sơ người; CV chưa gắn người nổi bật để HR xử lý. */
+.person-link { color:var(--sc-ink-900); text-decoration:none; }
+.person-link:hover strong, .person-link:focus-visible strong { color:var(--sc-brand-700); text-decoration:underline; text-underline-offset:3px; }
+.person-link:focus-visible { outline:3px solid var(--sc-brand-700); outline-offset:2px; border-radius:4px; }
+.unattached { color:#8a5a12; }
+.list-heading h2 .heading-count { font-size:12px; font-weight:500; color:var(--sc-brand-700); background:#edf7f5; border:1px solid #d8ece7; border-radius:7px; padding:2px 8px; letter-spacing:0; }
+.list-heading h2:focus { outline:none; }
+.filter-heading .heading-actions { display:flex; gap:8px; align-items:center; }
+.filter-heading .heading-actions .btn { min-height:40px; padding:8px 12px; font-size:13px; display:inline-flex; gap:6px; align-items:center; }
+@media (min-width: 900px) and (max-width: 1199.98px) { .filter-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); } }

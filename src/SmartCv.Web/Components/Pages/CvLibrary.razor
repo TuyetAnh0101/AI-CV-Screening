@@ -1,4 +1,8 @@
-@page "/cvs"
+@*
+    B23 Kho CV → B24: chế độ "Hồ sơ CV" của trang Ứng viên (/candidates?view=cvs). Không còn @page riêng:
+    /cvs cũ chuyển hướng về đây (CvsRedirect.razor) và giữ nguyên bộ lọc. Mọi chức năng B23 giữ nguyên;
+    B24 thêm bộ lọc "Gắn ứng viên" (lọc ở máy chủ) và liên kết tên ứng viên sang /candidates/{id}.
+*@
 @using Microsoft.AspNetCore.WebUtilities
 @using SmartCv.Core.Constants
 @using SmartCv.Core.Cvs
@@ -8,20 +12,12 @@
 @inject JobApiClient JobApi
 @inject NavigationManager Nav
 @inject AnonymityState Anonymity
-
-<PageTitle>Kho CV · SCApp</PageTitle>
+@inject IServiceProvider Services
 
 <div class="library-page">
-    <header class="library-heading">
-        <div><p class="eyebrow"><span aria-hidden="true">✧</span> Không gian tuyển dụng</p><h1 id="cvs-title" tabindex="-1">Kho CV <span class="heading-count">@(workspace.Data is { } countData ? countData.TotalCount.ToString("N0") : "—") hồ sơ</span></h1><p>Tìm lại hồ sơ, theo dõi hành trình ứng tuyển ở từng vị trí.</p></div>
-        <div class="heading-actions">
-            <button id="cvs-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button>
-            <a class="btn sc-btn-primary" href="/upload"><span aria-hidden="true">＋</span> Tải CV lên</a>
-        </div>
-    </header>
-
     <section class="filter-panel" aria-labelledby="cvs-filter-title">
-        <div class="filter-heading"><h2 id="cvs-filter-title">Tìm hồ sơ phù hợp</h2><AnonymousToggle /></div>
+        <div class="filter-heading"><h2 id="cvs-filter-title">Tìm hồ sơ CV</h2>
+            <div class="heading-actions"><button id="cvs-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button></div></div>
         <label for="cvs-search" class="field-label">Tìm kiếm trong kho CV</label>
         <div class="search-box">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
@@ -39,6 +35,7 @@
             <label><span>Giai đoạn HR</span><select id="cvs-stage" class="sc-select" value="@stage" @onchange="StageChangedAsync"><option value="">Tất cả giai đoạn</option>@foreach (var code in ApplicationStages.All) { <option value="@(code)">@StageText.Name(code)</option> }</select></label>
             <label><span>Nguồn CV</span><select id="cvs-source" class="sc-select" value="@source" @onchange="SourceChangedAsync"><option value="">Tất cả nguồn</option>@foreach (var code in CvSourceChannels.All) { <option value="@(code)">@CvLibraryText.Source(code)</option> }</select></label>
             <label><span>Trạng thái đọc chữ</span><select id="cvs-status" class="sc-select" value="@status" @onchange="StatusChangedAsync"><option value="">Tất cả trạng thái</option>@foreach (var item in CvLibraryText.Statuses) { <option value="@item.Code">@item.Name</option> }</select></label>
+            <label><span>Gắn ứng viên</span><select id="cvs-candidate" class="sc-select" value="@candidate" @onchange="CandidateChangedAsync"><option value="">Tất cả CV</option><option value="none">Chưa gắn ứng viên</option><option value="attached">Đã gắn ứng viên</option></select></label>
         </div>
         <div class="filter-footer"><p>@(job.Length > 0 ? "Giai đoạn HR được lọc trong đúng vị trí đã chọn." : "Giai đoạn HR thuộc từng hồ sơ ứng tuyển, tách biệt với trạng thái đọc chữ.")</p><button id="cvs-clear" type="button" class="clear-button" @onclick="ClearAsync">Xóa bộ lọc</button></div>
         </div>
@@ -46,7 +43,7 @@
     </section>
 
     <section class="list-panel" aria-labelledby="cvs-list-title" aria-busy="@workspace.Loading.ToString().ToLowerInvariant()">
-        <div class="list-heading"><div><h2 id="cvs-list-title">Hồ sơ đã lưu</h2><p>Mới nhất trước · điểm sàng lọc gần nhất từ hệ thống</p></div><span class="page-size">@pageSize hồ sơ / trang</span></div>
+        <div class="list-heading"><div><h2 id="cvs-list-title" tabindex="-1">Hồ sơ CV đã lưu <span class="heading-count">@(workspace.Data is { } countData ? countData.TotalCount.ToString("N0") : "—") CV</span></h2><p>Mỗi dòng là một file CV · mới nhất trước · điểm sàng lọc gần nhất của từng lần ứng tuyển</p></div><span class="page-size">@pageSize CV / trang</span></div>
         @if (validation is not null)
         {
             <div class="empty-state" role="alert"><span class="state-icon" aria-hidden="true">⌕</span><h3>Kiểm tra bộ lọc tìm kiếm</h3><p>@validation</p><button type="button" class="btn sc-btn-secondary" @onclick="ClearAsync">Xóa bộ lọc</button></div>
@@ -80,7 +77,7 @@
                     @foreach (var cv in data.Items)
                     {
                         <tr @key="cv.CvId" class="@(cv.IsAnonymized ? "anonymized" : null)">
-                            <td class="identity-cell"><div class="identity"><span class="file-icon" aria-hidden="true">▤</span><div><strong>@CvLibraryText.Candidate(cv, Anonymity.Enabled)</strong><span class="file-name">@CvLibraryText.File(cv, Anonymity.Enabled)</span><span class="cv-code">CV @CvLibraryText.ShortId(cv.CvId)</span></div></div><span class="extraction @CvLibraryText.StatusCss(cv)"><i aria-hidden="true"></i>@CvLibraryText.Status(cv)</span></td>
+                            <td class="identity-cell"><div class="identity"><span class="file-icon" aria-hidden="true">▤</span><div>@if (cv.CandidateId is { } personId && !cv.IsAnonymized && !Anonymity.Enabled) { <a class="person-link" href="@($"/candidates/{personId}?from=cvs")"><strong>@CvLibraryText.Candidate(cv, Anonymity.Enabled)</strong></a> } else { <strong class="@(cv.CandidateId is null && !cv.IsAnonymized && !Anonymity.Enabled ? "unattached" : null)">@CvLibraryText.Candidate(cv, Anonymity.Enabled)</strong> }<span class="file-name">@CvLibraryText.File(cv, Anonymity.Enabled)</span><span class="cv-code">CV @CvLibraryText.ShortId(cv.CvId)</span></div></div><span class="extraction @CvLibraryText.StatusCss(cv)"><i aria-hidden="true"></i>@CvLibraryText.Status(cv)</span></td>
                             <td data-label="Nguồn & ngày tải"><span class="source-label">@CvLibraryText.Source(cv.SourceChannel)</span><time datetime="@RunText.IsoTime(cv.UploadedAt)">@RunText.VnDate(cv.UploadedAt)</time><span class="subtle">@RunText.VnClock(cv.UploadedAt) · UTC+7</span></td>
                             <td class="applications-cell" data-label="Vị trí & giai đoạn HR">
                                 @if (cv.Applications.Count == 0) { <span class="subtle">Chưa gắn vị trí</span> }
@@ -112,7 +109,6 @@
             <footer class="list-footer"><span role="status">@data.TotalCount.ToString("N0") kết quả · Trang @data.Page/@Math.Max(1, data.TotalPages)</span><nav aria-label="Phân trang kho CV"><button id="cvs-prev" type="button" disabled="@(data.Page <= 1)" @onclick="() => GoAsync(data.Page - 1)">← Trước</button><span>@data.Page / @Math.Max(1, data.TotalPages)</span><button id="cvs-next" type="button" disabled="@(data.Page >= data.TotalPages)" @onclick="() => GoAsync(data.Page + 1)">Sau →</button></nav></footer>
         }
     </section>
-    <p class="privacy-note"><span aria-hidden="true">♧</span> Chế độ Ẩn danh che danh tính khi xem. Hồ sơ đã ẩn danh hóa vĩnh viễn luôn được bảo vệ.</p>
 </div>
 
 @if (attachId is { } id && !Anonymity.Enabled)
@@ -121,6 +117,14 @@
 }
 
 @code {
+    /// <summary>B24: chế độ đang hiện trong trang Ứng viên. Ẩn (false) thì không đồng bộ theo địa chỉ, không tải.</summary>
+    [Parameter] public bool Active { get; set; } = true;
+    /// <summary>B24: báo tổng số CV cho nhãn tab (null khi chưa có số chắc chắn).</summary>
+    [Parameter] public EventCallback<int?> OnTotal { get; set; }
+    private CandidateHubState Hub => hub ??= Services.GetService<CandidateHubState>() ?? new();
+    private CandidateHubState? hub;
+    private int loadedVersion = -1;
+    private string candidate = "";
     private CvLibraryWorkspace workspace = default!;
     private readonly Debouncer debouncer = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -139,7 +143,7 @@
         Anonymity.Changed += PrivacyChanged;
         await Task.WhenAll(LoadJobsAsync(), SynchronizeAsync());
     }
-    protected override Task OnParametersSetAsync() => SynchronizeAsync();
+    protected override Task OnParametersSetAsync() => Active ? SynchronizeAsync(force: loadedVersion >= 0 && loadedVersion != Hub.DataVersion) : Task.CompletedTask;
     protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? Anonymity.EnsureLoadedAsync() : Task.CompletedTask;
 
     private async Task LoadJobsAsync()
@@ -157,24 +161,32 @@
     }
     private void LocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        if (Nav.ToBaseRelativePath(e.Location).Split('?', '#')[0].TrimEnd('/') == "cvs")
+        var path = Nav.ToBaseRelativePath(e.Location).Split('?', '#')[0].TrimEnd('/');
+        // B24: /candidates?view=cvs là địa chỉ chuẩn; /cvs (B23) vẫn được đọc khi trang được mở trực tiếp.
+        if (Active && (path == "cvs" || (path == "candidates" && CandidatesView.FromUri(e.Location) == CandidatesView.Cvs)))
             _ = InvokeAsync(() => SynchronizeAsync());
     }
     private async Task SynchronizeAsync(bool force = false)
     {
-        if (disposed || (!force && lastUri == Nav.Uri)) return;
+        if (disposed || !Active || (!force && lastUri == Nav.Uri)) return;
         lastUri = Nav.Uri; debouncer.Cancel(); waiting = false; attachId = null;
+        Hub.CvsUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
         var raw = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
         search = raw.GetValueOrDefault("search").ToString(); job = raw.GetValueOrDefault("jobId").ToString();
         stage = raw.GetValueOrDefault("stage").ToString(); source = raw.GetValueOrDefault("source").ToString(); status = raw.GetValueOrDefault("status").ToString();
+        candidate = raw.GetValueOrDefault("candidate").ToString();
         var (filter, error) = CvLibraryFilter.FromUri(Nav.Uri);
         validation = error;
-        if (filter is null) { workspace.Invalidate(); StateHasChanged(); return; }
+        if (filter is null) { workspace.Invalidate(); await OnTotal.InvokeAsync(null); StateHasChanged(); return; }
         search = filter.Search; job = filter.JobId?.ToString() ?? ""; stage = filter.Stage; source = filter.Source; status = filter.Status; pageSize = filter.PageSize;
-        filtersExpanded = job.Length + stage.Length + source.Length + status.Length > 0;
+        candidate = filter.Candidate;
+        filtersExpanded = job.Length + stage.Length + source.Length + status.Length + candidate.Length > 0;
         now = DateTime.UtcNow;
+        loadedVersion = Hub.DataVersion;
         var task = workspace.LoadAsync(filter); StateHasChanged(); await task;
-        if (!disposed) StateHasChanged();
+        if (disposed) return;
+        await OnTotal.InvokeAsync(workspace.Data?.TotalCount);
+        StateHasChanged();
     }
     private Task NavigateAsync(CvLibraryFilter filter) => Nav.ToAbsoluteUri(filter.Url).AbsoluteUri == Nav.Uri
         ? SynchronizeAsync(force: true) : NavigateCoreAsync(filter.Url);
@@ -192,23 +204,25 @@
     private async Task ApplyAsync()
     {
         debouncer.Cancel(); waiting = false; workspace.Invalidate();
-        var raw = new Dictionary<string, string[]> { ["search"] = [search], ["jobId"] = [job], ["stage"] = [stage], ["source"] = [source], ["status"] = [status], ["pageSize"] = [pageSize.ToString()] };
+        var raw = new Dictionary<string, string[]> { ["search"] = [search], ["jobId"] = [job], ["stage"] = [stage], ["source"] = [source], ["status"] = [status], ["pageSize"] = [pageSize.ToString()], ["candidate"] = [candidate] };
         var (q, errors) = CvListQuery.Parse(raw);
         if (q is null) { validation = errors.ContainsKey("search") ? "Từ khóa cần từ 2 đến 100 ký tự sau khi gộp khoảng trắng." : "Bộ lọc không hợp lệ. Hãy chọn lại."; return; }
         validation = null;
-        await NavigateAsync(new(q.Search ?? "", q.JobId, q.Stage ?? "", q.Source ?? "", q.Status ?? "", 1, q.PageSize));
+        await NavigateAsync(new(q.Search ?? "", q.JobId, q.Stage ?? "", q.Source ?? "", q.Status ?? "", 1, q.PageSize, q.Candidate ?? ""));
     }
     private Task JobChangedAsync(ChangeEventArgs e) { job = e.Value?.ToString() ?? ""; return ApplyAsync(); }
     private Task StageChangedAsync(ChangeEventArgs e) { stage = e.Value?.ToString() ?? ""; return ApplyAsync(); }
     private Task SourceChangedAsync(ChangeEventArgs e) { source = e.Value?.ToString() ?? ""; return ApplyAsync(); }
     private Task StatusChangedAsync(ChangeEventArgs e) { status = e.Value?.ToString() ?? ""; return ApplyAsync(); }
+    private Task CandidateChangedAsync(ChangeEventArgs e) { candidate = e.Value?.ToString() ?? ""; return ApplyAsync(); }
     private Task ClearSearchAsync() { search = ""; return ApplyAsync(); }
     private Task ClearAsync() { debouncer.Cancel(); waiting = false; return NavigateAsync(new()); }
     private Task GoAsync(int page) => page < 1 || workspace.Loading || workspace.Filter is not { } f ? Task.CompletedTask : NavigateAsync(f with { Page = page });
     private Task RefreshAsync() => validation is not null ? ApplyAsync() : SynchronizeAsync(force: true);
     private void OpenAttach(CvListItemDto cv) { if (!Anonymity.Enabled && !cv.IsAnonymized) attachId = cv.CvId; }
     private void CloseAttach() => attachId = null;
-    private async Task AttachedAsync() { attachId = null; await SynchronizeAsync(force: true); }
+    // B24: gắn / đổi người thành công → báo chế độ Ứng viên phải tải lại khi mở (số CV, số hồ sơ thay đổi).
+    private async Task AttachedAsync() { attachId = null; Hub.NotifyDataChanged(); await SynchronizeAsync(force: true); }
     private void PrivacyChanged() => _ = InvokeAsync(() => { if (Anonymity.Enabled) attachId = null; StateHasChanged(); });
     public void Dispose()
     {

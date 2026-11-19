@@ -1,0 +1,102 @@
+@*
+    B24: gộp hai ứng viên (POST /api/candidates/{nguồn}/merge { targetCandidateId, actor }).
+    Bước 1 — HR chọn người GIỮ LẠI (hai hồ sơ cạnh nhau). Bước 2 — xem lại hậu quả theo contract A24 và xác nhận lần cuối.
+    Không gộp khi vừa chọn; 409 / kết quả chưa xác định → không tự gửi lại, yêu cầu tải lại.
+    Gộp KHÔNG phải xóa dữ liệu theo yêu cầu ứng viên (A43): CV, hồ sơ ứng tuyển và lịch sử đi theo CV sang người được giữ.
+*@
+@implements IDisposable
+@inject CandidateApiClient Api
+
+<ModalShell Id="merge" Title="@(step == 1 ? "Xem và gộp ứng viên" : "Xác nhận gộp")" Eyebrow="Có thể là cùng một người" Wide="true"
+            Description="@(step == 1 ? "So sánh hai hồ sơ và chọn hồ sơ được giữ lại. Chưa có gì thay đổi cho tới khi bạn xác nhận ở bước sau." : "Kiểm tra lại hậu quả. Thao tác này không hoàn tác được.")"
+            Busy="busy" ReturnFocusId="@ReturnFocusId" FallbackFocusId="candidate-name" OnClose="OnClose">
+    <ChildContent>
+        @if (step == 1)
+        {
+            <fieldset class="merge-choice">
+                <legend class="visually-hidden">Chọn hồ sơ giữ lại</legend>
+                @foreach (var side in Sides)
+                {
+                    <label class="merge-card @(keepId == side.Id ? "on" : null)">
+                        <input type="radio" name="merge-keep" value="@side.Id" checked="@(keepId == side.Id)" @onchange="() => keepId = side.Id" />
+                        <span class="merge-tag">@(side.Id == Current.CandidateId ? "Đang xem" : CandidateText.MatchedOn(Other.MatchedOn))</span>
+                        <strong>@side.Name</strong>
+                        <dl><div><dt>Mã</dt><dd>#@side.Id</dd></div><div><dt>Email</dt><dd>@Display.Text(side.Email)</dd></div><div><dt>Điện thoại</dt><dd>@CandidateText.Phone(side.Phone)</dd></div><div><dt>CV</dt><dd>@side.Cvs</dd></div></dl>
+                        <span class="merge-pick">@(keepId == side.Id ? "✓ Giữ hồ sơ này" : "Chọn giữ hồ sơ này")</span>
+                    </label>
+                }
+            </fieldset>
+            <p class="c-hint">Gợi ý dựa trên email / số điện thoại trùng. Tên giống nhau không đủ để kết luận là cùng một người.</p>
+        }
+        else
+        {
+            var keep = Sides.First(s => s.Id == keepId); var remove = Sides.First(s => s.Id != keepId);
+            var preview = CandidateText.Merge(keep.Id, keep.Email, keep.Phone, remove.Id, remove.Email, remove.Phone, remove.Cvs, 0);
+            <div class="c-notice danger" role="note"><strong>Hồ sơ #@remove.Id (@remove.Name) sẽ bị xóa sau khi chuyển dữ liệu.</strong></div>
+            <ul class="merge-effects">
+                <li><b>Giữ lại:</b> #@keep.Id · @keep.Name</li>
+                <li><b>Chuyển sang người được giữ:</b> @preview.CvsMoved CV của #@remove.Id, cùng mọi hồ sơ ứng tuyển, kết quả sàng lọc và lịch sử quyết định gắn với các CV đó.</li>
+                <li><b>Liên hệ:</b> giữ nguyên email / số của #@keep.Id@(preview.EmailFilled || preview.PhoneFilled ? $"; bổ sung {(preview.EmailFilled ? "email" : "")}{(preview.EmailFilled && preview.PhoneFilled ? " và " : "")}{(preview.PhoneFilled ? "số điện thoại" : "")} từ #{remove.Id} vì #{keep.Id} đang thiếu." : ".")</li>
+                <li><b>Không thay đổi:</b> giai đoạn tuyển dụng, điểm và nhãn HR của từng hồ sơ ứng tuyển.</li>
+                <li><b>Không phải xóa dữ liệu theo yêu cầu ứng viên:</b> không ẩn danh hóa CV nào.</li>
+            </ul>
+            <label class="c-label" for="merge-actor">Người thực hiện</label>
+            <input id="merge-actor" class="c-input" value="@actor" @oninput="e => actor = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" disabled="@busy" placeholder="HR - Họ tên" />
+            <label class="c-check"><input id="merge-confirm" type="checkbox" checked="@confirmed" disabled="@busy" @onchange="e => confirmed = e.Value is true" /> Tôi đã kiểm tra: đây là cùng một người.</label>
+        }
+        @if (error is not null) { <p class="c-alert" role="alert">@error</p> }
+    </ChildContent>
+    <Footer>
+        @if (step == 1)
+        {
+            <button id="merge-cancel" type="button" class="btn sc-btn-secondary" @onclick="OnClose">Hủy — không phải cùng người</button>
+            <button id="merge-next" type="button" class="btn sc-btn-primary" disabled="@(keepId == 0)" @onclick="() => { step = 2; error = null; }">Tiếp tục</button>
+        }
+        else
+        {
+            <button id="merge-back" type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="() => step = 1">Quay lại</button>
+            <button id="merge-submit" type="button" class="btn c-btn-danger" disabled="@(busy || uncertain || !confirmed || string.IsNullOrWhiteSpace(actor) || actor.Trim().Length > 100)" @onclick="MergeAsync">@(busy ? "Đang gộp…" : "Gộp vĩnh viễn")</button>
+        }
+    </Footer>
+</ModalShell>
+
+@code {
+    [Parameter, EditorRequired] public CandidateDetailDto Current { get; set; } = default!;
+    [Parameter, EditorRequired] public DuplicateMatchDto Other { get; set; } = default!;
+    [Parameter] public string? Actor { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Gộp xong: mã ứng viên được giữ (trang chuyển sang người đó nếu khác người đang xem).</summary>
+    [Parameter] public EventCallback<int> OnMerged { get; set; }
+    [Parameter] public EventCallback<string> OnUncertain { get; set; }
+    private sealed record Side(int Id, string Name, string? Email, string? Phone, int Cvs);
+    private IReadOnlyList<Side> Sides => [new(Current.CandidateId, Current.FullName, Current.Email, Current.PhoneNumber, Current.Cvs.Count),
+                                          new(Other.CandidateId, Other.FullName, Other.Email, Other.PhoneNumber, Other.CvCount)];
+    private readonly CancellationTokenSource lifetime = new();
+    private int step = 1, keepId;
+    private string actor = "";
+    private string? error;
+    private bool busy, confirmed, uncertain;
+
+    protected override void OnInitialized() { keepId = Current.CandidateId; actor = Actor ?? ""; }
+
+    private async Task MergeAsync()
+    {
+        if (busy || uncertain || !confirmed || string.IsNullOrWhiteSpace(actor)) return;
+        var keep = keepId; var source = keep == Current.CandidateId ? Other.CandidateId : Current.CandidateId;
+        busy = true; error = null;
+        try
+        {
+            var result = await Api.MergeAsync(source, keep, actor.Trim(), lifetime.Token);
+            if (result.IsSuccess && result.Data!.TargetCandidateId == keep && result.Data.RemovedCandidateId == source) { await OnMerged.InvokeAsync(keep); return; }
+            error = result.IsSuccess ? CandidateText.Error(null, writing: true) : result.ErrorMessage;
+            // 409 (dữ liệu đã đổi), 404 (một bên không còn), lỗi máy chủ / mất kết nối: KHÔNG gửi lại, phải tải lại để kiểm tra.
+            uncertain = true;
+            await OnUncertain.InvokeAsync(error!);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

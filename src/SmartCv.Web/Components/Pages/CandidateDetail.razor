@@ -1,0 +1,283 @@
+@page "/candidates/{Id:int}"
+@*
+    B24: hồ sơ một người (GET /api/candidates/{id}, CandidateDetailDto). Bố cục:
+      · Đầu trang: danh tính, tóm tắt (số CV · hồ sơ ứng tuyển · vị trí), thao tác Sửa / Xuất / Xóa.
+      · Cột chính: từng CV → các vị trí đã ứng tuyển bằng CV đó (giai đoạn HR, điểm sàng lọc CỦA LẦN ỨNG TUYỂN ĐÓ, dòng thời gian).
+      · Cột phụ: liên hệ, người có thể trùng (Xem và gộp), yêu cầu dữ liệu A43 + nhật ký.
+    Không có "điểm của người": điểm luôn gắn với một lần ứng tuyển.
+    Ẩn danh (B36, cùng AnonymityState): che tên, liên hệ, tên file, ghi chú; khóa Sửa / Gộp / Xuất / Xóa (cần đối chiếu danh tính).
+    404: đọc nhật ký A43 → "đã xóa theo yêu cầu" (vẫn hiện nhật ký) hoặc "không tồn tại / đã được gộp".
+*@
+@using SmartCv.Core.Constants
+@using SmartCv.Web.Components.Candidates
+@implements IDisposable
+@inject CandidateApiClient Api
+@inject CvApiClient CvApi
+@inject NavigationManager Nav
+@inject AnonymityState Anonymity
+@inject HrActorState Actor
+@inject CandidateHubState Hub
+
+<PageTitle>@PageTitleText · SCApp</PageTitle>
+
+<div class="detail-page">
+    <nav class="crumbs" aria-label="Điều hướng"><a id="back-to-list" href="@BackUrl"><span aria-hidden="true">←</span> @(FromCvs ? "Hồ sơ CV" : "Danh sách ứng viên")</a></nav>
+
+    @switch (workspace.Status)
+    {
+        case CandidateDetailWorkspace.State.Loading:
+            <div class="state-card" role="status"><span class="spinner" aria-hidden="true"></span><p>Đang tải hồ sơ ứng viên #@Id…</p></div>
+            break;
+
+        case CandidateDetailWorkspace.State.Error:
+            <div class="state-card error" role="alert"><span class="state-icon" aria-hidden="true">!</span><h1>Chưa tải được hồ sơ ứng viên</h1><p>@workspace.Error</p><button id="detail-retry" type="button" class="btn sc-btn-primary" @onclick="ReloadAsync">Thử lại</button></div>
+            break;
+
+        case CandidateDetailWorkspace.State.NotFound:
+            <div class="state-card" role="alert"><span class="state-icon" aria-hidden="true">?</span><h1>Không có ứng viên #@Id</h1><p>Hồ sơ không tồn tại hoặc đã được gộp vào một ứng viên khác.</p><a class="btn sc-btn-secondary" href="@BackUrl">Về danh sách ứng viên</a></div>
+            break;
+
+        case CandidateDetailWorkspace.State.Erased:
+            <section class="state-card erased" aria-labelledby="erased-title">
+                <span class="state-icon" aria-hidden="true">✓</span>
+                <h1 id="erased-title" tabindex="-1">Dữ liệu ứng viên #@Id đã được xóa</h1>
+                <p>Thông tin liên hệ và nội dung CV đã bị xóa theo yêu cầu của ứng viên. Điểm, giai đoạn và lịch sử quyết định vẫn được giữ cho thống kê, không còn gắn với người nào.</p>
+                @if (eraseResult is { } r) { <p class="erase-result" role="status">Đã ẩn danh hóa @r.CvsAnonymized CV@(r.CvsAlreadyAnonymized > 0 ? $" ({r.CvsAlreadyAnonymized} CV đã ẩn danh trước đó)" : "") · rút @r.ApplicationsWithdrawn hồ sơ · yêu cầu #@r.RequestId</p> }
+                <h2>Nhật ký yêu cầu</h2>
+                <RequestHistory Requests="workspace.Requests" Anonymous="Anonymity.Enabled" />
+            </section>
+            break;
+
+        default:
+            var c = workspace.Data!;
+            var anon = Anonymity.Enabled;
+            <header class="profile-head">
+                <span class="avatar" aria-hidden="true">@CandidateText.Initials(c.FullName, anon)</span>
+                <div class="identity">
+                    <h1 id="candidate-name" tabindex="-1">@CandidateText.Name(c.CandidateId, c.FullName, anon)</h1>
+                    <p class="meta">Ứng viên #@c.CandidateId · tạo @CandidateText.Date(c.CreatedAt)</p>
+                    <ul class="chips" aria-label="Tóm tắt">
+                        <li>@c.Cvs.Count CV</li><li>@c.Applications.Count hồ sơ ứng tuyển</li><li>@c.Applications.Select(a => a.JobId).Distinct().Count() vị trí</li>
+                        @if (c.PossibleDuplicates.Count > 0) { <li class="warn">Có thể trùng @c.PossibleDuplicates.Count người</li> }
+                    </ul>
+                </div>
+                <div class="head-actions">
+                    <AnonymousToggle />
+                    <button id="detail-edit" type="button" class="btn sc-btn-secondary" disabled="@(anon || busy)" @onclick="() => editing = true">Sửa thông tin</button>
+                    <button id="detail-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Refreshing" @onclick="ReloadAsync" aria-label="Tải lại hồ sơ"><span aria-hidden="true">↻</span></button>
+                </div>
+            </header>
+
+            @if (anon)
+            {
+                <p class="privacy-banner" role="note"><span aria-hidden="true">◐</span> Đang bật Ẩn danh: tên, liên hệ, tên file và ghi chú được che. Tắt Ẩn danh để sửa thông tin, gộp hoặc xử lý yêu cầu dữ liệu của ứng viên.</p>
+            }
+            @if (notice is not null) { <p class="notice @(noticeError ? "error" : "ok")" role="@(noticeError ? "alert" : "status")">@notice <button type="button" class="notice-close" aria-label="Đóng thông báo" @onclick="() => notice = null">×</button></p> }
+            @if (workspace.Error is not null && workspace.Data is not null) { <p class="notice error" role="alert">@workspace.Error <button type="button" class="link" @onclick="ReloadAsync">Tải lại</button></p> }
+
+            <div class="profile-grid">
+                <section class="main-col" aria-labelledby="applications-title">
+                    <div class="section-head"><h2 id="applications-title">CV và hồ sơ ứng tuyển</h2><p>Mỗi CV có thể ứng tuyển nhiều vị trí. Điểm sàng lọc thuộc từng lần ứng tuyển, không phải điểm của người.</p></div>
+                    @if (c.Cvs.Count == 0) { <div class="empty-card">Ứng viên chưa có CV nào. Gắn CV cho người này ở <a href="/candidates?view=cvs&candidate=none">Hồ sơ CV › Chưa gắn ứng viên</a>.</div> }
+                    @foreach (var cv in c.Cvs.OrderByDescending(v => v.UploadedAt))
+                    {
+                        var apps = c.Applications.Where(a => a.CvId == cv.CvId).OrderByDescending(a => a.AppliedAt).ToList();
+                        <article class="cv-card @(cv.IsAnonymized ? "anonymized" : null)" @key="cv.CvId">
+                            <header class="cv-head">
+                                <span class="file-icon" aria-hidden="true">▤</span>
+                                <div class="cv-title">
+                                    <strong>@(cv.IsAnonymized ? "Hồ sơ đã ẩn danh" : anon ? "CV đã ẩn tên" : Display.Text(cv.FileName))</strong>
+                                    <span>CV @CvLibraryText.ShortId(cv.CvId) · tải @CandidateText.Date(cv.UploadedAt) · @CvLibraryText.Source(cv.SourceChannel)</span>
+                                </div>
+                                @if (!cv.IsAnonymized && !anon) { <a class="file-link" href="@CvApi.FileUrl(cv.CvId)" target="_blank" rel="noopener noreferrer">Xem file <span aria-hidden="true">↗</span><span class="visually-hidden"> (mở tab mới)</span></a> }
+                            </header>
+                            <dl class="cv-facts">
+                                <div><dt>Đọc chữ</dt><dd>@(cv.IsAnonymized ? "Đã ẩn danh" : CvLibraryText.Statuses.FirstOrDefault(s => s.Code == cv.ExtractionStatus).Name ?? "—")</dd></div>
+                                <div><dt>Hạn lưu</dt><dd class="@(RetentionSoon(cv) ? "soon" : null)">@CvLibraryText.Retention(cv.RetainUntil, cv.AnonymizedAt, now)</dd></div>
+                                <div><dt>Đồng ý lưu</dt><dd>@CandidateText.Date(cv.ConsentConfirmedAt)</dd></div>
+                            </dl>
+                            @if (apps.Count == 0) { <p class="no-apps">CV này chưa ứng tuyển vị trí nào.</p> }
+                            else
+                            {
+                                <ul class="apps">
+                                    @foreach (var a in apps)
+                                    {
+                                        var open = expanded.Contains(a.ApplicationId);
+                                        <li class="app" @key="a.ApplicationId">
+                                            <div class="app-main">
+                                                <div class="app-job"><strong>@a.JobTitle</strong><span>Ứng tuyển @CandidateText.Date(a.AppliedAt) · hồ sơ #@a.ApplicationId</span></div>
+                                                <span class="stage @StageText.Css(a.Stage)"><i class="stage-dot" aria-hidden="true"></i>@StageText.Name(a.Stage)@if (a.Stage == ApplicationStages.Rejected && CvLibraryText.Reason(a.RejectReason, anon) is { } reason) { <small> · @reason</small> }</span>
+                                                <div class="app-score">@if (a.LatestFinalScore is { } score) { <strong>@Display.Score(score)</strong><span>điểm lần ứng tuyển này</span>@if (a.LatestFitLabel is { } fit && FitLevel.IsKnown(fit)) { <span class="fit">@fit</span> } } else { <span class="muted">Chưa chấm</span> }</div>
+                                            </div>
+                                            <button id="@($"timeline-{a.ApplicationId}")" type="button" class="timeline-toggle" aria-expanded="@(open ? "true" : "false")" aria-controls="@($"timeline-panel-{a.ApplicationId}")" @onclick="() => Toggle(a.ApplicationId)">@(open ? "Ẩn" : "Xem") dòng thời gian (@a.Events.Count)</button>
+                                            @if (open) { <div id="@($"timeline-panel-{a.ApplicationId}")" class="timeline"><StageTimeline Events="CandidateText.NewestFirst(a.Events)" Anonymous="anon" /></div> }
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </article>
+                    }
+                    @foreach (var orphan in c.Applications.Where(a => c.Cvs.All(v => v.CvId != a.CvId)))
+                    {
+                        <p class="no-apps">Hồ sơ #@orphan.ApplicationId (@orphan.JobTitle) thuộc CV không còn gắn với người này.</p>
+                    }
+                </section>
+
+                <aside class="side-col">
+                    <section class="side-card" aria-labelledby="contact-title">
+                        <div class="side-head"><h2 id="contact-title">Liên hệ</h2><button id="contact-edit" type="button" class="link" disabled="@(anon || busy)" @onclick="() => editing = true">Sửa</button></div>
+                        @if (anon) { <p class="muted">Liên hệ đã ẩn.</p> }
+                        else
+                        {
+                            <dl class="contact"><div><dt>Email</dt><dd>@Display.Text(c.Email)</dd></div><div><dt>Điện thoại</dt><dd>@CandidateText.Phone(c.PhoneNumber)</dd></div></dl>
+                        }
+                    </section>
+
+                    @if (c.PossibleDuplicates.Count > 0)
+                    {
+                        <section class="side-card warn" aria-labelledby="dup-title">
+                            <div class="side-head"><h2 id="dup-title">Có thể là cùng một người</h2></div>
+                            <p class="muted">Trùng email hoặc số điện thoại với @c.PossibleDuplicates.Count ứng viên khác. Hệ thống không tự gộp.</p>
+                            <ul class="dup-list">
+                                @foreach (var d in c.PossibleDuplicates)
+                                {
+                                    <li @key="d.CandidateId">
+                                        <div><a href="@($"/candidates/{d.CandidateId}")">@CandidateText.Name(d.CandidateId, d.FullName, anon)</a><span>@CandidateText.MatchedOn(d.MatchedOn) · @d.CvCount CV</span></div>
+                                        <button id="@($"merge-{d.CandidateId}")" type="button" class="btn sc-btn-secondary" disabled="@(anon || busy)" @onclick="() => mergeWith = d">Xem và gộp</button>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+                    }
+
+                    <section class="side-card" aria-labelledby="rights-title">
+                        <div class="side-head"><h2 id="rights-title">Yêu cầu của ứng viên</h2></div>
+                        <p class="muted">Ứng viên có quyền xem và yêu cầu xóa dữ liệu cá nhân. Mỗi lần xử lý đều được ghi nhật ký.</p>
+                        @if (!anon)
+                        {
+                            <label class="c-label" for="rights-actor">Người xử lý</label>
+                            <input id="rights-actor" class="c-input" value="@actorName" @oninput="e => actorName = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" placeholder="HR - Họ tên" />
+                            <div class="rights-actions">
+                                @if (ActorValid) { <a id="rights-export" class="btn sc-btn-secondary" href="@Api.ExportUrl(c.CandidateId, actorName)" download @onclick="ExportStartedAsync">Xuất dữ liệu (JSON)</a> }
+                                else { <button type="button" class="btn sc-btn-secondary" disabled>Xuất dữ liệu (JSON)</button> }
+                                <button id="rights-erase" type="button" class="btn c-btn-danger-outline" disabled="@busy" @onclick="() => erasing = true">Xóa dữ liệu…</button>
+                            </div>
+                            @if (!ActorValid) { <span class="c-hint">Nhập người xử lý để xuất dữ liệu.</span> }
+                        }
+                        <h3>Nhật ký yêu cầu</h3>
+                        <RequestHistory Requests="workspace.Requests" Anonymous="anon" />
+                    </section>
+                </aside>
+            </div>
+
+            @if (editing && !anon)
+            {
+                <CandidateEditorDialog CandidateId="c.CandidateId" InitialName="@c.FullName" InitialEmail="@c.Email" InitialPhone="@c.PhoneNumber"
+                                       ReturnFocusId="detail-edit" OnClose="() => editing = false" OnSaved="SavedAsync" />
+            }
+            @if (mergeWith is { } other && !anon)
+            {
+                <MergeCandidateDialog Current="c" Other="other" Actor="@actorName" ReturnFocusId="@($"merge-{other.CandidateId}")" OnClose="() => mergeWith = null" OnMerged="MergedAsync" OnUncertain="WriteUncertainAsync" />
+            }
+            @if (erasing && !anon)
+            {
+                <EraseDataDialog Candidate="c" Actor="@actorName" ReturnFocusId="rights-erase" OnClose="() => erasing = false" OnErased="ErasedAsync" OnUncertain="WriteUncertainAsync" />
+            }
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? From { get; set; }
+    private CandidateDetailWorkspace workspace = default!;
+    private readonly HashSet<int> expanded = [];
+    private readonly CancellationTokenSource lifetime = new();
+    private DuplicateMatchDto? mergeWith;
+    private EraseCandidateResultDto? eraseResult;
+    private bool editing, erasing, noticeError, disposed;
+    /// <summary>Đang tải lại sau thao tác ghi: khóa các thao tác khác để không gửi dựa trên dữ liệu cũ.</summary>
+    private bool busy => workspace.Refreshing;
+    private string? notice;
+    private string actorName = "";
+    private int loadedId;
+    private DateTime now = DateTime.UtcNow;
+
+    private bool FromCvs => string.Equals(From, CandidatesView.Cvs, StringComparison.OrdinalIgnoreCase);
+    private string BackUrl => FromCvs ? Hub.CvsUrl : Hub.PeopleUrl;
+    private bool ActorValid => !string.IsNullOrWhiteSpace(actorName) && actorName.Trim().Length <= 100 && !actorName.Any(char.IsControl);
+    private string PageTitleText => workspace.Status == CandidateDetailWorkspace.State.Ready && workspace.Data is { } d
+        ? CandidateText.Name(d.CandidateId, d.FullName, Anonymity.Enabled) : $"Ứng viên #{Id}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        workspace = new(Api);
+        Anonymity.Changed += PrivacyChanged;
+        try { await Actor.EnsureLoadedAsync(); actorName = Actor.Actor ?? ""; } catch (InvalidOperationException) { }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedId == Id) return;
+        loadedId = Id; expanded.Clear(); mergeWith = null; editing = erasing = false; eraseResult = null; notice = null;
+        await workspace.LoadAsync(Id);
+        // Mặc định mở dòng thời gian của hồ sơ mới nhất để thấy ngay quyết định gần nhất.
+        if (workspace.Data?.Applications.OrderByDescending(a => a.StageUpdatedAt ?? a.AppliedAt).FirstOrDefault() is { } latest) expanded.Add(latest.ApplicationId);
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? Anonymity.EnsureLoadedAsync() : Task.CompletedTask;
+
+    private bool RetentionSoon(CandidateCvDto cv) => !cv.IsAnonymized && cv.RetainUntil is { } d
+        && DateOnly.FromDateTime(DateTime.SpecifyKind(d, DateTimeKind.Utc).AddHours(7)).DayNumber - DateOnly.FromDateTime(now.AddHours(7)).DayNumber <= 14;
+    private void Toggle(int applicationId) { if (!expanded.Remove(applicationId)) expanded.Add(applicationId); }
+    private async Task ReloadAsync() { now = DateTime.UtcNow; await workspace.LoadAsync(Id, keepVisible: true); }
+
+    private async Task SavedAsync(CandidateDto saved)
+    {
+        editing = false; Hub.NotifyDataChanged();
+        Show("Đã lưu thông tin liên hệ.", false);
+        await ReloadAsync();
+    }
+
+    private async Task MergedAsync(int keptId)
+    {
+        mergeWith = null; Hub.NotifyDataChanged();
+        if (keptId != Id)
+        {
+            // Người đang xem đã bị gộp vào người kia: chuyển sang hồ sơ được giữ, không hiện lại người đã bị xóa.
+            Nav.NavigateTo($"/candidates/{keptId}" + (FromCvs ? "?from=cvs" : ""), replace: true);
+            return;
+        }
+        Show("Đã gộp hồ sơ. CV của người kia đã chuyển sang ứng viên này.", false);
+        await ReloadAsync();
+    }
+
+    private async Task ErasedAsync(EraseCandidateResultDto result)
+    {
+        erasing = false; eraseResult = result; Hub.NotifyDataChanged();
+        workspace.MarkErased();
+        if (!disposed) await workspace.LoadAsync(Id);   // 404 + nhật ký có dòng Erase → trạng thái "đã xóa" kèm nhật ký
+    }
+
+    /// <summary>Thao tác ghi chưa xác định / bị từ chối (409, 410, lỗi máy chủ): đóng hộp thoại, tải lại để HR thấy trạng thái thật. Không gửi lại.</summary>
+    private async Task WriteUncertainAsync(string message)
+    {
+        mergeWith = null; erasing = false;
+        Show(message + " Đã tải lại hồ sơ để kiểm tra.", true);
+        Hub.NotifyDataChanged();
+        await ReloadAsync();
+    }
+
+    /// <summary>Trình duyệt tự tải file; API ghi nhật ký → cập nhật bảng nhật ký sau 1,5 giây.</summary>
+    private async Task ExportStartedAsync()
+    {
+        try { await Actor.SetAsync(actorName.Trim()); } catch (InvalidOperationException) { }
+        Show("Đang tải file dữ liệu. Nhật ký yêu cầu sẽ cập nhật sau vài giây.", false);
+        try { await Task.Delay(1500, lifetime.Token); } catch (OperationCanceledException) { return; }
+        if (!disposed) { await ReloadAsync(); StateHasChanged(); }
+    }
+
+    private void Show(string text, bool error) { notice = text; noticeError = error; }
+    private void PrivacyChanged() => _ = InvokeAsync(() => { if (Anonymity.Enabled) { editing = erasing = false; mergeWith = null; } StateHasChanged(); });
+    public void Dispose() { disposed = true; Anonymity.Changed -= PrivacyChanged; workspace.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
+}

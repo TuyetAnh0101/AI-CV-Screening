@@ -1,0 +1,73 @@
+@page "/candidates"
+@*
+    B24: một trang "Ứng viên" thay cho "Kho CV", hai chế độ dùng chung layout:
+      /candidates             → Ứng viên (theo con người: GET /api/candidates)
+      /candidates?view=cvs    → Hồ sơ CV (theo file: GET /api/cvs, toàn bộ chức năng B23)
+    Mỗi chế độ gọi đúng API sở hữu dữ liệu. Chế độ đã mở được giữ trong bộ nhớ (ẩn đi khi chuyển tab) nên chuyển qua lại
+    không tải lại; chỉ tải lại khi địa chỉ đổi hoặc có thao tác ghi thành công (CandidateHubState.DataVersion).
+*@
+@using SmartCv.Web.Components.Candidates
+@implements IDisposable
+@inject NavigationManager Nav
+@inject CandidateHubState Hub
+
+<PageTitle>@(view == CandidatesView.Cvs ? "Hồ sơ CV" : "Ứng viên") · SCApp</PageTitle>
+
+<div class="candidates-page">
+    <header class="page-head">
+        <div>
+            <p class="eyebrow">Tuyển dụng</p>
+            <h1 id="candidates-title" tabindex="-1">Ứng viên</h1>
+            <p class="lead">Quản lý theo con người hoặc theo từng file CV. Một người có thể có nhiều CV; một CV có thể ứng tuyển nhiều vị trí.</p>
+        </div>
+        <div class="head-actions">
+            <AnonymousToggle />
+            <a class="btn sc-btn-secondary" href="/upload"><span aria-hidden="true">↥</span> Tải CV lên</a>
+        </div>
+    </header>
+
+    <nav class="view-tabs" aria-label="Chế độ xem">
+        <a id="view-people" href="@Hub.PeopleUrl" class="view-tab @(view == CandidatesView.People ? "on" : null)" aria-current="@(view == CandidatesView.People ? "page" : null)">
+            <span class="tab-icon" aria-hidden="true">◎</span>Ứng viên @if (peopleTotal is { } p) { <span class="tab-count">@p.ToString("N0")</span> }
+        </a>
+        <a id="view-cvs" href="@Hub.CvsUrl" class="view-tab @(view == CandidatesView.Cvs ? "on" : null)" aria-current="@(view == CandidatesView.Cvs ? "page" : null)">
+            <span class="tab-icon" aria-hidden="true">▤</span>Hồ sơ CV @if (cvTotal is { } c) { <span class="tab-count">@c.ToString("N0")</span> }
+        </a>
+        <span class="tab-note">@(view == CandidatesView.Cvs ? "Mỗi dòng là một file CV" : "Mỗi dòng là một người")</span>
+    </nav>
+
+    @if (peopleMounted)
+    {
+        <div hidden="@(view != CandidatesView.People)"><CandidatePeopleView Active="@(view == CandidatesView.People)" OnTotal="t => peopleTotal = t" /></div>
+    }
+    @if (cvsMounted)
+    {
+        <div hidden="@(view != CandidatesView.Cvs)"><CvLibrary Active="@(view == CandidatesView.Cvs)" OnTotal="t => cvTotal = t" /></div>
+    }
+</div>
+
+@code {
+    private string view = CandidatesView.People;
+    private bool peopleMounted, cvsMounted;
+    private int? peopleTotal, cvTotal;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += LocationChanged;
+        Apply(Nav.Uri);
+    }
+
+    private void Apply(string uri)
+    {
+        view = CandidatesView.FromUri(uri);
+        if (view == CandidatesView.People) peopleMounted = true; else cvsMounted = true;
+    }
+
+    private void LocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (Nav.ToBaseRelativePath(e.Location).Split('?', '#')[0].TrimEnd('/') != "candidates") return;
+        _ = InvokeAsync(() => { Apply(e.Location); StateHasChanged(); });
+    }
+
+    public void Dispose() => Nav.LocationChanged -= LocationChanged;
+}

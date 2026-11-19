@@ -12,6 +12,6 @@ export function close(dialog, returnFocusId) {
     requestAnimationFrame(() => {
         const opener = returnFocusId && document.getElementById(returnFocusId);
         if (opener && !opener.disabled) opener.focus();
-        else document.getElementById('cvs-title')?.focus();
+        else (document.getElementById('cvs-list-title') ?? document.getElementById('candidates-title'))?.focus();
     });
 }

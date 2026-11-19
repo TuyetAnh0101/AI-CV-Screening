@@ -111,7 +111,7 @@
             @if (tab == Tab.Picker)
             {
                 <section class="picker" role="tabpanel" aria-labelledby="tab-picker">
-                    <p class="hint">Mỗi dòng là một <strong>hồ sơ ứng tuyển</strong> (một CV nộp vào một Job). Một CV nộp hai Job là hai hồ sơ khác nhau. CV chưa gán Job chưa có hồ sơ: hãy mở <a href="/cvs">Kho CV</a> để gán Job trước.</p>
+                    <p class="hint">Mỗi dòng là một <strong>hồ sơ ứng tuyển</strong> (một CV nộp vào một Job). Một CV nộp hai Job là hai hồ sơ khác nhau. CV chưa gán Job chưa có hồ sơ: hãy mở <a href="/candidates?view=cvs">Ứng viên › Hồ sơ CV</a> để gán Job trước.</p>
                     <div class="picker-filters">
                         <label class="grow">Tìm kiếm<input type="search" aria-label="Tìm hồ sơ để thêm" placeholder="@(Anonymity.Enabled ? "Tên file đã ẩn; tìm theo vị trí" : "Tên ứng viên, tên file, vị trí")" @bind="members.Search" @bind:event="oninput" /></label>
                         <label>Vị trí<select aria-label="Lọc theo vị trí" value="@(members.Filter.JobId?.ToString() ?? "")" @onchange="e => FilterAsync(members.Filter with { JobId = int.TryParse(e.Value?.ToString(), out var j) ? j : null })"><option value="">Tất cả vị trí</option>@foreach (var job in jobs) { <option value="@job.JobId">@job.Title</option> }</select></label>
