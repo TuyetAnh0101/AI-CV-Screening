@@ -1,8 +1,8 @@
 @if (Flags.Count > 0)
 {
     <div class="review-flags" @onmouseenter="Show" @onmouseleave="Leave">
-        <button type="button" aria-label="@($"Cần xem kỹ: {Flags.Count} lý do")" aria-expanded="@open.ToString().ToLowerInvariant()" aria-describedby="@id" @onclick="Pin" @onfocus="Focus" @onblur="Blur" @onkeydown="Key"><span aria-hidden="true">⚑</span></button>
-        <div id="@id" class="flag-reasons" role="note" hidden="@(!open)"><strong>Cần xem kỹ</strong><ul>@foreach (var flag in Flags) { <li>@flag.Message</li> }</ul></div>
+        <button type="button" aria-label="@($"Cảnh báo tự động: {Flags.Count} lý do")" aria-expanded="@open.ToString().ToLowerInvariant()" aria-describedby="@id" @onclick="Pin" @onfocus="Focus" @onblur="Blur" @onkeydown="Key"><span aria-hidden="true">⚠</span></button>
+        <div id="@id" class="flag-reasons" role="note" hidden="@(!open)"><strong>Cảnh báo tự động</strong><small> · hệ thống tính từ kết quả chấm</small><ul>@foreach (var flag in Flags) { <li>@flag.Message</li> }</ul></div>
     </div>
 }
 @code {

@@ -24,7 +24,53 @@ public static class DashboardEndpoints
                 context.HttpContext.Response.Headers.CacheControl = "no-store";
                 return await next(context);
             });
+        // SCApp v2: biểu đồ kết hợp (cột: hồ sơ mới; đường: tỷ lệ qua vòng CV của cùng nhóm).
+        app.MapGet("/api/dashboard/trend", TrendAsync).WithTags("Dashboard").WithName("DashboardTrend")
+            .WithSummary("Hồ sơ ứng tuyển mới và tỷ lệ qua vòng CV theo ngày/tuần Việt Nam")
+            .AddEndpointFilter(async (context, next) =>
+            {
+                context.HttpContext.Response.Headers.CacheControl = "no-store";
+                return await next(context);
+            });
         return app;
+    }
+
+    // ---------- GET /api/dashboard/trend?jobId=&from=&to=&bucket=day|week|auto ----------
+    private static async Task<Results<Ok<DashboardTrendDto>, ProblemHttpResult>> TrendAsync(
+        HttpRequest request, SmartCvDbContext db, CancellationToken ct)
+    {
+        foreach (var key in new[] { "jobId", "from", "to", "bucket" })
+            if (request.Query[key].Count > 1) return Problem(400, "Bộ lọc không hợp lệ", "Mỗi bộ lọc chỉ được có một giá trị.");
+        var job = request.Query["jobId"].ToString();
+        int? jobId = null;
+        if (job.Length > 0)
+        {
+            if (!int.TryParse(job, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0)
+                return Problem(400, "Bộ lọc không hợp lệ", "Mã Job phải là số nguyên dương trong miền Int32.");
+            jobId = parsed;
+        }
+        var bucketText = request.Query["bucket"].ToString();
+        if (!TrendCalculator.IsValidBucket(bucketText)) return Problem(400, "Bộ lọc không hợp lệ", "bucket chỉ nhận day, week hoặc auto.");
+        var (parsedPeriod, error) = DashboardPeriod.Parse(request.Query["from"], request.Query["to"]);
+        if (parsedPeriod is null) return Problem(400, "Khoảng ngày không hợp lệ", error!);
+        // "Tất cả thời gian" không có mốc bắt đầu: biểu đồ dùng 30 ngày gần nhất (giao diện ghi rõ).
+        var (from, to) = TrendCalculator.DefaultRange(parsedPeriod.From, parsedPeriod.To);
+        if (from > to) return Problem(400, "Khoảng ngày không hợp lệ", "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+        var bucket = TrendCalculator.ResolveBucket(bucketText.Length == 0 ? null : bucketText, from, to);
+        if (TrendCalculator.PointCount(bucket, from, to) > TrendCalculator.MaxPoints)
+            return Problem(400, "Khoảng ngày quá dài", $"Biểu đồ tối đa {TrendCalculator.MaxPoints} {(bucket == TrendCalculator.Day ? "ngày" : "tuần")}. Hãy rút ngắn khoảng ngày hoặc xem theo tuần.");
+        if (jobId is { } jid && !await db.Jobs.AsNoTracking().AnyAsync(j => j.JobId == jid, ct))
+            return Problem(404, "Không tìm thấy Job", $"Không có Job #{jid}.");
+
+        var (period, _) = DashboardPeriod.Create(from, to);
+        var apps = db.Applications.AsNoTracking().Where(a => a.CreatedAt >= period!.FromUtc && a.CreatedAt < period.ToUtc);
+        if (jobId is not null) apps = apps.Where(a => a.JobId == jobId);
+        // Cùng quy ước với phễu A19: "đã qua vòng CV" = đang hoặc đã từng ở Qua vòng CV / Phỏng vấn.
+        var passed = new[] { ApplicationStages.Shortlisted, ApplicationStages.Interview };
+        var rows = await apps.Select(a => new TrendCalculator.Row(a.CreatedAt,
+                passed.Contains(a.Stage) || a.Events.Any(e => passed.Contains(e.FromStage) || passed.Contains(e.ToStage))))
+            .ToListAsync(ct);
+        return TypedResults.Ok(TrendCalculator.Build(jobId, from, to, bucket, rows));
     }
 
     private static async Task<Results<Ok<DashboardSummaryDto>, ProblemHttpResult>> SummaryAsync(
@@ -82,7 +128,7 @@ public static class DashboardEndpoints
             TotalCvs = totalCvs, FailedCvs = failedCvs, TotalApplications = total,
             ActiveJobs = await db.Jobs.AsNoTracking().CountAsync(j => j.IsActive && (jobId == null || j.JobId == jobId), ct),
             RunningRuns = await db.EvaluationRuns.AsNoTracking().CountAsync(r => r.Status == RunStatuses.Queued || r.Status == RunStatuses.Running, ct),
-            FlaggedUnresolved = flagged.Count, FlaggedJobId = flagged.TopJobId,
+            FlaggedUnresolved = flagged.Count, FlaggedJobId = flagged.TopJobId, ManualFlagsOpen = flagged.Manual,
             Funnel = FunnelCalculator.Build(current, reached),
             RejectedCount = current.GetValueOrDefault(ApplicationStages.Rejected),
             OnHoldCount = current.GetValueOrDefault(ApplicationStages.OnHold),
@@ -92,7 +138,7 @@ public static class DashboardEndpoints
         });
     }
 
-    private static async Task<(int Count, int? TopJobId)> CountFlaggedAsync(SmartCvDbContext db,
+    private static async Task<(int Count, int? TopJobId, int Manual)> CountFlaggedAsync(SmartCvDbContext db,
         IQueryable<Core.Entities.Application> apps, ReviewFlagOptions options, CancellationToken ct)
     {
         var open = apps.Where(a => a.Stage == ApplicationStages.New || a.Stage == ApplicationStages.Reviewing);
@@ -102,7 +148,10 @@ public static class DashboardEndpoints
             && !screening.Any(n => n.ApplicationId == e.ApplicationId && (n.CreatedAt > e.CreatedAt
                 || (n.CreatedAt == e.CreatedAt && n.EvaluationId > e.EvaluationId))))
             .Where(e => e.Status == EvaluationStatuses.Completed);
-        var counts = new Dictionary<int, int>();
+        // SCApp v2: hồ sơ có cờ thủ công đang mở cũng "cần xem kỹ" (mỗi hồ sơ đếm một lần, dù có cả cảnh báo tự động).
+        var manual = await open.Where(a => a.Flags.Any(f => f.Status == ManualFlagStatuses.Open))
+            .Select(a => new { a.ApplicationId, a.JobId }).ToListAsync(ct);
+        var flaggedApps = manual.ToDictionary(m => m.ApplicationId, m => m.JobId);
         var after = 0;
         while (true)
         {
@@ -111,7 +160,7 @@ public static class DashboardEndpoints
             var rows = await latest.Where(e => e.EvaluationId > after).OrderBy(e => e.EvaluationId).Take(256)
                 .Select(e => new
                 {
-                    e.EvaluationId, e.Application.JobId, e.Status, e.KeywordScore, e.AiScore, e.FinalScore,
+                    e.EvaluationId, e.ApplicationId, e.Application.JobId, e.Status, e.KeywordScore, e.AiScore, e.FinalScore,
                     e.ScoreSource, e.Reasoning, e.Run.KeywordWeight, e.Run.AiWeight,
                     TextLength = e.Application.Cv.ExtractedText == null ? (int?)null : (e.Application.Cv.ExtractedText + "#").Length - 1,
                     MissingMustHave = e.Skills.Any(s => !s.IsMatched && s.JobSkill.SkillType == SkillTypes.MustHave)
@@ -119,11 +168,12 @@ public static class DashboardEndpoints
             foreach (var row in rows)
                 if (ReviewFlags.Evaluate(new(row.Status, row.KeywordScore, row.AiScore, row.FinalScore, row.ScoreSource,
                     row.TextLength, row.KeywordWeight, row.AiWeight, row.MissingMustHave, row.Reasoning), options).Count > 0)
-                    counts[row.JobId] = counts.GetValueOrDefault(row.JobId) + 1;
+                    flaggedApps[row.ApplicationId] = row.JobId;
             if (rows.Count < 256) break;
             after = rows[^1].EvaluationId;
         }
-        return (counts.Values.Sum(), counts.OrderByDescending(k => k.Value).ThenBy(k => k.Key).Select(k => (int?)k.Key).FirstOrDefault());
+        var counts = flaggedApps.Values.GroupBy(j => j).ToDictionary(g => g.Key, g => g.Count());
+        return (flaggedApps.Count, counts.OrderByDescending(k => k.Value).ThenBy(k => k.Key).Select(k => (int?)k.Key).FirstOrDefault(), manual.Count);
     }
 
     private sealed class TimingAggregate

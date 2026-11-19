@@ -57,6 +57,20 @@ public sealed class EvaluationSetDto
     public int LabelCount { get; init; }   // số CV đã gán nhãn
     public int PassCount { get; init; }    // số nhãn Đạt
     public int UnreadyCount { get; init; } // labeled applications without usable extracted CV text
+
+    // SCApp v2: thành viên tách khỏi nhãn. MemberCount = LabelCount + UnlabeledCount.
+    public string? Purpose { get; init; }
+    public int? JobId { get; init; }
+    public string? JobTitle { get; init; }
+    public int MemberCount { get; init; }
+    public int UnlabeledCount { get; init; }
+    /// <summary>Thành viên chưa sẵn sàng (chưa trích xuất xong, lỗi, không có chữ hoặc đã ẩn danh) — kể cả chưa gán nhãn.</summary>
+    public int MemberUnreadyCount { get; init; }
+    public int Revision { get; init; } = 1;
+    public int RunCount { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? UpdatedAt { get; init; }
+    public int FailCount => LabelCount - PassCount;
 }
 
 public sealed class StartPromptTestRequest
@@ -150,6 +164,8 @@ public sealed class CreateEvaluationSetRequest
 {
     public string Name { get; set; } = string.Empty;          // NVARCHAR(150), không trùng
     public string? Description { get; set; }                   // NVARCHAR(500)
+    public string? Purpose { get; set; }                       // SCApp v2: NVARCHAR(300), mục tiêu của bộ
+    public int? JobId { get; set; }                            // SCApp v2: vị trí tuyển dụng chính (không bắt buộc)
 }
 
 /// <summary>Một nhãn HR (bảng HrLabels) kèm thông tin hồ sơ để hiển thị.</summary>
@@ -176,6 +192,15 @@ public sealed class EvaluationSetDetailDto
     public int PassCount { get; init; }
     public int RunCount { get; init; }                         // số lần đã chạy đánh giá trên bộ này
     public List<HrLabelDto> Labels { get; init; } = [];
+
+    // SCApp v2
+    public string? Purpose { get; init; }
+    public int? JobId { get; init; }
+    public string? JobTitle { get; init; }
+    public int Revision { get; init; } = 1;
+    public DateTime? UpdatedAt { get; init; }
+    public List<EvaluationSetMemberDto> Members { get; init; } = [];
+    public EvaluationSetReadinessDto Readiness { get; init; } = new();
 }
 
 /// <summary>Hồ sơ có thể đưa vào bộ đánh giá (để giao diện cho chọn).</summary>
@@ -190,6 +215,11 @@ public sealed class LabelCandidateDto
     public string JobTitle { get; init; } = string.Empty;
     public string ExtractionStatus { get; init; } = string.Empty;   // Failed: không nên đưa vào bộ đánh giá
     public bool? CurrentLabel { get; init; }                         // null: chưa gán nhãn trong bộ này
+    // SCApp v2: dùng cho bước "Chọn CV đã quét"
+    public bool IsMember { get; init; }
+    public string Stage { get; init; } = string.Empty;
+    public DateTime AppliedAt { get; init; }                         // UTC, lúc CV được gán vào Job
+    public bool IsAnonymized { get; init; }
 }
 
 public sealed class HrLabelInput

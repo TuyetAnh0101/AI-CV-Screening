@@ -28,6 +28,22 @@ public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> lo
     public Task<ApiResult<LabelSuggestionResponse>> GetLabelSuggestionsAsync(int id, int? jobId = null, CancellationToken ct = default) =>
         GetAsync<LabelSuggestionResponse>(jobId is > 0 ? $"api/evaluation-sets/{id}/label-suggestions?jobId={jobId}" : $"api/evaluation-sets/{id}/label-suggestions", ct);
     public string EvaluationCvUrl(Guid cvId) => new Uri(Http.BaseAddress!, $"api/cvs/{cvId}/file").AbsoluteUri;
+
+    // ----- SCApp v2: thành viên bộ CV (tách khỏi nhãn HR) -----
+
+    /// <summary>Hồ sơ có thể thêm vào bộ: lọc theo Job, giai đoạn, ngày ứng tuyển (lịch Việt Nam) và chỉ hồ sơ chưa thuộc bộ.</summary>
+    public Task<ApiResult<List<LabelCandidateDto>>> GetSetCandidatesAsync(int id, CandidatePickerFilter filter, CancellationToken ct = default) =>
+        GetAsync<List<LabelCandidateDto>>($"api/evaluation-sets/{id}/applications{filter.Query}", ct);
+
+    public Task<ApiResult<AddEvaluationSetMembersResult>> AddMembersAsync(int id, AddEvaluationSetMembersRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<AddEvaluationSetMembersResult>($"api/evaluation-sets/{id}/members", request, ct);
+
+    public Task<ApiResult<RemoveEvaluationSetMemberResult>> RemoveMemberAsync(int id, int applicationId, CancellationToken ct = default) =>
+        DeleteJsonAsync<RemoveEvaluationSetMemberResult>($"api/evaluation-sets/{id}/members/{applicationId}", ct);
+
+    /// <summary>Đưa một thành viên về "Chưa đánh giá" (bỏ nhãn, vẫn giữ trong bộ).</summary>
+    public Task<ApiResult<bool>> ClearLabelAsync(int id, int applicationId, CancellationToken ct = default) =>
+        DeleteAsync($"api/evaluation-sets/{id}/labels/{applicationId}", ct);
     public Task<ApiResult<List<PromptVersionDto>>> GetVersionsAsync(CancellationToken ct = default) =>
         GetAsync<List<PromptVersionDto>>("api/prompts", ct);
 

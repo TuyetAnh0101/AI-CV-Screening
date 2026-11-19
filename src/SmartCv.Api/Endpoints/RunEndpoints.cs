@@ -5,6 +5,7 @@ using SmartCv.Core.Scoring;
 using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
+using SmartCv.Core.Evaluation;
 using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Core.Privacy;
@@ -345,6 +346,13 @@ public static partial class RunEndpoints
             .ToListAsync(ct);
 
         var reviews = await EvaluationReviewReader.ReadAsync(db.Evaluations.Where(e => e.RunId == id && e.Application.JobId == job.JobId), flagOptions.Value, ct);
+        // SCApp v2: cờ thủ công đang mở (theo hồ sơ, không theo lượt chấm) + ghi chú bị ẩn với CV đã ẩn danh.
+        var applicationIds = rows.Select(r => r.ApplicationId).Distinct().ToList();
+        var manualFlags = (await db.ApplicationFlags.AsNoTracking()
+                .Where(f => applicationIds.Contains(f.ApplicationId) && f.Status == ManualFlagStatuses.Open)
+                .Select(f => new { Flag = f, Anonymized = f.Application.Cv.AnonymizedAt != null }).ToListAsync(ct))
+            .GroupBy(f => f.Flag.ApplicationId)
+            .ToDictionary(g => g.Key, g => ManualFlagEndpoints.ToDto(g.OrderByDescending(f => f.Flag.CreatedAt).First().Flag, g.First().Anonymized));
 
         // Xếp hạng: điểm cao trước; bằng điểm thì cùng hạng (1, 2, 2, 4); chưa có điểm đứng cuối, không có hạng
         var scored = rows.Where(r => r.Status == EvaluationStatuses.Completed && r.FinalScore is not null).OrderByDescending(r => r.FinalScore).ThenBy(r => r.FileName).ThenBy(r => r.EvaluationId).ToList();
@@ -356,6 +364,8 @@ public static partial class RunEndpoints
             {
                 Rank = x.Rank,
                 ReviewFlags = reviews[x.Row.EvaluationId].Flags,
+                ManualFlag = manualFlags.GetValueOrDefault(x.Row.ApplicationId),
+                NeedsReview = ReviewAttention.NeedsReview(x.Row.Stage, reviews[x.Row.EvaluationId].Flags.Count > 0, manualFlags.ContainsKey(x.Row.ApplicationId)),
                 EvaluationId = x.Row.EvaluationId,
                 ApplicationId = x.Row.ApplicationId,
                 Stage = x.Row.Stage,
@@ -395,6 +405,8 @@ public static partial class RunEndpoints
             StageCounts = ApplicationStages.All.ToDictionary(s => s, s => items.Count(i => i.Stage == s)),
             PassCount = items.Count(i => i.Rank != null && i.PredictedPass == true),
             FlaggedCount = items.Count(i => i.ReviewFlags.Count > 0),
+            ManualFlagCount = items.Count(i => i.ManualFlag is not null),
+            NeedsReviewCount = items.Count(i => i.NeedsReview),
             Items = items
         });
     }

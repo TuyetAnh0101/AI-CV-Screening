@@ -1,0 +1,80 @@
+@*
+    SCApp v2: hộp thoại cờ "Cần kiểm tra lại" do HR gắn thủ công.
+      Create  → chọn lý do, ghi chú (bắt buộc với "Khác"), người thao tác → Xác nhận lưu.
+      Resolve → ghi chú xử lý (không bắt buộc) → Đánh dấu đã xử lý.
+      Reopen  → ghi chú (không bắt buộc) → Mở lại.
+    Không đổi giai đoạn tuyển dụng. Mở hộp thoại KHÔNG lưu gì; chỉ nút xác nhận mới gửi API.
+*@
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Evaluation
+
+<div class="flag-backdrop" @onclick="CancelAsync"></div>
+<div class="flag-dialog" role="dialog" aria-modal="true" aria-labelledby="flag-dialog-title" @onkeydown="KeyAsync">
+    <header>
+        <h2 id="flag-dialog-title" tabindex="-1" @ref="title">@Title</h2>
+        <p>@Subject</p>
+    </header>
+    <div class="flag-body">
+        @if (Mode == FlagMode.Create)
+        {
+            <fieldset>
+                <legend>Lý do cần kiểm tra</legend>
+                @foreach (var reason in ManualFlagReasons.All)
+                {
+                    <label class="reason @(selected == reason ? "on" : null)"><input type="radio" name="flag-reason" value="@reason" checked="@(selected == reason)" disabled="@Busy" @onchange="() => selected = reason" />@ManualFlagReasons.DisplayName(reason)</label>
+                }
+            </fieldset>
+        }
+        else if (Current is { } flag)
+        {
+            <div class="current-flag"><strong>@flag.ReasonName</strong>@if (!string.IsNullOrWhiteSpace(flag.Note)) { <p>@(Anonymous ? "Ghi chú được ẩn khi bật Ẩn danh." : flag.Note)</p> }<small>Gắn bởi @(Anonymous ? "HR" : flag.CreatedBy) · @RankingView.VnTime(flag.CreatedAt)</small></div>
+        }
+        <label class="field">@(Mode == FlagMode.Resolve ? "Cách đã xử lý (không bắt buộc)" : Mode == FlagMode.Reopen ? "Lý do mở lại (không bắt buộc)" : selected == ManualFlagReasons.Other ? "Ghi chú (bắt buộc với lý do Khác)" : "Ghi chú (không bắt buộc)")
+            <textarea id="flag-note" maxlength="500" rows="3" disabled="@Busy" @bind="note" @bind:event="oninput" placeholder="Ví dụ: Cần đối chiếu số năm kinh nghiệm với CV gốc"></textarea>
+        </label>
+        <label class="field">Người thao tác<input id="flag-actor" maxlength="100" disabled="@Busy" @bind="actor" @bind:event="oninput" placeholder="HR - Họ tên" /></label>
+        @if (error is not null) { <p class="flag-error" role="alert">@error</p> }
+        @if (Error is not null) { <p class="flag-error" role="alert">@Error</p> }
+        <p class="flag-hint">Cờ chỉ đánh dấu để kiểm tra lại, không đổi giai đoạn tuyển dụng. Người thao tác và thời điểm được ghi vào lịch sử.</p>
+    </div>
+    <footer>
+        <button id="flag-cancel" type="button" class="btn sc-btn-secondary" disabled="@Busy" @onclick="CancelAsync">Hủy</button>
+        <button id="flag-confirm" type="button" class="btn sc-btn-primary" disabled="@Busy" @onclick="ConfirmAsync">@(Busy ? "Đang lưu..." : Mode switch { FlagMode.Resolve => "Đánh dấu đã xử lý", FlagMode.Reopen => "Mở lại cờ", _ => "Xác nhận đánh dấu" })</button>
+    </footer>
+</div>
+
+@code {
+    public enum FlagMode { Create, Resolve, Reopen }
+    public sealed record FlagDecision(FlagMode Mode, string? Reason, string? Note, string Actor);
+    public sealed record FlagRequest(FlagMode Mode, ManualFlagDto? Flag);
+    [Parameter] public FlagMode Mode { get; set; }
+    [Parameter] public string Subject { get; set; } = "";
+    [Parameter] public ManualFlagDto? Current { get; set; }
+    [Parameter] public string? Actor { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool Anonymous { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback<FlagDecision> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private string? selected, note, actor, error;
+    private ElementReference title;
+    private bool focused;
+    private string Title => Mode switch { FlagMode.Resolve => "Đánh dấu đã xử lý", FlagMode.Reopen => "Mở lại cờ kiểm tra", _ => "Đánh dấu cần kiểm tra" };
+
+    protected override void OnInitialized() => actor = Actor;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focused || !RendererInfo.IsInteractive) return;
+        focused = true;
+        try { await title.FocusAsync(); } catch (InvalidOperationException) { } catch (Microsoft.JSInterop.JSException) { }
+    }
+    private async Task ConfirmAsync()
+    {
+        if (Busy) return;
+        error = Mode == FlagMode.Create ? ManualFlagRules.ValidateCreate(selected, note, actor) : ManualFlagRules.ValidateChange(note, actor);
+        if (error is not null) return;
+        await OnConfirm.InvokeAsync(new(Mode, selected, note, actor!.Trim()));
+    }
+    private Task CancelAsync() => Busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+    private Task KeyAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CancelAsync() : Task.CompletedTask;
+}

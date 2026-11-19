@@ -19,3 +19,6 @@ select:focus-visible,button:focus-visible { outline:3px solid var(--brand-accent
 .failed .progress-track span { background:var(--sc-error); }
 .accuracy strong { font-size:22px; color:var(--brand-hover); }
 @media(max-width:600px) { .prompt-test { padding:18px 14px; } .test-form button { width:100%; } }
+
+/* SCApp v2: nhãn bước */
+.eyebrow { color:var(--brand); text-transform:uppercase; letter-spacing:.06em; font-size:12px; font-weight:700; margin:0 0 4px; }

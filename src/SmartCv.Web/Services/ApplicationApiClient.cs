@@ -19,6 +19,19 @@ public sealed class ApplicationApiClient(HttpClient http, ILogger<ApplicationApi
     public Task<ApiResult<BulkStageChangeResponse>> ChangeStagesAsync(BulkChangeStageRequest request, CancellationToken ct = default) =>
         PostJsonAsync<BulkStageChangeResponse>("api/applications/stage", request, ct);
 
+    // ----- SCApp v2: cờ "Cần kiểm tra lại" thủ công (không đổi giai đoạn) -----
+    public Task<ApiResult<ApplicationFlagsResponse>> GetFlagsAsync(int applicationId, CancellationToken ct = default) =>
+        GetAsync<ApplicationFlagsResponse>($"api/applications/{applicationId}/flags", ct);
+
+    public Task<ApiResult<ManualFlagDto>> CreateFlagAsync(int applicationId, CreateManualFlagRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<ManualFlagDto>($"api/applications/{applicationId}/flags", request, ct);
+
+    public Task<ApiResult<ManualFlagDto>> ResolveFlagAsync(int flagId, ChangeManualFlagRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<ManualFlagDto>($"api/applications/flags/{flagId}/resolve", request, ct);
+
+    public Task<ApiResult<ManualFlagDto>> ReopenFlagAsync(int flagId, ChangeManualFlagRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<ManualFlagDto>($"api/applications/flags/{flagId}/reopen", request, ct);
+
     /// <summary>Chuẩn bị và gửi các CV đã tải thành công, có tích chọn, vào một Job đang tuyển.
     /// Chưa gọi từ nút Phân tích trên trang Upload; luồng điều phối nút đó thuộc B6.</summary>
     public Task<ApiResult<CreateApplicationsResponse>> AssignSelectedAsync(

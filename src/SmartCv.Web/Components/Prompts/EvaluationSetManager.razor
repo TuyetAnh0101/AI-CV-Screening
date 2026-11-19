@@ -1,166 +1,413 @@
+@*
+    SCApp v2 – Bộ CV đánh giá theo 5 bước:
+      1 Tạo bộ (nút "+ Tạo bộ CV" luôn hiện) · 2 Chọn CV đã quét (lọc, chọn nhiều, không upload lại, không trùng)
+      3 Gán nhãn HR (Đạt / Không đạt / Chưa đánh giá) · 4 Kiểm tra bộ · 5 Chạy Prompt Test (PromptTestPanel bên dưới).
+    Thành viên bộ tách khỏi nhãn HR (EvaluationSetMembers). Nhãn KHÔNG BAO GIỜ lấy từ dự đoán AI.
+    EvaluationSetWorkspace giữ danh sách bộ và luồng tạo an toàn (không POST lại khi chưa xác minh).
+    SetMembersWorkspace giữ thành viên, bản nháp nhãn và bước chọn CV của bộ đang mở.
+*@
+@using SmartCv.Core.Constants
+@using SmartCv.Web.Components.Upload
 @implements IDisposable
 @inject PromptApiClient Api
 @inject IServiceProvider Services
 
-<section id="evaluation-set-manager" class="set-manager" aria-labelledby="set-manager-title" aria-busy="@(Busy ? "true" : "false")">
-    <header><div><p class="eyebrow">1 · Chuẩn bị dữ liệu tham chiếu</p><h2 id="set-manager-title">Bộ CV &amp; nhãn HR</h2><p>Dùng hồ sơ đã upload và gán vào Job. HR tự đọc CV và đưa ra kết luận; nhãn này là chuẩn để kiểm tra AI.</p></div><button type="button" class="btn sc-btn-secondary" disabled="@Busy" @onclick="LoadAsync">@(Busy ? "Đang tải..." : "Tải lại danh sách bộ")</button></header>
-    @if (!workspace.Loaded && workspace.Busy) { <p role="status">Đang tải bộ CV đánh giá...</p> }
-    @if (workspace.Error is not null) { <p class="set-error" role="alert">@workspace.Error</p> }
-    @if (workspace.Message is not null) { <p class="set-success" role="status">@workspace.Message</p> }
-    @if (Services.GetService<AnonymityState>() is not null) { <AnonymousToggle /> }
-    @if (workspace.Loaded && workspace.Sets.Count == 0) { <p class="set-empty">Chưa có bộ CV đánh giá. Tạo tên bộ ở bước 1, sau đó gán nhãn ở bước 2. Không cần upload lại CV đã có.</p> }
-    <details open="@(workspace.Sets.Count == 0)">
-        <summary>Tạo bộ CV đánh giá</summary>
-        <fieldset disabled="@(Busy || workspace.CreationUncertain)">
-            <legend class="visually-hidden">Bước 1: Lưu tên bộ CV</legend>
-            <div class="set-form"><label>Tên bộ CV<input aria-label="Tên bộ CV mới" maxlength="150" @bind="workspace.Name" placeholder="Ví dụ: Bộ CV Backend đợt 1" /></label><label>Mô tả<input aria-label="Mô tả bộ CV" maxlength="500" @bind="workspace.Description" placeholder="Mục tiêu và phạm vi đánh giá" /></label><button type="button" class="btn sc-btn-primary" @onclick="CreateAsync">1. Lưu tên bộ</button></div>
-            <p class="hint">Tên bộ được lưu trước. Bạn có thể quay lại hoàn thiện nhãn; bộ chưa có đủ hai loại nhãn sẽ chưa chạy được.</p>
-        </fieldset>
-    </details>
-    @if (workspace.Sets.Count > 0)
+<section id="evaluation-set-manager" class="set-studio" aria-labelledby="set-manager-title" aria-busy="@(Busy ? "true" : "false")">
+    <header class="studio-head">
+        <div>
+            <p class="eyebrow">Dữ liệu tham chiếu cho Prompt Test</p>
+            <h2 id="set-manager-title">Bộ CV đánh giá</h2>
+            <p>Tạo nhiều bộ, chọn CV đã quét và để HR tự kết luận Đạt / Không đạt. Không cần upload lại CV đã có.</p>
+        </div>
+        <div class="head-actions">
+            @if (Services.GetService<AnonymityState>() is not null) { <AnonymousToggle /> }
+            <button type="button" class="btn sc-btn-secondary" disabled="@Busy" @onclick="ReloadAsync">Tải lại</button>
+            <button id="create-set-open" type="button" class="btn sc-btn-primary" disabled="@(Busy || creatingOpen)" @onclick="OpenCreate"><span aria-hidden="true">+</span> Tạo bộ CV</button>
+        </div>
+    </header>
+
+    @if (!sets.Loaded && sets.Busy) { <p role="status" class="muted-line">Đang tải bộ CV đánh giá...</p> }
+    @if (sets.Error is not null) { <p class="set-error" role="alert">@sets.Error</p> }
+    @if (sets.Message is not null) { <p class="set-success" role="status">@sets.Message</p> }
+
+    @if (creatingOpen || (sets.Loaded && sets.Sets.Count == 0))
     {
-        <div class="set-form"><label>Bộ CV cần gán nhãn<select aria-label="Bộ CV cần gán nhãn" value="@workspace.SetId" disabled="@Busy" @onchange="SelectAsync"><option value="0">Chọn bộ để tiếp tục</option>@foreach (var set in workspace.Sets) { <option value="@set.EvaluationSetId">@set.Name · @set.LabelCount nhãn</option> }</select></label></div>
+        <form class="create-card" @onsubmit="CreateAsync" @onsubmit:preventDefault="true" aria-labelledby="create-set-title">
+            <fieldset disabled="@(Busy || sets.CreationUncertain)">
+                <legend id="create-set-title"><span class="step-no" aria-hidden="true">1</span> Tạo bộ CV mới</legend>
+                @if (sets.Loaded && sets.Sets.Count == 0)
+                {
+                    <p class="set-empty">Chưa có bộ CV đánh giá. Tạo bộ đầu tiên, sau đó chọn các CV đã quét trong hệ thống. Không cần upload lại CV đã có.</p>
+                }
+                <div class="form-grid">
+                    <label>Tên bộ CV <span class="req">*</span><input aria-label="Tên bộ CV mới" maxlength="150" required @bind="sets.Name" placeholder="Ví dụ: Backend junior – đợt 11/2026" /></label>
+                    <label>Vị trí tuyển dụng<select aria-label="Vị trí tuyển dụng của bộ" value="@(sets.JobId?.ToString() ?? "")" @onchange="e => sets.JobId = int.TryParse(e.Value?.ToString(), out var j) ? j : null"><option value="">Nhiều vị trí / chưa chọn</option>@foreach (var job in jobs) { <option value="@job.JobId">@job.Title@(job.IsActive ? "" : " · Ngừng tuyển")</option> }</select></label>
+                    <label class="wide">Mục tiêu<input aria-label="Mục tiêu của bộ CV" maxlength="300" @bind="sets.Purpose" placeholder="Ví dụ: Kiểm tra prompt mới có bỏ sót ứng viên tốt không" /></label>
+                    <label class="wide">Mô tả<input aria-label="Mô tả bộ CV" maxlength="500" @bind="sets.Description" placeholder="Phạm vi, nguồn CV, lưu ý cho người gán nhãn" /></label>
+                </div>
+                <div class="form-actions">
+                    @if (sets.Sets.Count > 0) { <button type="button" class="btn sc-btn-secondary" @onclick="() => creatingOpen = false">Hủy</button> }
+                    <button id="create-set-submit" type="submit" class="btn sc-btn-primary">Tạo bộ CV</button>
+                </div>
+                <p class="hint">Bộ chưa hoàn thiện vẫn được lưu; bạn có thể quay lại thêm hồ sơ và gán nhãn sau.</p>
+            </fieldset>
+        </form>
     }
+
+    @if (sets.Sets.Count > 0)
+    {
+        <div class="set-list" role="list" aria-label="Các bộ CV đánh giá">
+            @foreach (var set in sets.Sets)
+            {
+                var on = set.EvaluationSetId == members.SetId;
+                var ready = set.LabelCount > 0 && set.PassCount > 0 && set.PassCount < set.LabelCount && set.UnreadyCount == 0;
+                <button type="button" role="listitem" class="set-card @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")" disabled="@Busy" @onclick="() => SelectAsync(set.EvaluationSetId)">
+                    <span class="set-card-top"><strong>@set.Name</strong><span class="chip @(ready ? "chip-ok" : "chip-warn")">@(ready ? "Sẵn sàng chạy" : "Chưa đủ điều kiện")</span></span>
+                    <span class="set-card-meta">@(set.JobTitle ?? "Nhiều vị trí") · @set.RunCount lượt chạy</span>
+                    <span class="set-card-stats"><b>@set.MemberCount</b> hồ sơ · <b>@set.LabelCount</b> đã gán · <b>@set.UnlabeledCount</b> chưa gán</span>
+                </button>
+            }
+        </div>
+    }
+
     @if (pendingSet is not null)
     {
-        <p role="alert" class="set-empty">Chuyển bộ hoặc tải lại sẽ bỏ nhãn/ghi chú đang soạn. <button type="button" class="btn sc-btn-secondary" @onclick="() => pendingSet = null">Giữ bản nháp</button> <button type="button" class="btn sc-btn-secondary" @onclick="DiscardAsync">Bỏ bản nháp và tiếp tục</button></p>
+        <div role="alert" class="set-empty discard">Bạn có nhãn/ghi chú chưa lưu trong bộ đang mở. <button type="button" class="btn sc-btn-secondary" @onclick="() => pendingSet = null">Giữ bản nháp</button> <button type="button" class="btn sc-btn-secondary" @onclick="DiscardAndSwitchAsync">Bỏ bản nháp và chuyển</button></div>
     }
-    @if (workspace.Selected is { } selected && workspace.CandidatesLoaded)
+
+    @if (members.Detail is { } detail && members.Loaded)
     {
-        <h3>2. Chọn hồ sơ &amp; gán nhãn — @selected.Name</h3>
-        <p class="hint">Chỉ hồ sơ trích xuất hoàn tất và có nội dung chữ mới được chọn. Mỗi dòng là một CV ứng tuyển một Job. Không có lựa chọn Đạt/Không đạt mặc định cho hồ sơ mới.</p>
-        @if (workspace.Rows.Count == 0) { <p class="set-empty">Chưa có hồ sơ ứng tuyển. <a href="/upload">Tải CV và gán vào Job</a>, rồi quay lại tải lại danh sách bộ.</p> }
-        else
-        {
-            <fieldset disabled="@(Busy || CurrentSuggestions.Busy || CurrentSuggestions.NeedsVerification)" @onchange="MarkDirty">
-                <legend class="visually-hidden">Nhãn HR cho hồ sơ</legend>
-                <div class="set-scroll" tabindex="0" role="region" aria-label="Hồ sơ gán nhãn HR, có thể cuộn ngang"><table><thead><tr><th scope="col">Hồ sơ / Job</th><th scope="col">Trích xuất</th><th scope="col">Kết luận HR</th><th scope="col">Ghi chú HR</th></tr></thead><tbody>
-                    @foreach (var row in workspace.Rows)
+        var readiness = members.Readiness;
+        <div class="set-workspace">
+            <div class="workspace-title">
+                <div><h3>@detail.Name</h3><p>@(detail.JobTitle ?? "Nhiều vị trí")@(string.IsNullOrWhiteSpace(detail.Purpose) ? "" : " · " + detail.Purpose) · Phiên bản bộ @detail.Revision</p></div>
+                <a class="btn sc-btn-secondary" href="#prompt-test-panel">Bước 5 · Chạy Prompt Test ↓</a>
+            </div>
+
+            <section class="readiness" aria-label="Bước 4: Kiểm tra bộ dữ liệu">
+                <h4><span class="step-no" aria-hidden="true">4</span> Kiểm tra bộ dữ liệu</h4>
+                <dl class="stat-row">
+                    <div><dt>Tổng hồ sơ</dt><dd>@readiness.MemberCount</dd></div>
+                    <div><dt>Đã gán nhãn</dt><dd>@readiness.LabeledCount</dd></div>
+                    <div class="ok"><dt>Đạt</dt><dd>@readiness.PassCount</dd></div>
+                    <div class="bad"><dt>Không đạt</dt><dd>@readiness.FailCount</dd></div>
+                    <div><dt>Chưa gán nhãn</dt><dd>@readiness.UnlabeledCount</dd></div>
+                    <div class="@(readiness.NotReadyCount > 0 ? "warn" : null)"><dt>Chưa đủ điều kiện</dt><dd>@readiness.NotReadyCount</dd></div>
+                </dl>
+                @if (readiness.CanRun) { <p class="ready-line" role="status"><span aria-hidden="true">✓</span> Bộ đủ điều kiện chạy Prompt Test trên @readiness.LabeledCount hồ sơ có nhãn.</p> }
+                @foreach (var blocker in readiness.Blockers) { <p class="blocker">@blocker</p> }
+                @foreach (var warning in readiness.Warnings) { <p class="hint warn-line">@warning</p> }
+            </section>
+
+            <div class="tabs" role="tablist" aria-label="Thao tác với bộ CV">
+                <button id="tab-labels" type="button" role="tab" aria-selected="@(tab == Tab.Labels ? "true" : "false")" class="tab @(tab == Tab.Labels ? "on" : null)" @onclick="() => tab = Tab.Labels"><span class="step-no" aria-hidden="true">3</span> Gán nhãn HR <span class="count">@readiness.MemberCount</span></button>
+                <button id="tab-picker" type="button" role="tab" aria-selected="@(tab == Tab.Picker ? "true" : "false")" class="tab @(tab == Tab.Picker ? "on" : null)" @onclick="OpenPickerAsync"><span class="step-no" aria-hidden="true">2</span> Thêm CV đã quét</button>
+            </div>
+
+            @if (members.Error is not null) { <p class="set-error" role="alert">@members.Error</p> }
+            @if (members.Message is not null) { <p class="set-success" role="status">@members.Message</p> }
+            @foreach (var w in members.Warnings) { <p class="hint warn-line">@w</p> }
+
+            @if (tab == Tab.Picker)
+            {
+                <section class="picker" role="tabpanel" aria-labelledby="tab-picker">
+                    <p class="hint">Mỗi dòng là một <strong>hồ sơ ứng tuyển</strong> (một CV nộp vào một Job). Một CV nộp hai Job là hai hồ sơ khác nhau. CV chưa gán Job chưa có hồ sơ: hãy mở <a href="/cvs">Kho CV</a> để gán Job trước.</p>
+                    <div class="picker-filters">
+                        <label class="grow">Tìm kiếm<input type="search" aria-label="Tìm hồ sơ để thêm" placeholder="@(Anonymity.Enabled ? "Tên file đã ẩn; tìm theo vị trí" : "Tên ứng viên, tên file, vị trí")" @bind="members.Search" @bind:event="oninput" /></label>
+                        <label>Vị trí<select aria-label="Lọc theo vị trí" value="@(members.Filter.JobId?.ToString() ?? "")" @onchange="e => FilterAsync(members.Filter with { JobId = int.TryParse(e.Value?.ToString(), out var j) ? j : null })"><option value="">Tất cả vị trí</option>@foreach (var job in jobs) { <option value="@job.JobId">@job.Title</option> }</select></label>
+                        <label>Giai đoạn<select aria-label="Lọc theo giai đoạn" value="@(members.Filter.Stage ?? "")" @onchange="e => FilterAsync(members.Filter with { Stage = e.Value?.ToString() is { Length: > 0 } s ? s : null })"><option value="">Tất cả</option>@foreach (var stage in ApplicationStages.All) { <option value="@stage">@StageText.Name(stage)</option> }</select></label>
+                        <label>Từ ngày<input type="date" aria-label="Ứng tuyển từ ngày" value="@Date(members.Filter.From)" @onchange="e => FilterAsync(members.Filter with { From = ParseDate(e.Value) })" /></label>
+                        <label>Đến ngày<input type="date" aria-label="Ứng tuyển đến ngày" value="@Date(members.Filter.To)" @onchange="e => FilterAsync(members.Filter with { To = ParseDate(e.Value) })" /></label>
+                    </div>
+                    @if (!members.CandidatesLoaded && members.Busy) { <p role="status" class="muted-line">Đang tải hồ sơ...</p> }
+                    else if (members.CandidatesLoaded)
                     {
-                        <tr @key="row.Candidate.ApplicationId"><th scope="row"><strong>@Anonymity.Name(row.Candidate.CandidateName, null, row.Candidate.ApplicationId)</strong><span>@Anonymity.FileName(row.Candidate.FileName)</span><span>@row.Candidate.JobTitle · Hồ sơ #@row.Candidate.ApplicationId</span>@if (row.Candidate.CvId != Guid.Empty && row.Eligible) { <a href="@Api.EvaluationCvUrl(row.Candidate.CvId)" target="_blank" rel="noopener">Đọc CV gốc ↗</a> }</th>
-                            <td>@row.Candidate.ExtractionStatus<span>@(row.Eligible ? "Sẵn sàng" : "Chưa đủ điều kiện: cần đọc lại hoặc chờ trích xuất")</span></td>
-                            <td><select aria-label="@($"Nhãn HR hồ sơ {row.Candidate.ApplicationId}")" disabled="@(!row.Eligible)" @bind="row.Choice">@if (!row.HadLabel) { <option value="">Chưa gán nhãn</option> }<option value="pass">Đạt</option><option value="fail">Không đạt</option></select></td>
-                            <td>@if (Anonymity.Enabled) { <span>Ghi chú được ẩn. Tắt Ẩn danh để xem hoặc sửa.</span> } else { <textarea aria-label="@($"Ghi chú HR hồ sơ {row.Candidate.ApplicationId}")" maxlength="500" rows="2" disabled="@(!row.Eligible)" @bind="row.Note"></textarea> }</td></tr>
+                        var visible = members.VisibleCandidates(c => Anonymity.Name(c.CandidateName, null, c.ApplicationId)).ToList();
+                        var selectable = visible.Where(c => !c.IsAnonymized).ToList();
+                        <div class="picker-bar">
+                            <label class="check"><input type="checkbox" aria-label="Chọn mọi hồ sơ đang hiển thị" checked="@(selectable.Count > 0 && selectable.All(c => members.Selected.Contains(c.ApplicationId)))" disabled="@(Busy || selectable.Count == 0)" @onchange="e => ToggleAll(selectable, e)" /> Chọn tất cả đang hiển thị (@selectable.Count)</label>
+                            <span class="muted-line">Đã chọn <strong>@members.Selected.Count</strong></span>
+                        </div>
+                        @if (visible.Count == 0)
+                        {
+                            <p class="set-empty">Không còn hồ sơ phù hợp bộ lọc (hồ sơ đã thuộc bộ được ẩn). <a href="/upload">Tải CV và gán Job</a> hoặc đổi bộ lọc.</p>
+                        }
+                        else
+                        {
+                            <ul class="pick-list">
+                                @foreach (var c in visible)
+                                {
+                                    var reason = c.IsAnonymized ? "Đã ẩn danh" : c.ExtractionStatus != "Completed" ? "CV chưa đọc xong" : !c.HasExtractedText ? "CV không có chữ" : null;
+                                    <li @key="c.ApplicationId" class="@(members.Selected.Contains(c.ApplicationId) ? "on" : null)">
+                                        <label class="pick">
+                                            <input type="checkbox" aria-label="@($"Chọn hồ sơ {c.ApplicationId} để thêm")" checked="@members.Selected.Contains(c.ApplicationId)" disabled="@(Busy || c.IsAnonymized)" @onchange="e => members.Toggle(c.ApplicationId, e.Value is true)" />
+                                            <span class="pick-main"><strong>@Anonymity.Name(c.CandidateName, null, c.ApplicationId)</strong><span>@Anonymity.FileName(c.FileName)</span></span>
+                                            <span class="pick-meta"><span>@c.JobTitle · Hồ sơ #@c.ApplicationId</span><span><i class="stage-dot @StageText.Css(c.Stage)" aria-hidden="true"></i> @StageText.Name(c.Stage) · @RankingView.VnTime(c.AppliedAt)</span></span>
+                                            @if (reason is not null) { <span class="chip chip-warn">@reason</span> }
+                                        </label>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        <div class="sticky-actions">
+                            <label>Người thao tác<input aria-label="Người thêm hồ sơ" maxlength="100" @bind="actor" placeholder="HR - Họ tên" /></label>
+                            <button id="add-members" type="button" class="btn sc-btn-primary" disabled="@(Busy || members.Selected.Count == 0)" @onclick="AddAsync">Thêm @members.Selected.Count hồ sơ vào bộ</button>
+                        </div>
                     }
-                </tbody></table></div>
-                <div class="set-form"><label>Người gán nhãn<input aria-label="Người gán nhãn HR" maxlength="100" @bind="workspace.LabeledBy" /></label><button type="button" class="btn sc-btn-primary" @onclick="SaveAsync">Lưu nhãn HR &amp; dùng bộ CV</button></div>
-                <p class="hint">Lưu bổ sung/cập nhật nhãn, không xóa nhãn cũ. Sửa nhãn HR có thể tính lại tỷ lệ của các lượt cũ; điểm AI đã lưu được giữ nguyên.</p>
-            </fieldset>
-        }
-        <LabelSuggestionPanel @key="workspace.SetId" State="CurrentSuggestions" Disabled="Busy" OnSaved="SuggestionsSavedAsync" OnDirtyChanged="SuggestionsDirtyAsync" />
-        <p class="hint">Bản nháp nhãn thủ công và lựa chọn đề xuất được giữ riêng theo từng bộ CV trong phiên trang này.</p>
+                </section>
+            }
+            else
+            {
+                <section class="labels" role="tabpanel" aria-labelledby="tab-labels">
+                    @if (members.Rows.Count == 0)
+                    {
+                        <div class="set-empty"><strong>Bộ chưa có hồ sơ.</strong> Chọn CV đã quét để thêm vào bộ. <button type="button" class="btn sc-btn-primary" @onclick="OpenPickerAsync">Chọn CV đã quét</button></div>
+                    }
+                    else
+                    {
+                        <p class="hint">HR tự đọc CV gốc và kết luận. Kết quả AI không được dùng làm nhãn. Hồ sơ chưa sẵn sàng chưa gán nhãn được.</p>
+                        <ul class="member-list">
+                            @foreach (var row in members.Rows)
+                            {
+                                var m = row.Member;
+                                <li @key="m.ApplicationId" class="member @(row.IsDirty ? "dirty" : null) @(m.IsReady ? null : "not-ready")">
+                                    <div class="member-who">
+                                        <strong>@Anonymity.Name(m.CandidateName, null, m.ApplicationId)</strong>
+                                        <span>@Anonymity.FileName(m.FileName) · @m.JobTitle · Hồ sơ #@m.ApplicationId</span>
+                                        @if (!m.IsReady) { <span class="chip chip-warn">@m.NotReadyReason</span> }
+                                        <span class="member-links">
+                                            @if (m.IsReady && m.CvId != Guid.Empty) { <a href="@Api.EvaluationCvUrl(m.CvId)" target="_blank" rel="noopener">Xem CV gốc ↗</a> }
+                                            @if (m.CvId != Guid.Empty && !m.IsAnonymized) { <button id="@($"text-{m.ApplicationId}")" type="button" class="link-btn" @onclick="() => textMember = m">Nội dung đã trích xuất</button> }
+                                        </span>
+                                    </div>
+                                    <fieldset class="label-choice" disabled="@(Busy || !m.IsReady)">
+                                        <legend class="visually-hidden">Nhãn HR hồ sơ @m.ApplicationId</legend>
+                                        @foreach (var (value, text) in Choices)
+                                        {
+                                            <label class="seg @(row.Choice == value ? "on" : null) seg-@(value.Length == 0 ? "none" : value)"><input type="radio" name="@($"label-{m.ApplicationId}")" value="@value" aria-label="@($"{text} – hồ sơ {m.ApplicationId}")" checked="@(row.Choice == value)" @onchange="() => { row.Choice = value; NotifyDirty(); }" />@text</label>
+                                        }
+                                    </fieldset>
+                                    <div class="member-note">
+                                        @if (Anonymity.Enabled) { <span class="muted-line">Ghi chú được ẩn khi bật Ẩn danh.</span> }
+                                        else if (row.Choice.Length > 0) { <textarea aria-label="@($"Ghi chú HR hồ sơ {m.ApplicationId}")" maxlength="500" rows="2" disabled="@(Busy || !m.IsReady)" placeholder="Nhận xét của HR (không bắt buộc)" @bind="row.Note" @bind:event="oninput" @bind:after="NotifyDirty"></textarea> }
+                                        @if (m.LabeledBy is not null && m.LabeledAt is { } labeledAt) { <span class="muted-line">Gán bởi @m.LabeledBy · @RankingView.VnTime(labeledAt)</span> }
+                                    </div>
+                                    <button type="button" class="icon-btn" aria-label="@($"Bỏ hồ sơ {m.ApplicationId} khỏi bộ")" title="Bỏ khỏi bộ" disabled="@Busy" @onclick="() => confirmRemove = m.ApplicationId">✕</button>
+                                    @if (confirmRemove == m.ApplicationId)
+                                    {
+                                        <div class="inline-confirm" role="alert">Bỏ hồ sơ #@m.ApplicationId khỏi bộ? Nhãn HR của hồ sơ trong bộ này cũng bị bỏ; kết quả chấm đã lưu không thay đổi. <button type="button" class="btn sc-btn-secondary" @onclick="() => confirmRemove = null">Hủy</button> <button type="button" class="btn bulk-reject" @onclick="() => RemoveAsync(m.ApplicationId)">Bỏ khỏi bộ</button></div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        <div class="sticky-actions">
+                            <label>Người gán nhãn<input aria-label="Người gán nhãn HR" maxlength="100" @bind="actor" placeholder="HR - Họ tên" /></label>
+                            <span class="muted-line">@(members.DirtyCount == 0 ? "Không có thay đổi" : $"{members.DirtyCount} thay đổi chưa lưu")</span>
+                            <button id="save-labels" type="button" class="btn sc-btn-primary" disabled="@(Busy || members.DirtyCount == 0)" @onclick="SaveAsync">Lưu nhãn HR</button>
+                        </div>
+                    }
+                    <LabelSuggestionPanel @key="members.SetId" State="CurrentSuggestions" Disabled="Busy" OnSaved="SuggestionsSavedAsync" OnDirtyChanged="_ => NotifyDirty()" />
+                </section>
+            }
+        </div>
     }
 </section>
 
+@if (textMember is { } shown)
+{
+    <ExtractedTextDialog @key="shown.ApplicationId" CvId="shown.CvId" FileName="@Anonymity.FileName(shown.FileName)" FileUrl="@Api.EvaluationCvUrl(shown.CvId)"
+                         ReturnFocusIds="@([$"text-{shown.ApplicationId}", "tab-labels"])" OnClose="() => textMember = null" />
+}
+
 @code {
+    private enum Tab { Labels, Picker }
+    private static readonly (string Value, string Text)[] Choices = [(SetMembersWorkspace.Pass, "Đạt"), (SetMembersWorkspace.Fail, "Không đạt"), (SetMembersWorkspace.Unlabeled, "Chưa đánh giá")];
     [Parameter] public EventCallback<int> OnSaved { get; set; }
     [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
     [Parameter] public int? EvaluationSetId { get; set; }
     [Parameter] public EventCallback<int> OnSetChanged { get; set; }
-    private EvaluationSetWorkspace workspace = default!;
+    private EvaluationSetWorkspace sets = default!;
+    private SetMembersWorkspace members = default!;
     private AnonymityState Anonymity => anonymity ??= Services.GetService<AnonymityState>() ?? new();
     private AnonymityState? anonymity;
     private readonly CancellationTokenSource lifetime = new();
-    private bool dirty, creating;
-    private bool Busy => creating || workspace.Busy;
-    private int? pendingSet;
-    private readonly Dictionary<int, EvaluationSetWorkspace> workspaces = [];
     private readonly Dictionary<int, LabelSuggestionWorkspace> suggestions = [];
-    private readonly HashSet<int> dirtySets = [];
-    private int switchGeneration;
-    private CancellationTokenSource? switchRequest;
-    private LabelSuggestionWorkspace CurrentSuggestions => GetSuggestions(workspace.SetId);
-    private LabelSuggestionWorkspace GetSuggestions(int id)
-    { if (!suggestions.TryGetValue(id, out var state)) suggestions[id] = state = new(Api, id); return state; }
-    protected override async Task OnInitializedAsync() { Anonymity.Changed += PrivacyChanged; workspace = new(Api); await LoadAsync(); }
+    private List<JobDto> jobs = [];
+    private bool creatingOpen, creating, lastDirty;
+    private int? pendingSet, confirmRemove;
+    private EvaluationSetMemberDto? textMember;
+    private string actor = "";
+    private Tab tab = Tab.Labels;
+    private bool Busy => creating || sets.Busy || members.Busy;
+    private LabelSuggestionWorkspace CurrentSuggestions
+    { get { if (!suggestions.TryGetValue(members.SetId, out var s)) suggestions[members.SetId] = s = new(Api, members.SetId); return s; } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Anonymity.Changed += PrivacyChanged;
+        sets = new(Api); members = new(Api);
+        if (Services.GetService<HrActorState>() is { } hr) { try { await hr.EnsureLoadedAsync(); } catch { } actor = hr.Actor ?? ""; }
+        var jobLoad = LoadJobsAsync();
+        await sets.LoadAsync(lifetime.Token);
+        await jobLoad;
+        if (EvaluationSetId is > 0 && sets.Sets.Any(s => s.EvaluationSetId == EvaluationSetId)) await OpenSetAsync(EvaluationSetId.Value, notify: false);
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        if (!creating && EvaluationSetId is > 0 && EvaluationSetId != workspace.SetId && workspace.Loaded)
-            await SwitchPreservingDraftAsync(EvaluationSetId.Value);
+        if (!creating && sets.Loaded && EvaluationSetId is > 0 && EvaluationSetId != members.SetId && !members.IsDirty
+            && sets.Sets.Any(s => s.EvaluationSetId == EvaluationSetId))
+            await OpenSetAsync(EvaluationSetId.Value, notify: false);
     }
-    private Task NotifyDirtyAsync() => OnDirtyChanged.InvokeAsync(dirtySets.Count > 0 || suggestions.Values.Any(s => s.Draft.HasPending || s.NeedsVerification || s.Saving));
-    private async Task MarkDirty() { dirty = true; dirtySets.Add(workspace.SetId); await NotifyDirtyAsync(); }
-    private async Task ClearDirty() { dirty = false; dirtySets.Remove(workspace.SetId); await NotifyDirtyAsync(); }
-    private Task SuggestionsDirtyAsync(bool _) => NotifyDirtyAsync();
-    private async Task SwitchPreservingDraftAsync(int id)
+
+    private async Task LoadJobsAsync()
     {
-        var current = ++switchGeneration;
-        switchRequest?.Cancel(); switchRequest?.Dispose();
-        switchRequest = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-        var ct = switchRequest.Token;
-        if (workspace.SetId > 0) workspaces[workspace.SetId] = workspace;
-        if (workspaces.TryGetValue(id, out var cached)) workspace = cached;
-        else
+        if (Services.GetService<JobApiClient>() is not { } jobApi) return;
+        var result = await jobApi.GetJobsAsync(activeOnly: false, lifetime.Token);
+        if (result.IsSuccess) jobs = result.Data!;
+    }
+
+    private void OpenCreate() { creatingOpen = true; }
+
+    private async Task ReloadAsync()
+    {
+        if (Busy) return;
+        try
         {
-            var next = new EvaluationSetWorkspace(Api);
-            try { await next.LoadAsync(ct); await next.SelectAsync(id, ct); }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-            if (current != switchGeneration || next.SetId != id) return;
-            workspaces[id] = workspace = next;
+            await sets.LoadAsync(lifetime.Token);
+            if (members.SetId > 0) await members.LoadAsync(members.SetId, lifetime.Token);
+            if (tab == Tab.Picker) await members.LoadCandidatesAsync(lifetime.Token);
         }
-        dirty = dirtySets.Contains(id); pendingSet = null;
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
     }
-    private async Task SuggestionsSavedAsync(int id)
-    {
-        var target = workspace.SetId == id ? workspace : workspaces.GetValueOrDefault(id);
-        if (target is not null) await target.RefreshLabelsPreservingDraftAsync(lifetime.Token);
-        await NotifyDirtyAsync();
-        await OnSaved.InvokeAsync(id);
-    }
-    private async Task LoadAsync()
-    {
-        if (creating) return;
-        if (dirty) { pendingSet = 0; return; }
-        try { await workspace.LoadAsync(lifetime.Token); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-    }
+
     private async Task CreateAsync()
     {
-        if (creating || workspace.Busy) return;
-        if (dirty) { pendingSet = -1; return; }
+        if (Busy) return;
         creating = true;
         try
         {
-            // A cached workspace must continue to belong to its original set.
-            if (workspace.SetId > 0)
+            await sets.CreateAsync(lifetime.Token);
+            if (sets.Error is null && sets.SetId > 0)
             {
-                workspaces[workspace.SetId] = workspace;
-                var next = new EvaluationSetWorkspace(Api) { Name = workspace.Name, Description = workspace.Description, LabeledBy = workspace.LabeledBy };
-                await next.LoadAsync(lifetime.Token); workspace = next;
+                creatingOpen = false;
+                creating = false;
+                await OpenSetAsync(sets.SetId, notify: true, force: true);
+                tab = Tab.Picker;
+                await members.LoadCandidatesAsync(lifetime.Token);
             }
-            await workspace.CreateAsync(lifetime.Token);
-            if (workspace.SetId > 0) await OnSetChanged.InvokeAsync(workspace.SetId);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         finally { creating = false; }
     }
-    private async Task SelectAsync(ChangeEventArgs e)
+
+    private async Task SelectAsync(int id)
     {
-        if (creating) return;
-        if (!int.TryParse(e.Value?.ToString(), out var id) || id == workspace.SetId) return;
-        try { await SwitchPreservingDraftAsync(id); if (workspace.SetId == id) await OnSetChanged.InvokeAsync(id); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        if (Busy || id == members.SetId) return;
+        if (members.IsDirty) { pendingSet = id; return; }
+        await OpenSetAsync(id, notify: true);
     }
-    private async Task DiscardAsync()
+
+    private async Task DiscardAndSwitchAsync()
     {
-        var id = pendingSet; pendingSet = null; await ClearDirty();
-        if (id == 0) await LoadAsync(); else if (id == -1) await CreateAsync(); else await SelectAsync(new() { Value = id });
+        if (pendingSet is not { } id) return;
+        pendingSet = null;
+        await OpenSetAsync(id, notify: true, force: true);
     }
-    private async Task SaveAsync()
+
+    private async Task OpenSetAsync(int id, bool notify, bool force = false)
     {
-        if (creating) return;
-        var target = workspace;
-        if (GetSuggestions(target.SetId).Busy || GetSuggestions(target.SetId).NeedsVerification) return;
+        if (!force && members.IsDirty) return;
+        confirmRemove = null;
         try
         {
-            if (await target.SaveAsync(lifetime.Token))
-            {
-                dirtySets.Remove(target.SetId); if (ReferenceEquals(target, workspace)) dirty = false;
-                var panel = GetSuggestions(target.SetId);
-                if (panel.Draft.Data is not null) await panel.LoadAsync();
-                await NotifyDirtyAsync(); await OnSaved.InvokeAsync(target.SetId);
-            }
+            await members.LoadAsync(id, lifetime.Token);
+            if (members.SetId == id && tab == Tab.Picker) await members.LoadCandidatesAsync(lifetime.Token);
+            NotifyDirty();
+            if (notify && members.SetId == id) await OnSetChanged.InvokeAsync(id);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
     }
+
+    private async Task OpenPickerAsync()
+    {
+        tab = Tab.Picker;
+        if (!members.CandidatesLoaded)
+        {
+            if (members.Filter.JobId is null && members.Detail?.JobId is { } job) members.Filter = members.Filter with { JobId = job };
+            try { await members.LoadCandidatesAsync(lifetime.Token); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        }
+    }
+
+    private async Task FilterAsync(CandidatePickerFilter filter)
+    {
+        members.Filter = filter;
+        try { await members.LoadCandidatesAsync(lifetime.Token); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private void ToggleAll(List<LabelCandidateDto> visible, ChangeEventArgs e)
+    {
+        foreach (var c in visible) members.Toggle(c.ApplicationId, e.Value is true);
+    }
+
+    private async Task AddAsync()
+    {
+        try
+        {
+            await RememberActorAsync();
+            if (await members.AddSelectedAsync(actor, lifetime.Token)) await AfterWriteAsync();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private async Task RemoveAsync(int applicationId)
+    {
+        confirmRemove = null;
+        try { if (await members.RemoveAsync(applicationId, lifetime.Token)) await AfterWriteAsync(); }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await RememberActorAsync();
+            var saved = await members.SaveLabelsAsync(actor, lifetime.Token);
+            if (saved || members.Message is not null) await AfterWriteAsync();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private async Task SuggestionsSavedAsync(int id)
+    {
+        if (id == members.SetId) await members.LoadAsync(id, lifetime.Token);
+        await AfterWriteAsync();
+    }
+
+    /// <summary>Danh sách bộ (số liệu thẻ) và PromptTestPanel/lịch sử phải thấy ngay số mới.</summary>
+    private async Task AfterWriteAsync()
+    {
+        await sets.LoadAsync(lifetime.Token);
+        NotifyDirty();
+        await OnSaved.InvokeAsync(members.SetId);
+    }
+
+    private async Task RememberActorAsync()
+    {
+        if (Services.GetService<HrActorState>() is { } hr && !string.IsNullOrWhiteSpace(actor) && actor.Trim().Length <= 100)
+            try { await hr.SetAsync(actor.Trim()); } catch { /* lưu tên chỉ là tiện ích */ }
+    }
+
+    private void NotifyDirty()
+    {
+        var dirty = members.IsDirty || suggestions.Values.Any(s => s.Draft.HasPending || s.NeedsVerification || s.Saving);
+        if (dirty == lastDirty) return;
+        lastDirty = dirty;
+        _ = OnDirtyChanged.InvokeAsync(dirty);
+    }
+
+    private static string Date(DateOnly? d) => d?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+    private static DateOnly? ParseDate(object? value) => DateOnly.TryParseExact(value?.ToString(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) ? d : null;
     private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() { Anonymity.Changed -= PrivacyChanged; lifetime.Cancel(); switchRequest?.Cancel(); switchRequest?.Dispose(); lifetime.Dispose(); foreach (var state in suggestions.Values) state.Dispose(); }
+    public void Dispose() { Anonymity.Changed -= PrivacyChanged; lifetime.Cancel(); lifetime.Dispose(); foreach (var s in suggestions.Values) s.Dispose(); }
 }

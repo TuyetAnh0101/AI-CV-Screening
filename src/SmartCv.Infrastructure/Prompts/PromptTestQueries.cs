@@ -27,7 +27,9 @@ public static class PromptTestQueries
                 FailedItems = r.FailedItems,
                 CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc),
                 CompletedAt = r.CompletedAt == null ? null : DateTime.SpecifyKind(r.CompletedAt.Value, DateTimeKind.Utc),
-                AccuracyPercent = r.Status == RunStatuses.Completed ? r.AccuracyPercent : null
+                AccuracyPercent = r.Status == RunStatuses.Completed ? r.AccuracyPercent : null,
+                EvaluationSetRevision = r.EvaluationSetRevision,
+                CurrentSetRevision = r.EvaluationSet!.Revision
             });
     }
 
@@ -112,6 +114,7 @@ public static class PromptTestQueries
             TotalLabeledCount = accuracy?.Total, CorrectCount = accuracy?.Correct, MissedCount = accuracy?.Missed,
             WrongPickCount = accuracy?.WrongPick, UnscoredCount = accuracy?.Unscored, KeywordOnlyCount = accuracy?.KeywordOnly,
             Matrix = ToMatrix(accuracy), AccuracyLow = accuracy?.Confidence95?.Low, AccuracyHigh = accuracy?.Confidence95?.High,
+            EvaluationSetRevision = run.EvaluationSetRevision, CurrentSetRevision = info.CurrentSetRevision,
             Items = items.Select(WithOutcome).ToList()
         };
         if (transaction is not null) await transaction.CommitAsync(ct);
@@ -160,14 +163,14 @@ public static class PromptTestQueries
         return accuracy;
     }
 
-    private sealed record RunInfo(EvaluationRun Run, string PromptVersionName, string EvaluationSetName);
+    private sealed record RunInfo(EvaluationRun Run, string PromptVersionName, string EvaluationSetName, int CurrentSetRevision);
     private sealed record RunPrediction(int RunId, LabeledPrediction Prediction);
 
     private static IQueryable<RunInfo> RunInfos(SmartCvDbContext db, int setId, int? runId = null)
     {
         var runs = db.EvaluationRuns.Where(r => r.RunType == RunTypes.PromptTest && r.EvaluationSetId == setId);
         if (runId is not null) runs = runs.Where(r => r.RunId == runId);
-        return runs.Select(r => new RunInfo(r, r.PromptVersion.VersionName, r.EvaluationSet!.Name));
+        return runs.Select(r => new RunInfo(r, r.PromptVersion.VersionName, r.EvaluationSet!.Name, r.EvaluationSet!.Revision));
     }
 
     private static async Task<List<RunPrediction>> LoadPredictionsAsync(
@@ -198,7 +201,8 @@ public static class PromptTestQueries
             AccuracyPercent = accuracy?.AccuracyPercent, TotalLabeledCount = accuracy?.Total,
             CorrectCount = accuracy?.Correct, MissedCount = accuracy?.Missed, WrongPickCount = accuracy?.WrongPick,
             UnscoredCount = accuracy?.Unscored, KeywordOnlyCount = accuracy?.KeywordOnly,
-            Matrix = ToMatrix(accuracy), AccuracyLow = accuracy?.Confidence95?.Low, AccuracyHigh = accuracy?.Confidence95?.High
+            Matrix = ToMatrix(accuracy), AccuracyLow = accuracy?.Confidence95?.Low, AccuracyHigh = accuracy?.Confidence95?.High,
+            EvaluationSetRevision = run.EvaluationSetRevision, CurrentSetRevision = info.CurrentSetRevision
         };
     }
 
