@@ -19,19 +19,20 @@ namespace SmartCv.Tests;
 internal static class TestSupport
 {
     /// <summary>A28: fixture nghiệp vụ cho các filter privacy A39/A43 vốn đòi HR khi auth được cấu hình.</summary>
-    internal static async Task<HttpClient> ClientWithSyntheticHrAsync(WebApplicationFactory<Program> factory)
+    internal static async Task<HttpClient> ClientWithSyntheticHrAsync(WebApplicationFactory<Program> factory, string role = "HR")
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         var user = new SmartCv.Core.Entities.User
         {
-            Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Synthetic regression HR",
-            Role = SmartCv.Core.Auth.UserRoles.Hr, IsActive = true, CreatedAt = DateTime.UtcNow
+            Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Synthetic regression " + role,
+            Role = role, IsActive = true, CreatedAt = DateTime.UtcNow
         };
         user.PasswordHash = new Microsoft.AspNetCore.Identity.PasswordHasher<SmartCv.Core.Entities.User>()
             .HashPassword(user, Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
         if (db.Database.IsSqlServer())
         {
+            RegressionIdentity.ValidateTarget(db);
             // Tạo identity của fixture ngoài các interceptor lỗi/cancellation đang kiểm tra nghiệp vụ CV.
             await using var identityDb = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>().UseSqlServer(db.Database.GetConnectionString()).Options);
             identityDb.Add(user); await identityDb.SaveChangesAsync();
@@ -68,7 +69,7 @@ internal static class TestSupport
     /// (CV vừa tải lên luôn là Pending). Test cần đọc chữ thật thì truyền <paramref name="extractionWorker"/> = true.
     public static WebApplicationFactory<Program> ApiFactory(
         string environment = "Development", Dictionary<string, string?>? settings = null, string? dbName = null,
-        bool extractionWorker = false)
+        bool extractionWorker = false, bool authenticated = true)
     {
         var database = dbName ?? Guid.NewGuid().ToString("N");
         return new StartupGatedApiFactory().WithWebHostBuilder(builder =>
@@ -84,6 +85,12 @@ internal static class TestSupport
 
             builder.ConfigureTestServices(services =>
             {
+                if (authenticated)
+                {
+                    services.AddSingleton<RegressionIdentity>();
+                    services.RemoveAll<Microsoft.AspNetCore.Authentication.IAuthenticationHandlerProvider>();
+                    services.AddScoped<Microsoft.AspNetCore.Authentication.IAuthenticationHandlerProvider, RegressionAuthenticationHandlerProvider>();
+                }
                 services.RemoveAll<DbContextOptions<SmartCvDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<SmartCvDbContext>>();
                 services.AddDbContext<SmartCvDbContext>(o => o.UseInMemoryDatabase(database));
@@ -139,6 +146,7 @@ internal static class TestSupport
 /// </summary>
 internal class StartupGatedApiFactory : WebApplicationFactory<Program>
 {
+    internal const string RegressionActor = "Synthetic regression Admin";
     // Khóa test ngẫu nhiên chỉ trong RAM của test host; không dùng User Secrets thật.
     internal static readonly string JwtTestKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
     protected override void ConfigureWebHost(IWebHostBuilder builder)

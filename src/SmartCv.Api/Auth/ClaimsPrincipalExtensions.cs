@@ -19,7 +19,8 @@ public static class ClaimsPrincipalExtensions
         var value = user.FindFirstValue(SmartCvClaims.Name);
         if (string.IsNullOrWhiteSpace(value)) value = user.GetEmail();
         if (string.IsNullOrWhiteSpace(value)) return "Không rõ";
-        value = value.Trim();
+        value = string.Concat(value.Where(c => !char.IsControl(c))).Trim();
+        if (value.Length == 0) value = user.GetEmail()?.Trim() ?? "Không rõ";
         if (value.Length <= MaxActorLength) return value;
         var length = char.IsHighSurrogate(value[MaxActorLength - 1]) ? MaxActorLength - 1 : MaxActorLength;
         return value[..length];

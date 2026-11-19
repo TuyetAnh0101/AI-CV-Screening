@@ -18,10 +18,9 @@ namespace SmartCv.Api.Endpoints;
 /// </summary>
 public static class PromptTestEndpoints
 {
-    public static WebApplication MapPromptTestEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapPromptTestEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/prompt-tests").WithTags("PromptTests");
         group.MapPost("/", StartAsync).WithName("StartPromptTest")
             .RequireRateLimiting(CvUploadRateLimiting.PolicyName);

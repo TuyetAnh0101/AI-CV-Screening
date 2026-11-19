@@ -158,10 +158,15 @@ public class JobCrudEndpointTests
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]
-    public void Enabling_unauthenticated_HR_outside_Development_is_refused_by_existing_startup_guard(string environment)
+    public async Task A29_protects_Job_writes_outside_Development(string environment)
     {
         using var factory = Factory(environment, true);
-        Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        using var client = factory.CreateClient();
+        await SeedAsync(factory);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/jobs", JobRulesTests.Valid("A29 Production synthetic"))).StatusCode);
+        using var secured = TestSupport.ApiFactory(environment, new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
+        using var anonymous = secured.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/jobs", JobRulesTests.Valid())).StatusCode);
     }
 
     [Fact]

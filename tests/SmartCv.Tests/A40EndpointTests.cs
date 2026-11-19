@@ -176,8 +176,9 @@ public class A40EndpointTests(ITestOutputHelper output)
         Assert.Empty(detail.ReviewFlags); Assert.Equal(69, detail.FinalScore);
         using var disabled = TestSupport.ApiFactory(settings: new() { ["CvUpload:Endpoint:Enabled"] = "false", ["Scoring:WorkerEnabled"] = "false" });
         using var closed = disabled.CreateClient(); Assert.Equal(HttpStatusCode.NotFound, (await closed.GetAsync("/api/runs/1/compare?evaluationIds=1,2")).StatusCode);
-        using var prod = TestSupport.ApiFactory("Production", new() { ["CvUpload:Endpoint:Enabled"] = "true", ["Scoring:WorkerEnabled"] = "false" });
-        Assert.Contains("xác thực", Assert.Throws<InvalidOperationException>(() => prod.CreateClient()).Message);
+        using var prod = TestSupport.ApiFactory("Production", new() { ["CvUpload:Endpoint:Enabled"] = "true", ["Scoring:WorkerEnabled"] = "false" }, authenticated: false);
+        using var anonymous = prod.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/runs/1/compare?evaluationIds=1,2")).StatusCode);
     }
 
     private sealed class ReadCounter : DbCommandInterceptor

@@ -110,7 +110,7 @@ public class A43EndpointTests
         using var scope = f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         var logs = await db.CandidateDataRequests.OrderBy(r => r.RequestId).ToListAsync();
-        Assert.Equal(2, logs.Count); Assert.Equal("hr.test", logs[0].HandledBy); Assert.Equal("HR", logs[1].HandledBy);
+        Assert.Equal(2, logs.Count); Assert.All(logs, l => Assert.Equal("Synthetic regression HR", l.HandledBy));
         Assert.Equal(2, logs[0].CvIds!.Split(',').Length);
         Assert.DoesNotContain("thu.xoa", JsonSerializer.Serialize(logs));
         Assert.Equal(1, await db.Candidates.CountAsync()); Assert.Equal(2, await db.Cvs.CountAsync());
@@ -122,19 +122,17 @@ public class A43EndpointTests
     [Theory]
     [InlineData("handledBy=one&handledBy=two")]
     [InlineData("handledBy=%0A")]
-    public async Task Invalid_export_query_returns_400_without_journal(string query)
+    public async Task Legacy_export_actor_query_is_ignored_and_journal_uses_authenticated_operator(string query)
     {
         var (factory, client, seed) = await StartAsync(); using var f = factory; using var c = client;
         using var response = await client.GetAsync($"/api/candidates/{seed.CandidateId}/data-export?{query}");
-        await JsonAsync(response, HttpStatusCode.BadRequest);
+        await JsonAsync(response, HttpStatusCode.OK);
         using var scope = f.Services.CreateScope();
-        Assert.Empty(await scope.ServiceProvider.GetRequiredService<SmartCvDbContext>().CandidateDataRequests.ToListAsync());
+        Assert.Equal("Synthetic regression HR", (await scope.ServiceProvider.GetRequiredService<SmartCvDbContext>().CandidateDataRequests.SingleAsync()).HandledBy);
     }
 
     [Theory]
     [InlineData(false, "hr.test", null, "confirm")]
-    [InlineData(true, null, null, "handledBy")]
-    [InlineData(true, " ", null, "handledBy")]
     public async Task Erase_requires_explicit_confirmation_and_operator_without_changes(bool confirm, string? actor, string? note, string field)
     {
         var (factory, client, seed) = await StartAsync(); using var f = factory; using var c = client;
@@ -241,8 +239,12 @@ public class A43EndpointTests
         using var erase = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
         Assert.Equal(expected == 200 ? 503 : expected, (int)erase.StatusCode);
         using var detail = await client.GetAsync($"/api/candidates/{seed.CandidateId}");
-        var data = await JsonAsync(detail, HttpStatusCode.OK);
-        Assert.Equal(expected == 200 ? 1 : 0, data.GetProperty("dataRequests").GetArrayLength());
+        if (expected == 200)
+        {
+            var data = await JsonAsync(detail, HttpStatusCode.OK);
+            Assert.Single(data.GetProperty("dataRequests").EnumerateArray());
+        }
+        else await JsonAsync(detail, (HttpStatusCode)expected);
     }
 
     [Theory]
@@ -265,7 +267,7 @@ public class A43EndpointTests
             var role = Request.Headers["X-A43-Role"].FirstOrDefault();
             if (role is null) return Task.FromResult(AuthenticateResult.NoResult());
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(
-                new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "synthetic"), new Claim(ClaimTypes.Role, role)], Scheme.Name)), Scheme.Name)));
+                new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "1"), new Claim("name", "synthetic"), new Claim(ClaimTypes.Name, "synthetic"), new Claim(ClaimTypes.Role, role)], Scheme.Name)), Scheme.Name)));
         }
     }
 
@@ -303,7 +305,7 @@ public class A43EndpointTests
     }
 
     [Theory]
-    [InlineData(101, 0, 400)]
+    [InlineData(101, 0, 503)] // Client identity is ignored; InMemory erasure still fails closed.
     [InlineData(5, 501, 400)]
     [InlineData(100, 500, 503)]
     public async Task Erase_checks_operator_and_note_length_before_any_write(int actorLength, int noteLength, int status)
@@ -315,11 +317,12 @@ public class A43EndpointTests
     }
 
     [Fact]
-    public async Task Export_rejects_an_overlong_operator_instead_of_silently_truncating()
+    public async Task Export_ignores_an_overlong_client_operator_and_uses_current_account()
     {
         var (factory, client, seed) = await StartAsync(); using var f = factory; using var c = client;
         using var response = await client.GetAsync($"/api/candidates/{seed.CandidateId}/data-export?handledBy=" + new string('a', 101));
-        await JsonAsync(response, HttpStatusCode.BadRequest);
+        var json = await JsonAsync(response, HttpStatusCode.OK);
+        Assert.Equal("Synthetic regression HR", json.GetProperty("exportedBy").GetString());
     }
 
     private sealed class SaveFault(bool timeout) : SaveChangesInterceptor

@@ -57,6 +57,7 @@ public sealed class BulkStageChangeResponse
 public sealed class ApplicationEventDto
 {
     public long EventId { get; init; }
+    public int? UserId { get; init; } // NULL for historical events before account attribution.
     public int ApplicationId { get; init; }
     public string FromStage { get; init; } = string.Empty;
     public string ToStage { get; init; } = string.Empty;

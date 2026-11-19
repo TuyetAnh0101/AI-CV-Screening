@@ -130,12 +130,16 @@ public class CvUploadEndpointTests
     }
 
     [Fact]
-    public void Production_with_endpoint_enabled_fails_at_startup()
+    public async Task Production_with_endpoint_enabled_requires_a_real_account_and_accepts_authorized_uploads()
     {
         using var factory = CreateFactory("Production", new() { ["CvUpload:Endpoint:Enabled"] = "true" });
 
-        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
-        Assert.Contains("Không được bật API tải CV", ex.ToString());
+        using var client = factory.CreateClient();
+        using var result = await client.PostAsync("/api/cvs/upload", Files("cv.pdf"));
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+        using var anonymousFactory = TestSupport.ApiFactory("Production", new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
+        using var anonymous = anonymousFactory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync("/api/cvs/upload", Files("cv.pdf"))).StatusCode);
     }
 
     [Fact]

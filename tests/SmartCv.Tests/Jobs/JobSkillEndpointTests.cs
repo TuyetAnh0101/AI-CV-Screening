@@ -121,9 +121,13 @@ public class JobSkillEndpointTests
         using var factory = JobCrudEndpointTests.Factory(environment, enabled);
         if (environment != "Development" && enabled)
         {
-            // The existing upload startup guard rejects this configuration before any route is served.
-            var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
-            Assert.Contains("M6", exception.Message); return;
+            using var secured = TestSupport.ApiFactory(environment, new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
+            using var anonymous = secured.CreateClient(); anonymous.DefaultRequestHeaders.Add("X-HR", "admin");
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/jobs/1/skills", Skill())).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PutAsJsonAsync("/api/jobs/1/skills/csharp", new UpdateJobSkillRequest())).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PutAsJsonAsync("/api/jobs/1/skills/csharp/aliases", new ReplaceAliasesRequest())).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.DeleteAsync("/api/jobs/1/skills/csharp")).StatusCode);
+            return;
         }
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-HR", "admin");

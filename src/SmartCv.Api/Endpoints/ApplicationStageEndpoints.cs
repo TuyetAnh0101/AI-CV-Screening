@@ -10,6 +10,8 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Privacy;
+using System.Security.Claims;
+using SmartCv.Api.Auth;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -23,11 +25,10 @@ namespace SmartCv.Api.Endpoints;
 /// </summary>
 public static class ApplicationStageEndpoints
 {
-    public static WebApplication MapApplicationStageEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapApplicationStageEndpoints(this IEndpointRouteBuilder app)
     {
-        // Keep the existing A8/A13 personal-data access boundary until authentication is introduced.
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        // A29: role policy comes from MapSmartCvApi; preserve the feature flag.
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/applications").WithTags("Applications");
         group.MapGet("/stage-options", Options).WithName("StageOptions").WithSummary("Các giai đoạn và lý do loại");
         group.MapPatch("/{id:int}/stage", ChangeOneAsync).WithName("ChangeStage").WithSummary("Đổi giai đoạn một hồ sơ");
@@ -45,9 +46,9 @@ public static class ApplicationStageEndpoints
 
     // ---------- PATCH /api/applications/{id}/stage ----------
     private static async Task<Results<Ok<StageChangeResultDto>, ProblemHttpResult>> ChangeOneAsync(
-        int id, ChangeStageRequest request, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
+        int id, ChangeStageRequest request, ClaimsPrincipal user, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
     {
-        var (change, error) = StageChangeRules.Validate(request.ToStage, request.RejectReason, request.Note, request.Actor);
+        var (change, error) = StageChangeRules.Validate(request.ToStage, request.RejectReason, request.Note, user.ActorName());
         if (change is null) return Problem(400, "Dữ liệu không hợp lệ", error!);
         if (id <= 0 || (request.ExpectedStage is not null && !ApplicationStages.IsValid(request.ExpectedStage.Trim()))
             || request.ExpectedStageVersion == Guid.Empty)
@@ -66,7 +67,7 @@ public static class ApplicationStageEndpoints
             return TypedResults.Ok(Unchanged(app, "Hồ sơ đã ở giai đoạn này."));
 
         var now = DateTime.UtcNow;
-        var ev = Apply(app, change, now);
+        var ev = Apply(app, change, now, user.GetUserId()!.Value);
         db.ApplicationEvents.Add(ev);
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
         try
@@ -98,7 +99,7 @@ public static class ApplicationStageEndpoints
 
     // ---------- POST /api/applications/stage ----------
     private static async Task<Results<Ok<BulkStageChangeResponse>, ProblemHttpResult>> ChangeManyAsync(
-        BulkChangeStageRequest request, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
+        BulkChangeStageRequest request, ClaimsPrincipal user, SmartCvDbContext db, IOptions<RetentionOptions> retention, ILogger<ApplicationEvent> logger, CancellationToken ct)
     {
         var idError = StageChangeRules.ValidateIds(request.ApplicationIds);
         if (idError is not null) return Problem(400, "Danh sách hồ sơ không hợp lệ", idError);
@@ -106,7 +107,7 @@ public static class ApplicationStageEndpoints
             versions.Any(v => !request.ApplicationIds.Contains(v.Key) || v.Value == Guid.Empty))
             return Problem(400, "Dữ liệu không hợp lệ", "Phiên bản dự kiến phải thuộc hồ sơ đã chọn và không được rỗng.");
 
-        var (change, error) = StageChangeRules.Validate(request.ToStage, request.RejectReason, request.Note, request.Actor);
+        var (change, error) = StageChangeRules.Validate(request.ToStage, request.RejectReason, request.Note, user.ActorName());
         if (change is null) return Problem(400, "Dữ liệu không hợp lệ", error!);
 
         var ids = request.ApplicationIds;
@@ -122,7 +123,7 @@ public static class ApplicationStageEndpoints
         var events = new Dictionary<int, ApplicationEvent>();
         foreach (var p in plan.Where(p => p.Outcome == StageChangeOutcome.Changed).OrderBy(p => p.ApplicationId))
         {
-            var ev = Apply(apps[p.ApplicationId], change, now);
+            var ev = Apply(apps[p.ApplicationId], change, now, user.GetUserId()!.Value);
             db.ApplicationEvents.Add(ev);
             events[p.ApplicationId] = ev;
         }
@@ -203,7 +204,7 @@ public static class ApplicationStageEndpoints
 
         return TypedResults.Ok(rows.Select(e => new ApplicationEventDto
         {
-            EventId = e.EventId,
+            EventId = e.EventId, UserId = e.UserId,
             ApplicationId = e.ApplicationId,
             FromStage = e.FromStage,
             ToStage = e.ToStage,
@@ -217,7 +218,7 @@ public static class ApplicationStageEndpoints
     // ---------- dùng chung ----------
 
     /// <summary>Đổi giai đoạn trên entity và tạo dòng lịch sử tương ứng (chưa lưu).</summary>
-    private static ApplicationEvent Apply(Application app, StageChange change, DateTime now)
+    private static ApplicationEvent Apply(Application app, StageChange change, DateTime now, int userId)
     {
         var ev = new ApplicationEvent
         {
@@ -227,6 +228,7 @@ public static class ApplicationStageEndpoints
             RejectReason = change.RejectReason,
             Note = change.Note,
             Actor = change.Actor,
+            UserId = userId,
             CreatedAt = now
         };
         app.Stage = change.ToStage;

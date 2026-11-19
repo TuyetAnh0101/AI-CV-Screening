@@ -103,7 +103,7 @@ public class A39PrivacyTests
     public async Task Invalid_asOf_or_future_real_run_is_400(string value, bool dryRun)
     {
         using var factory = TestSupport.ApiFactory(settings: new() { ["Scoring:WorkerEnabled"] = "false" });
-        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory);
+        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory, role: "Admin");
         using var response = await http.PostAsync($"/api/retention/run?dryRun={dryRun}&asOf={Uri.EscapeDataString(value)}", null);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

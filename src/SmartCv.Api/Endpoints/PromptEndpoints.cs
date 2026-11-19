@@ -1,3 +1,4 @@
+using SmartCv.Api.Auth;
 using System.Linq.Expressions;
 using System.Data;
 using Microsoft.Data.SqlClient;
@@ -31,19 +32,18 @@ public static class PromptEndpoints
 {
     public const int MaxPromptLength = 20_000;   // ~5.000 token: đủ dài cho quy tắc chấm, không làm phình chi phí Gemini
 
-    public static WebApplication MapPromptEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapPromptEndpoints(this IEndpointRouteBuilder app)
     {
-        // Same development-only boundary as the CV/results APIs until authentication exists.
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        // A29: HR/Admin business group; explicit Admin policies protect prompt configuration.
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/prompts").WithTags("Prompts");
         group.MapGet("/", ListAsync).WithName("ListPrompts").WithSummary("Danh sách phiên bản prompt");
         group.MapGet("/active", ActiveAsync).WithName("GetActivePrompt").WithSummary("Phiên bản đang dùng");
         group.MapGet("/{id:int}", GetAsync).WithName("GetPrompt").WithSummary("Một phiên bản prompt");
-        group.MapPost("/", CreateAsync).WithName("CreatePrompt").WithSummary("Lưu thành phiên bản mới");
-        group.MapPost("/{id:int}/activate", ActivateAsync).WithName("ActivatePrompt").WithSummary("Kích hoạt một phiên bản");
+        group.MapPost("/", CreateAsync).WithName("CreatePrompt").RequireAuthorization(AuthPolicies.Admin).WithSummary("Lưu thành phiên bản mới");
+        group.MapPost("/{id:int}/activate", ActivateAsync).WithName("ActivatePrompt").RequireAuthorization(AuthPolicies.Admin).WithSummary("Kích hoạt một phiên bản");
         // A41: trả nội dung CV (đã che) và thông tin job nên nằm trong cùng chốt chặn Development ở trên
-        group.MapPost("/assembled-preview", AssembledPreviewAsync).WithName("PreviewAssembledPrompt")
+        group.MapPost("/assembled-preview", AssembledPreviewAsync).WithName("PreviewAssembledPrompt").RequireAuthorization(AuthPolicies.Admin)
             .WithSummary("Nội dung sẽ gửi Gemini cho một hồ sơ (đã che dữ liệu cá nhân); không gọi Gemini, không tốn lượt, không lưu")
             .WithMetadata(new RequestSizeLimitAttribute(PromptToolSupport.MaxRequestBytes))
             .WithDescription("Body JSON (UTF-8): { \"applicationId\": 5 } kèm \"systemPrompt\" (nháp) hoặc \"promptVersionId\"; " +

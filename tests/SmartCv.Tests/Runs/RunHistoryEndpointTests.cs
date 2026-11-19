@@ -188,7 +188,14 @@ public class RunHistoryEndpointTests
     public async Task Internal_routes_fail_closed_outside_Development_feature_gate(string environment, bool enabled)
     {
         using var factory = Factory(environment, enabled);
-        if (environment != "Development" && enabled) { Assert.Contains("M6", Assert.Throws<InvalidOperationException>(() => factory.CreateClient()).Message); return; }
+        if (environment != "Development" && enabled)
+        {
+            using var secured = TestSupport.ApiFactory(environment, new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
+            using var anonymous = secured.CreateClient(); anonymous.DefaultRequestHeaders.Add("X-HR", "admin");
+            foreach (var path in new[] { "/api/runs", "/api/runs?page=1", "/api/runs/1", "/api/runs/1/failures" })
+                Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
+            return;
+        }
         using var client = factory.CreateClient(); client.DefaultRequestHeaders.Add("X-HR", "admin");
         foreach (var path in new[] { "/api/runs", "/api/runs?page=1", "/api/runs/1", "/api/runs/1/failures" }) Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(path)).StatusCode);
     }

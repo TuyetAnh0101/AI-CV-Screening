@@ -7,6 +7,8 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Evaluation;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Prompts;
+using System.Security.Claims;
+using SmartCv.Api.Auth;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -29,9 +31,9 @@ public static partial class EvaluationSetEndpoints
 
     // ---------- POST /api/evaluation-sets/{id}/members ----------
     private static async Task<Results<Ok<AddEvaluationSetMembersResult>, ProblemHttpResult>> AddMembersAsync(
-        int id, AddEvaluationSetMembersRequest request, SmartCvDbContext db, CancellationToken ct)
+        int id, AddEvaluationSetMembersRequest request, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct)
     {
-        var actorError = EvaluationSetRules.ValidateActor(request.AddedBy, out var by);
+        var actorError = EvaluationSetRules.ValidateActor(user.ActorName(), out var by);
         if (actorError is not null) return Problem(400, "Thiếu người thao tác", actorError);
         var ids = request.ApplicationIds ?? [];
         if (ids.Count == 0) return Problem(400, "Chưa chọn hồ sơ", "Chọn ít nhất một hồ sơ để thêm vào bộ.");

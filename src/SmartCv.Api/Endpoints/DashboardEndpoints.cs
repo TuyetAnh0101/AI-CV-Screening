@@ -12,10 +12,10 @@ namespace SmartCv.Api.Endpoints;
 
 public static class DashboardEndpoints
 {
-    public static WebApplication MapDashboardEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapDashboardEndpoints(this IEndpointRouteBuilder app)
     {
         // Same temporary HR boundary as A35/A40 until M6 supplies real authorization.
-        if (!app.Environment.IsDevelopment() || !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
             return app;
         app.MapGet("/api/dashboard/summary", SummaryAsync).WithTags("Dashboard").WithName("DashboardSummary")
             .WithSummary("Tổng quan tuyển dụng theo Job và ngày Việt Nam")

@@ -13,7 +13,7 @@ public sealed class CvUploadEndpointOptions
 
     /// <summary>
     /// Bật endpoint. Mặc định TẮT (an toàn): appsettings.json để false, chỉ appsettings.Development.json bật true.
-    /// Khi chưa có xác thực (M6), bật ở môi trường khác Development sẽ bị chặn ngay lúc khởi động.
+    /// A29: bật ở môi trường nào cũng được; mọi API nghiệp vụ vẫn bắt buộc JWT và quyền HR/Admin (MapSmartCvApi).
     /// </summary>
     public bool Enabled { get; set; }
 

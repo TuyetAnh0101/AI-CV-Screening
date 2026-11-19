@@ -90,7 +90,7 @@ public class ApplicationStageEndpointTests
         var history = (await client.GetFromJsonAsync<List<ApplicationEventDto>>($"/api/applications/{id}/events"))!;
         Assert.Equal(2, history.Count);
         Assert.Equal(new[] { "NotEnoughExperience", "MissingSkills" }, history.Select(e => e.RejectReason));
-        Assert.All(history, e => { Assert.Equal("HR - Trần Thu Hà", e.Actor); Assert.Equal("Đủ kỹ năng", e.Note); });
+        Assert.All(history, e => { Assert.Equal(StartupGatedApiFactory.RegressionActor, e.Actor); Assert.NotNull(e.UserId); Assert.Equal("Đủ kỹ năng", e.Note); });
         Assert.All(history, e => Assert.Equal(DateTimeKind.Utc, e.CreatedAt.Kind));
     }
 
@@ -99,8 +99,7 @@ public class ApplicationStageEndpointTests
         [null, null, "HR", null], ["", null, "HR", null], ["Hired", null, "HR", null],
         ["reviewing", null, "HR", null], ["Rejected", null, "HR", null],
         ["Rejected", "invalid", "HR", null], ["Interview", "Duplicate", "HR", null],
-        ["Reviewing", null, null, null], ["Reviewing", null, "  ", null],
-        ["Reviewing", null, new string('a', 101), null], ["Reviewing", null, "HR", new string('a', 501)]
+        ["Reviewing", null, "HR", new string('a', 501)]
     };
 
     [Theory]

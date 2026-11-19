@@ -1,3 +1,5 @@
+using SmartCv.Api.Auth;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -31,13 +33,12 @@ public static partial class EvaluationSetEndpoints
     public const int MaxLabelsPerRequest = 2000;
     public const long MaxCsvBytes = 1024 * 1024;   // 1 MB ~ hàng chục nghìn dòng
 
-    public static WebApplication MapEvaluationSetEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapEvaluationSetEndpoints(this IEndpointRouteBuilder app)
     {
-        if (!app.Environment.IsDevelopment() ||
-            !app.Services.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/evaluation-sets").WithTags("EvaluationSets");
         group.MapGet("/", ListAsync).WithName("ListEvaluationSets").WithSummary("Các bộ CV đánh giá");
-        group.MapPost("/", CreateAsync).WithName("CreateEvaluationSet").WithSummary("Tạo bộ CV đánh giá");
+        group.MapPost("/", CreateAsync).WithName("CreateEvaluationSet").RequireAuthorization(AuthPolicies.Admin).WithSummary("Tạo bộ CV đánh giá");
         group.MapGet("/{id:int}", GetAsync).WithName("GetEvaluationSet").WithSummary("Một bộ CV đánh giá và các nhãn HR");
         group.MapGet("/{id:int}/applications", CandidatesAsync).WithName("ListLabelCandidates")
             .WithSummary("Hồ sơ có thể gán nhãn trong bộ này");
@@ -50,7 +51,7 @@ public static partial class EvaluationSetEndpoints
             // Keep Kestrel's existing total request limit; cap multipart parts and the CSV file separately.
             .WithFormOptions(multipartBodyLengthLimit: MaxCsvBytes + 64 * 1024)
             .RequireRateLimiting(CvUploadRateLimiting.PolicyName)
-            // Same boundary as CV upload: Development only, no authentication cookie yet.
+            // Bearer authentication does not use ambient browser cookies.
             .DisableAntiforgery();
         group.MapGet("/{id:int}/labels/template", TemplateAsync).WithName("HrLabelTemplate").WithSummary("File CSV mẫu");
         group.MapDelete("/{id:int}/labels/{applicationId:int}", DeleteLabelAsync).WithName("DeleteHrLabel")
@@ -236,12 +237,12 @@ public static partial class EvaluationSetEndpoints
 
     // ---------- PUT /api/evaluation-sets/{id}/labels ----------
     private static async Task<Results<Ok<SaveHrLabelsResult>, ProblemHttpResult>> SaveLabelsAsync(
-        int id, SaveHrLabelsRequest request, SmartCvDbContext db, CancellationToken ct) =>
-        await SaveCoreAsync(db, id, request.LabeledBy, request.Labels ?? [], [], ct);
+        int id, SaveHrLabelsRequest request, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct) =>
+        await SaveCoreAsync(db, id, user.ActorName(), request.Labels ?? [], [], ct);
 
     // ---------- POST /api/evaluation-sets/{id}/labels/import ----------
     private static async Task<Results<Ok<SaveHrLabelsResult>, ProblemHttpResult>> ImportCsvAsync(
-        int id, IFormFile? file, [FromForm] string? labeledBy, SmartCvDbContext db, CancellationToken ct)
+        int id, IFormFile? file, ClaimsPrincipal user, SmartCvDbContext db, CancellationToken ct)
     {
         if (!await db.EvaluationSets.AnyAsync(s => s.EvaluationSetId == id, ct)) return NotFoundSet(id);
         if (file is null || file.Length == 0) return Problem(400, "Chưa chọn file", "Gửi file CSV trong trường \"file\".");
@@ -308,7 +309,7 @@ public static partial class EvaluationSetEndpoints
         }
         if (errors.Count > 0) return Problem(400, "File CSV có lỗi", string.Join(" | ", errors.Take(20)));
 
-        return await SaveCoreAsync(db, id, labeledBy, labels, [$"Đã đọc {parsed.Rows.Count} dòng CSV có kết quả."], ct);
+        return await SaveCoreAsync(db, id, user.ActorName(), labels, [$"Đã đọc {parsed.Rows.Count} dòng CSV có kết quả."], ct);
     }
 
     // ---------- GET /api/evaluation-sets/{id}/labels/template ----------

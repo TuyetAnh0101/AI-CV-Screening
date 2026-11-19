@@ -10,6 +10,7 @@ using SmartCv.Core.Entities;
 using SmartCv.Infrastructure.Candidates;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Privacy;
+using SmartCv.Api.Auth;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -26,10 +27,7 @@ public static partial class CandidateEndpoints
     private static async Task<Results<FileContentHttpResult, ProblemHttpResult>> ExportAsync(
         int id, HttpContext http, SmartCvDbContext db, TimeProvider clock, CancellationToken ct)
     {
-        var values = http.Request.Query["handledBy"];
-        var actor = string.IsNullOrWhiteSpace(values.FirstOrDefault()) ? "HR" : values[0]!.Trim();
-        if (values.Count > 1 || values.Any(v => v?.Any(char.IsControl) == true) || actor.Length > CandidateErasePlan.MaxHandledByLength || actor.Any(char.IsControl))
-            return Invalid(new() { ["handledBy"] = ["Người xử lý tối đa 100 ký tự, không có ký tự điều khiển; chỉ gửi một lần."] });
+        var actor = http.User.ActorName();
         await using var write = await CandidateWriteScope.BeginAsync(db, ct);
         var c = await db.Candidates.AsNoTracking().FirstOrDefaultAsync(x => x.CandidateId == id, ct);
         if (c is null) return NotFound(id);
@@ -72,7 +70,7 @@ public static partial class CandidateEndpoints
                     }).ToList(),
                     Events = a.Events.OrderBy(e => e.CreatedAt).ThenBy(e => e.EventId).Select(e => new ApplicationEventDto
                     {
-                        EventId = e.EventId, ApplicationId = e.ApplicationId, FromStage = e.FromStage, ToStage = e.ToStage,
+                        EventId = e.EventId, UserId = e.UserId, ApplicationId = e.ApplicationId, FromStage = e.FromStage, ToStage = e.ToStage,
                         RejectReason = e.RejectReason, Note = e.Note, Actor = e.Actor, CreatedAt = e.CreatedAt
                     }).ToList(),
                     HrLabels = a.HrLabels.Select(l => new ExportHrLabelDto
@@ -124,10 +122,11 @@ public static partial class CandidateEndpoints
         var (request, error) = await CandidateRequestReader.ReadAsync<EraseCandidateRequest>(http.Request, ct);
         if (error is not null) return error;
         if (request is null) return InvalidBody();
+        request.HandledBy = http.User.ActorName(); // Accepted for compatibility, never used as an identity source.
         var errors = CandidateErasePlan.Validate(request.Confirm, request.HandledBy, request.Note);
         if (errors.Count > 0) return Invalid(errors);
         CandidateErasureAttempt attempt;
-        try { attempt = await erasure.EraseAsync(id, request, ct); }
+        try { attempt = await erasure.EraseAsync(id, request, ct, http.User.GetUserId()!.Value); }
         catch (CvPrivacyBusyException)
         {
             return TypedResults.Problem(statusCode: 503, title: "Dữ liệu đang được bảo vệ",

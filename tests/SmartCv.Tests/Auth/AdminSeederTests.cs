@@ -131,7 +131,7 @@ public class AdminSeederTests
     public async Task Program_binds_options_resolves_hasher_and_seeds_before_serving_requests()
     {
         var seed = SeedAdminPlanTests.Valid();
-        using var factory = TestSupport.ApiFactory(settings: new()
+        using var factory = TestSupport.ApiFactory(authenticated: false, settings: new()
         {
             ["Auth:SeedAdmin:Email"] = seed.Email, ["Auth:SeedAdmin:FullName"] = seed.FullName,
             ["Auth:SeedAdmin:Password"] = seed.Password
