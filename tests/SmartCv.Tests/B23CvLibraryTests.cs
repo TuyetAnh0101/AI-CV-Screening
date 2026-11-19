@@ -49,7 +49,9 @@ public class B23CvLibraryTests
         Assert.EndsWith("page=3&pageSize=20", valid.ApiQuery);
         Assert.Contains("search=Nguy%E1%BB%85n%20C%23%20%26%20SQL", valid.ApiQuery);
         Assert.Equal(valid, CvLibraryFilter.FromUri("https://app.test" + valid.Url).Filter);
-        Assert.Equal("/cvs", new CvLibraryFilter().Url);
+        // B24: Hồ sơ CV nằm trong trang Ứng viên; /cvs cũ chuyển hướng về đây và giữ bộ lọc.
+        Assert.Equal("/candidates?view=cvs", new CvLibraryFilter().Url);
+        Assert.Equal("/candidates?view=cvs&stage=Rejected&page=3", CandidatesView.LegacyCvsTarget("https://app.test/cvs?stage=Rejected&page=3"));
         Assert.Null(CvLibraryFilter.FromUri("https://app.test/cvs?search=" + new string('a', 101)).Filter);
     }
 
@@ -138,7 +140,9 @@ public class B23CvLibraryTests
         var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
         Assert.Contains("Nguyễn Văn An", html); Assert.Contains("cv-nguyen-van-an.pdf", html); Assert.Contains(">82<", html);
         Assert.DoesNotContain(">95<", html); Assert.DoesNotContain("PRIVATE-legacy", html); Assert.Contains("Hồ sơ đã ẩn danh", html);
-        Assert.Contains("Chưa chấm", html); Assert.Contains("+1 vị trí", html); Assert.DoesNotContain("/candidates/", html);
+        // B24: tên ứng viên đã gắn mở hồ sơ người (kèm from=cvs để quay lại đúng chế độ); hồ sơ đã ẩn danh không có liên kết.
+        Assert.Contains("Chưa chấm", html); Assert.Contains("+1 vị trí", html); Assert.Contains("?from=cvs", html);
+        Assert.DoesNotContain("PRIVATE-legacy", html);
     }
 
     [Fact]
@@ -174,7 +178,9 @@ public class B23CvLibraryTests
     public async Task Menu_adds_library_and_keeps_all_existing_destinations()
     {
         using var sp = Services(new Api(), new Nav()); var html = await Html<NavMenu>(sp);
-        foreach (var route in new[] { "cvs", "upload", "results", "prompts", "jobs", "runs" }) Assert.Contains($"href=\"{route}\"", html);
+        // B24: một mục "Ứng viên" thay cho "Kho CV" (không để hai mục chồng chức năng).
+        foreach (var route in new[] { "candidates", "upload", "results", "prompts", "jobs", "runs" }) Assert.Contains($"href=\"{route}\"", html);
+        Assert.DoesNotContain("href=\"cvs\"", html); Assert.DoesNotContain("Kho CV", html);
     }
 
     [Theory]

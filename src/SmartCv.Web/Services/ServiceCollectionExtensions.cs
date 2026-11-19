@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
         Add<PromptApiClient>(TimeSpan.FromSeconds(30)); // B12: xem và tạo phiên bản prompt
         Add<AiPreviewApiClient>(TimeSpan.FromMinutes(5)); // B39: chấm thử chờ Gemini (có thể thử lại), lâu hơn 30 giây
         Add<CvApiClient>(TimeSpan.FromMinutes(5));   // tải nhiều file cần lâu hơn
-        Add<CandidateApiClient>(TimeSpan.FromSeconds(30)); // B23: tìm người đã có để gắn CV.
+        Add<CandidateApiClient>(TimeSpan.FromSeconds(30)); // B23/B24: tìm, xem, tạo, sửa, gộp ứng viên; xuất/xóa dữ liệu (A43).
 
         // B3: giới hạn tải CV, đọc mục "CvUpload" trong appsettings.json của Web.
         // PHẢI KHỚP với mục "CvUpload" của API, nếu không giao diện cho qua mà API lại từ chối.
@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<HrActorState>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage>();
         services.AddScoped<AnonymityState>();
+        services.AddScoped<CandidateHubState>(); // B24: từ khóa tìm người + phiên bản dữ liệu dùng chung giữa hai chế độ, chỉ trong phiên
         return services;
     }
 }

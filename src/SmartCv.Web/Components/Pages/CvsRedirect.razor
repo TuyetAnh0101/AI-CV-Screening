@@ -1,0 +1,19 @@
+@page "/cvs"
+@*
+    B24: /cvs (Kho CV của B23) → /candidates?view=cvs, giữ nguyên mọi bộ lọc trên địa chỉ.
+    Thay thế mục lịch sử (replace) nên Back không quay lại /cvs rồi bị chuyển hướng lần nữa.
+*@
+@inject NavigationManager Nav
+
+<PageTitle>Hồ sơ CV · SCApp</PageTitle>
+<p class="redirect-note" role="status">Kho CV đã chuyển vào trang Ứng viên. <a href="@target">Mở Hồ sơ CV</a></p>
+
+@code {
+    private string target = CvLibraryFilter.BasePath;
+
+    protected override void OnInitialized()
+    {
+        target = CandidatesView.LegacyCvsTarget(Nav.Uri);
+        Nav.NavigateTo(target, replace: true);
+    }
+}

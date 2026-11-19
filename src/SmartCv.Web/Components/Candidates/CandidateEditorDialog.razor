@@ -1,0 +1,103 @@
+@*
+    B24: tạo ứng viên (POST /api/candidates) hoặc sửa liên hệ (PUT /api/candidates/{id}).
+    Kiểm tra bằng đúng CandidateRules của Core (họ tên bắt buộc; có email HOẶC số; chuẩn hóa như API), lỗi hiện dưới từng ô.
+    Trùng email / số với người khác → API trả 409 + danh sách: HR chọn mở người đó, sửa lại, hoặc "Vẫn lưu"
+    (chỉ khi đó mới gửi AllowDuplicate = true). Không bao giờ tự gộp. Kết quả chưa xác định → không tự gửi lại.
+*@
+@using SmartCv.Core.Candidates
+@implements IDisposable
+@inject CandidateApiClient Api
+
+<ModalShell Id="candidate-editor" Title="@(CandidateId is null ? "Thêm ứng viên" : "Sửa thông tin liên hệ")" Eyebrow="Ứng viên"
+            Description="@(CandidateId is null ? "Nhập thông tin người ứng tuyển. Cần họ tên và ít nhất email hoặc số điện thoại." : "Thay đổi được lưu ngay khi bạn xác nhận. Email và số được chuẩn hóa như khi tìm kiếm.")"
+            Busy="busy" FocusId="editor-name" ReturnFocusId="@ReturnFocusId" FallbackFocusId="candidates-title" OnClose="OnClose">
+    <ChildContent>
+        @if (matches.Count > 0)
+        {
+            <div class="c-notice warn" role="status"><strong>Có thể trùng người đã có</strong><p>Đã có người dùng cùng email hoặc số điện thoại. Hãy kiểm tra trước khi lưu; hệ thống không tự gộp.</p></div>
+            <ul class="c-match-list">
+                @foreach (var m in matches)
+                {
+                    <li><div><strong>@m.FullName</strong><span>@Display.Text(m.Email) · @CandidateText.Phone(m.PhoneNumber)</span><small>@CandidateText.MatchedOn(m.MatchedOn) · @m.CvCount CV</small></div>
+                        <a class="btn sc-btn-secondary" href="@($"/candidates/{m.CandidateId}")">Mở hồ sơ này</a></li>
+                }
+            </ul>
+        }
+        <fieldset class="c-fields" disabled="@(busy || matches.Count > 0)">
+            <legend class="visually-hidden">Thông tin ứng viên</legend>
+            <label for="editor-name">Họ tên <span class="req" aria-hidden="true">*</span></label>
+            <input id="editor-name" class="c-input" value="@fullName" @oninput="e => { fullName = e.Value?.ToString() ?? string.Empty; Revalidate(); }" maxlength="150" autocomplete="off" required aria-invalid="@(Err("fullName") is not null ? "true" : "false")" aria-describedby="editor-name-error" />
+            <span id="editor-name-error" class="c-error">@Err("fullName")</span>
+            <label for="editor-email">Email</label>
+            <input id="editor-email" class="c-input" type="email" value="@email" @oninput="e => { email = e.Value?.ToString() ?? string.Empty; Revalidate(); }" maxlength="254" autocomplete="off" aria-invalid="@(Err("email") is not null ? "true" : "false")" aria-describedby="editor-email-error editor-contact-error" />
+            <span id="editor-email-error" class="c-error">@Err("email")</span>
+            <label for="editor-phone">Số điện thoại</label>
+            <input id="editor-phone" class="c-input" inputmode="tel" value="@phone" @oninput="e => { phone = e.Value?.ToString() ?? string.Empty; Revalidate(); }" maxlength="20" autocomplete="off" placeholder="0912 345 678 hoặc +84 912 345 678" aria-invalid="@(Err("phoneNumber") is not null ? "true" : "false")" aria-describedby="editor-phone-error editor-contact-error" />
+            <span id="editor-phone-error" class="c-error">@Err("phoneNumber")</span>
+            <span id="editor-contact-error" class="c-error">@Err("contact")</span>
+        </fieldset>
+        @if (error is not null) { <p class="c-alert" role="alert">@error</p> }
+    </ChildContent>
+    <Footer>
+        @if (matches.Count > 0)
+        {
+            <button id="editor-back" type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="EditAgain">Sửa lại thông tin</button>
+            <button id="editor-allow-duplicate" type="button" class="btn sc-btn-primary" disabled="@(busy || uncertain)" @onclick="() => SaveAsync(allowDuplicate: true)">@(CandidateId is null ? "Vẫn tạo người mới" : "Vẫn lưu thay đổi")</button>
+        }
+        else
+        {
+            <button type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="OnClose">Hủy</button>
+            <button id="editor-save" type="button" class="btn sc-btn-primary" disabled="@(busy || uncertain)" @onclick="() => SaveAsync(allowDuplicate: false)">@(busy ? "Đang lưu…" : CandidateId is null ? "Thêm ứng viên" : "Lưu thay đổi")</button>
+        }
+    </Footer>
+</ModalShell>
+
+@code {
+    /// <summary>null = tạo mới; có giá trị = sửa ứng viên này.</summary>
+    [Parameter] public int? CandidateId { get; set; }
+    [Parameter] public string? InitialName { get; set; }
+    [Parameter] public string? InitialEmail { get; set; }
+    [Parameter] public string? InitialPhone { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<CandidateDto> OnSaved { get; set; }
+    private readonly CancellationTokenSource lifetime = new();
+    private string fullName = "", email = "", phone = "";
+    private string? error;
+    private bool busy, validated, uncertain;
+    private Dictionary<string, string[]> errors = [];
+    private List<DuplicateMatchDto> matches = [];
+
+    protected override void OnInitialized()
+    {
+        fullName = InitialName ?? ""; email = InitialEmail ?? ""; phone = InitialPhone ?? "";
+    }
+
+    private string? Err(string field) => errors.TryGetValue(field, out var list) ? list.FirstOrDefault() : null;
+    private void Revalidate() { if (validated) errors = CandidateRules.Validate(fullName, email, phone).Errors; }
+    private void EditAgain() { matches = []; error = null; }
+
+    private async Task SaveAsync(bool allowDuplicate)
+    {
+        if (busy || uncertain) return;
+        validated = true;
+        var (input, found) = CandidateRules.Validate(fullName, email, phone);
+        errors = found;
+        if (input is null) return;   // không gọi API khi dữ liệu chưa hợp lệ
+        busy = true; error = null;
+        try
+        {
+            var request = new CandidateRequest { FullName = input.FullName, Email = input.Email, PhoneNumber = input.PhoneNumber, AllowDuplicate = allowDuplicate };
+            var result = CandidateId is { } id ? await Api.UpdateAsync(id, request, lifetime.Token) : await Api.CreateAsync(request, lifetime.Token);
+            if (result.IsSuccess) { await OnSaved.InvokeAsync(result.Data!); return; }
+            if (result.StatusCode == 409 && result.Matches.Count > 0 && !allowDuplicate) { matches = [.. result.Matches]; return; }
+            if (result.StatusCode == 400 && result.Errors.Count > 0) { errors = result.Errors.ToDictionary(e => e.Key, e => e.Value); return; }
+            error = result.ErrorMessage;
+            uncertain = result.Uncertain || result.StatusCode is 404;   // không tự gửi lại: phải tải lại để kiểm tra
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

@@ -164,6 +164,11 @@ public static partial class CvEndpoints
                 ? cvs.Where(c => c.AnonymizedAt != null)
                 : cvs.Where(c => c.AnonymizedAt == null && c.ExtractionStatus == status);
 
+        // B24: CV chưa gắn ứng viên phải tìm được trên toàn kho (không lọc giả trên một trang đã phân trang).
+        // CV đã ẩn danh hóa không còn liên kết người và không gắn lại được, nên không thuộc "chưa gắn".
+        if (query.Candidate == CvListQuery.UnattachedCandidate) cvs = cvs.Where(c => c.CandidateId == null && c.AnonymizedAt == null);
+        else if (query.Candidate == CvListQuery.AttachedCandidate) cvs = cvs.Where(c => c.CandidateId != null);
+
         // 1) Mã CV của trang: lần quét duy nhất có điều kiện tìm/lọc (LIKE trên ExtractedText là phần tốn thời gian).
         var ids = await cvs
             .OrderByDescending(c => c.UploadedAt).ThenBy(c => c.CvId)

@@ -10,12 +10,19 @@ namespace SmartCv.Core.Cvs;
 ///   stage  : có hồ sơ ở giai đoạn này (nếu có jobId: giai đoạn ở đúng job đó)
 ///   source : kênh nhận CV (Email | Website | JobBoard | Referral | Other)
 ///   status : Pending | Completed | Failed (trạng thái đọc chữ) | Anonymized (đã ẩn danh hóa)
+///   candidate (B24): none = chưa gắn ứng viên (và chưa ẩn danh hóa, vì CV ẩn danh không gắn được) | attached = đã gắn
 ///   page từ 1, pageSize 1–100 (mặc định 20)
 /// Giá trị rỗng = không lọc. Mã stage/source/status phân biệt hoa thường (đúng mã lưu trong database).
 /// Hồ sơ đã ẩn danh hóa không còn tên, email, chữ → khi có search thì bỏ qua chúng.
 /// </summary>
 public sealed record CvListQuery(string? Search, int? JobId, string? Stage, string? Source, string? Status, int Page, int PageSize)
 {
+    /// <summary>B24: lọc theo việc đã gắn ứng viên hay chưa (lọc ở máy chủ, đúng trên toàn kho, không chỉ trang hiện tại).</summary>
+    public string? Candidate { get; init; }
+    public const string UnattachedCandidate = "none";
+    public const string AttachedCandidate = "attached";
+    public static readonly string[] CandidateFilters = [UnattachedCandidate, AttachedCandidate];
+
     public const int DefaultPageSize = 20;
     public const int MaxPageSize = 100;
     public const int MinSearchLength = 2;
@@ -25,7 +32,7 @@ public sealed record CvListQuery(string? Search, int? JobId, string? Stage, stri
     public static readonly string[] Statuses =
         [ExtractionStatuses.Pending, ExtractionStatuses.Completed, ExtractionStatuses.Failed, AnonymizedStatus];
 
-    private static readonly string[] Fields = ["search", "jobId", "stage", "source", "status", "page", "pageSize"];
+    private static readonly string[] Fields = ["search", "jobId", "stage", "source", "status", "page", "pageSize", "candidate"];
 
     /// <summary>Số dòng bỏ qua; Create/Parse đã chặn page × pageSize vượt Int32.</summary>
     public int Skip => checked((Page - 1) * PageSize);
@@ -54,19 +61,19 @@ public sealed record CvListQuery(string? Search, int? JobId, string? Stage, stri
         var jobId = Integer("jobId"); var page = Integer("page"); var pageSize = Integer("pageSize");
         if (errors.Count > 0) return (null, errors);
         return Validate(values.GetValueOrDefault("search"), jobId, values.GetValueOrDefault("stage"),
-            values.GetValueOrDefault("source"), values.GetValueOrDefault("status"), page, pageSize);
+            values.GetValueOrDefault("source"), values.GetValueOrDefault("status"), page, pageSize, values.GetValueOrDefault("candidate"));
     }
 
     /// <summary>Lối vào thuần theo mẫu hướng dẫn A23: trả câu lỗi đầu tiên.</summary>
     public static (CvListQuery? Query, string? Error) Create(
-        string? search, int? jobId, string? stage, string? source, string? status, int? page, int? pageSize)
+        string? search, int? jobId, string? stage, string? source, string? status, int? page, int? pageSize, string? candidate = null)
     {
-        var (query, errors) = Validate(search, jobId, stage, source, status, page, pageSize);
+        var (query, errors) = Validate(search, jobId, stage, source, status, page, pageSize, candidate);
         return (query, errors.Count == 0 ? null : errors.Values.First()[0]);
     }
 
     private static (CvListQuery? Query, Dictionary<string, string[]> Errors) Validate(
-        string? search, int? jobId, string? stage, string? source, string? status, int? page, int? pageSize)
+        string? search, int? jobId, string? stage, string? source, string? status, int? page, int? pageSize, string? candidate = null)
     {
         var errors = new Dictionary<string, string[]>();
         var s = NormalizeSearch(search);
@@ -82,6 +89,9 @@ public sealed record CvListQuery(string? Search, int? JobId, string? Stage, stri
         var statusValue = Blank(status);
         if (statusValue is not null && !Statuses.Contains(statusValue, StringComparer.Ordinal))
             errors["status"] = [$"status phải là một trong: {string.Join(", ", Statuses)}."];
+        var candidateValue = Blank(candidate);
+        if (candidateValue is not null && !CandidateFilters.Contains(candidateValue, StringComparer.Ordinal))
+            errors["candidate"] = [$"candidate phải là một trong: {string.Join(", ", CandidateFilters)}."];
         if (page is < 1) errors["page"] = ["page bắt đầu từ 1."];
         if (pageSize is < 1 or > MaxPageSize) errors["pageSize"] = [$"pageSize từ 1 đến {MaxPageSize}."];
         var actualPage = page ?? 1;
@@ -91,7 +101,7 @@ public sealed record CvListQuery(string? Search, int? JobId, string? Stage, stri
 
         return errors.Count > 0
             ? (null, errors)
-            : (new CvListQuery(s, jobId, stageValue, sourceValue, statusValue, actualPage, actualSize), errors);
+            : (new CvListQuery(s, jobId, stageValue, sourceValue, statusValue, actualPage, actualSize) { Candidate = candidateValue }, errors);
     }
 
     /// <summary>Bỏ khoảng trắng đầu/cuối, gộp nhiều khoảng trắng liền nhau thành một. Rỗng → null (không tìm).</summary>
