@@ -98,7 +98,7 @@ public class A43SqlServerTests
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
         string[] paths;
         await using (var db = env.Context()) paths = await db.Cvs.Select(c => c.StoredPath).ToArrayAsync();
-        using var factory = env.Api(storage: files); using var client = factory.CreateClient();
+        using var factory = env.Api(storage: files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var export = await client.GetAsync($"/api/candidates/{seed.CandidateId}/data-export?handledBy=hr.test");
         Assert.Equal(HttpStatusCode.OK, export.StatusCode);
         using var response = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
@@ -145,7 +145,7 @@ public class A43SqlServerTests
         var files = new A43SafetyTests.FaultingFiles(TestSupport.Storage(TestSupport.TempRoot())) { FailAfterPrepare = 2 };
         A43EndpointTests.Seed seed;
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
-        using var factory = env.Api(storage: files); using var client = factory.CreateClient();
+        using var factory = env.Api(storage: files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode); Assert.DoesNotContain("PRIVATE", await response.Content.ReadAsStringAsync());
         await VerifyRollbackAsync(env, seed, files);
@@ -158,7 +158,7 @@ public class A43SqlServerTests
         var files = TestSupport.Storage(TestSupport.TempRoot());
         A43EndpointTests.Seed seed;
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
-        using var factory = env.Api(new FailAuditSave(), files); using var client = factory.CreateClient();
+        using var factory = env.Api(new FailAuditSave(), files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         await VerifyRollbackAsync(env, seed, files);
@@ -172,7 +172,7 @@ public class A43SqlServerTests
         A43EndpointTests.Seed seed;
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
         using var first = env.Api(storage: files); using var second = env.Api(storage: files);
-        using var a = first.CreateClient(); using var b = second.CreateClient();
+        using var a = await TestSupport.ClientWithSyntheticHrAsync(first); using var b = await TestSupport.ClientWithSyntheticHrAsync(second);
         var body = new { confirm = true, handledBy = "hr.test" };
         var responses = await Task.WhenAll(a.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", body), b.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", body));
         try { Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Gone }, responses.Select(r => r.StatusCode).Order()); }
@@ -191,7 +191,7 @@ public class A43SqlServerTests
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
         await using var reader = env.Context();
         await using var lease = await CvPrivacyScope.BeginAsync(reader, false, default);
-        using var factory = env.Api(storage: files); using var client = factory.CreateClient();
+        using var factory = env.Api(storage: files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         await VerifyRollbackAsync(env, seed, files);
@@ -205,7 +205,7 @@ public class A43SqlServerTests
         A43EndpointTests.Seed seed;
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
         using var cancellation = new CancellationTokenSource();
-        using var factory = env.Api(new CancelAfterSave(cancellation), files); using var client = factory.CreateClient();
+        using var factory = env.Api(new CancelAfterSave(cancellation), files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" }, cancellation.Token));
         // Wait for the request's SQL rollback by acquiring the same cross-process privacy lock.
@@ -223,7 +223,7 @@ public class A43SqlServerTests
         var files = TestSupport.Storage(TestSupport.TempRoot());
         A43EndpointTests.Seed seed;
         await using (var db = env.Context()) seed = await A43EndpointTests.SeedAsync(db, files);
-        using var factory = env.Api(new CommitFailure(), files); using var client = factory.CreateClient();
+        using var factory = env.Api(new CommitFailure(), files); using var client = await TestSupport.ClientWithSyntheticHrAsync(factory);
         using var response = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal(2, files.PendingErasureIds(200).Count);
