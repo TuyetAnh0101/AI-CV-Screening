@@ -109,7 +109,7 @@
     font-weight: 700;
 }
 .run-outcome.is-running .outcome-icon { background: #0369a1; }
-.run-outcome.is-completed { background: #f0fdfa; border-color: #99f6e4; }
+.run-outcome.is-completed { background: var(--sc-brand-50); border-color: #b9ded7; }
 .run-outcome.is-completed .outcome-icon { background: var(--brand); }
 .run-outcome.is-partialfailure,
 .run-outcome.is-aifallback { background: #fffbeb; border-color: #fcd34d; color: #78350f; }
@@ -176,7 +176,7 @@
 
 /* ---------- Kết quả từng hồ sơ ---------- */
 .run-items {
-    border: 1px solid #06b6d4;
+    border: 1px solid var(--sc-cyan);
     border-radius: 12px;
     overflow: hidden;
 }

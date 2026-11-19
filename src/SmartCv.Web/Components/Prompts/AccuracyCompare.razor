@@ -29,7 +29,7 @@
     </div>
     @if (error is not null) { <p class="compare-error" role="alert">@error <button type="button" class="btn sc-btn-secondary" disabled="@loading" @onclick="ReloadAsync">Tải lại so sánh</button></p> }
     @if (loading && rows.Count == 0) { <div class="compare-skeleton" role="status"><span>Đang tải kết quả đánh giá...</span><i></i><i></i></div> }
-    else if (rows.Count == 0 && error is null) { <div class="empty" role="status"><strong>Chưa có dữ liệu để so sánh</strong><p>Chưa có lần đánh giá nào hoàn thành. Hãy chọn bộ CV và chạy đánh giá một phiên bản Prompt để xem kết quả. Để so sánh cải thiện, chạy cả hai phiên bản trên cùng bộ CV và cấu hình.</p><a href="@(sets.Count == 0 ? "#evaluation-set-manager" : "#prompt-test-panel")">@(sets.Count == 0 ? "Tạo bộ CV đánh giá" : "Đi tới Chạy đánh giá")</a></div> }
+    else if (rows.Count == 0 && error is null) { <div class="empty" role="status"><strong>Chưa có dữ liệu để so sánh</strong><p>Chưa có lần đánh giá nào hoàn thành. Hãy chọn bộ CV và chạy đánh giá một phiên bản Prompt để xem kết quả. Để so sánh cải thiện, chạy cả hai phiên bản trên cùng bộ CV và cấu hình.</p><a href="@(sets.Count == 0 ? "/evaluation-sets" : "#prompt-test-panel")">@(sets.Count == 0 ? "Tạo bộ CV đánh giá" : "Đi tới Chạy đánh giá")</a></div> }
     else if (rows.Count > 0)
     {
         <p class="compare-note" role="note">@verification</p>
@@ -139,7 +139,7 @@
                         {
                             <ul class="verdict-notes">@foreach (var note in c.Notes) { <li>@note</li> }</ul>
                         }
-                        @if (c.Kind == ConclusionKind.Inconclusive) { <a class="verdict-link" href="#evaluation-set-manager">Thêm CV có nhãn từ quyết định HR</a> }
+                        @if (c.Kind == ConclusionKind.Inconclusive) { <a class="verdict-link" href="@(EvaluationSetId is > 0 ? $"/evaluation-sets?set={EvaluationSetId}" : "/evaluation-sets")">Thêm CV có nhãn từ quyết định HR</a> }
                         else if (c.Kind == ConclusionKind.Error) { <button type="button" class="btn sc-btn-secondary verdict-action" @onclick="RetryConclusionAsync">Thử lại so sánh</button> }
                         else if (c.Kind == ConclusionKind.Stale) { <button type="button" class="btn sc-btn-secondary verdict-action" disabled="@loading" @onclick="ReloadAsync">Làm mới so sánh</button> }
                     </div>

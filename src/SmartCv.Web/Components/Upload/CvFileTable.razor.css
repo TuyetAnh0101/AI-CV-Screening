@@ -234,7 +234,7 @@ tr.needs-review td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
     background: #fff;
     border: 1px solid var(--sc-line-200);
     border-radius: 12px;
-    box-shadow: 0 12px 32px -8px rgba(15, 42, 42, .22);
+    box-shadow: 0 12px 32px -8px rgba(14, 54, 64, .22);
     text-align: left;
 }
 

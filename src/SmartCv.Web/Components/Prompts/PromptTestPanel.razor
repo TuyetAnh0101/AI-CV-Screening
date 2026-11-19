@@ -11,7 +11,7 @@
     </div>
     @if (flow.Checking && !flow.SetsLoaded) { <p role="status">Đang tải bộ CV đánh giá...</p> }
     else if (flow.SetsError is not null) { <p class="test-error" role="alert">Không tải được danh sách bộ CV: @flow.SetsError <button type="button" class="btn sc-btn-secondary" @onclick="ReloadSetsAsync">Tải lại bộ CV</button></p> }
-    else if (flow.SetsLoaded && flow.Sets.Count == 0) { <div class="confirm-run" role="status"><strong>Chưa có bộ CV đánh giá</strong><p>Bạn cần tạo bộ CV và gán nhãn HR để đo độ chính xác của AI. Có thể dùng CV đã upload và gán vào Job.</p><a class="btn sc-btn-secondary" href="#evaluation-set-manager">Tạo bộ CV đánh giá</a></div> }
+    else if (flow.SetsLoaded && flow.Sets.Count == 0) { <div class="confirm-run" role="status"><strong>Chưa có bộ CV đánh giá</strong><p>Bạn cần tạo bộ CV và gán nhãn HR để đo độ chính xác của AI. Có thể dùng CV đã upload và gán vào Job.</p><a class="btn sc-btn-secondary" href="/evaluation-sets">Tạo bộ CV đánh giá</a></div> }
     @if (SelectedSet is { } set)
     {
         <p class="set-info">@(string.IsNullOrWhiteSpace(set.Description) ? "" : set.Description + " · ")@set.MemberCount hồ sơ trong bộ · @set.LabelCount có nhãn HR · @set.PassCount Đạt · @(set.LabelCount - set.PassCount) Không đạt · phiên bản bộ @set.Revision</p>

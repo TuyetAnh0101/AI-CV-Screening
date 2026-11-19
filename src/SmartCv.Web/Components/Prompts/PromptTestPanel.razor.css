@@ -10,7 +10,7 @@ select:focus-visible,button:focus-visible { outline:3px solid var(--brand-accent
 .test-error { padding:14px; background:#fff1f2; color:var(--sc-error); border-radius:10px; font-size:13px; margin:12px 0; }
 .test-error button { margin:8px; font-size:12px; }
 .run-progress { margin-top:18px; padding:18px; border-radius:12px; background:var(--sc-info-bg); border:1px solid #bae6fd; font-size:13px; overflow-wrap:anywhere; }
-.run-progress.completed { background:#f0fdfa; border-color:#99f6e4; }
+.run-progress.completed { background:var(--sc-brand-50); border-color:#b9ded7; }
 .run-progress.failed { background:#fff1f2; border-color:#fecaca; }
 .run-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; }
 .run-progress p { margin:12px 0; }

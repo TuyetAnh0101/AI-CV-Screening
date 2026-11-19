@@ -1,0 +1,201 @@
+@page "/evaluation-sets"
+@*
+    B25: trang quản lý bộ dữ liệu đánh giá (tách khỏi /prompts).
+      - Bước 1–4 (tạo bộ, chọn CV đã quét, gán nhãn HR, kiểm tra bộ + độ tin cậy C8) do EvaluationSetManager đảm nhận — chỉ một instance, chỉ ở đây.
+      - Bước 5 (chạy Prompt Test) chỉ có ở trang /prompts; trang này dẫn link kèm ?set= để chọn sẵn bộ.
+      - Lượt Prompt Test của bộ đang mở: GET /api/prompt-tests?evaluationSetId= (đã có), cảnh báo khi bộ đã đổi sau lượt chạy.
+    Không có API sửa / sao chép bộ nên trang không có nút đó. ?set= chỉ chứa mã bộ (không phải thông tin cá nhân).
+*@
+@using SmartCv.Web.Components.Prompts
+@implements IDisposable
+@inject PromptApiClient PromptApi
+@inject NavigationManager Nav
+
+<PageTitle>Bộ dữ liệu đánh giá · SCApp</PageTitle>
+<NavigationLock ConfirmExternalNavigation="labelsDirty" OnBeforeInternalNavigation="BeforeInternalNavigation" />
+
+<div class="sets-page">
+    <header class="sets-heading">
+        <div>
+            <p class="eyebrow">Đánh giá AI</p>
+            <h1>Bộ dữ liệu đánh giá</h1>
+            <p>Chuẩn bị bộ CV tham chiếu: chọn hồ sơ đã quét, để HR gán nhãn Đạt / Không đạt và kiểm tra bộ đã đủ tin cậy chưa. Prompt Test chạy ở trang System Prompt.</p>
+        </div>
+        <a id="go-prompts" class="btn sc-btn-secondary" href="@PromptsHref">System Prompt · Chạy Prompt Test <span aria-hidden="true">→</span></a>
+    </header>
+
+    @if (pendingLocation is not null)
+    {
+        <section class="discard-notice" role="alert" aria-label="Xác nhận bỏ bản nháp" tabindex="-1" @ref="discardNotice">
+            <div><strong>Bạn có nhãn / ghi chú HR chưa lưu</strong><p>Rời trang sẽ bỏ các thay đổi đang soạn trong bộ đang mở.</p></div>
+            <div class="discard-actions">
+                <button id="keep-draft" type="button" class="btn sc-btn-secondary" @onclick="KeepDraft">Ở lại và lưu</button>
+                <button id="discard-draft" type="button" class="btn sc-btn-danger" @onclick="DiscardAndContinue">Bỏ thay đổi và rời trang</button>
+            </div>
+        </section>
+    }
+
+    <details class="guide" open="@(setCount == 0)">
+        <summary>Cách xây một bộ đánh giá đáng tin cậy</summary>
+        <ol>
+            <li><strong>30–50 CV có nhãn</strong> mỗi bộ. Dưới 30 CV, tỷ lệ đúng dao động quá rộng: hai prompt chênh nhau 10% vẫn có thể chỉ là ngẫu nhiên.</li>
+            <li><strong>Hai nhãn cân bằng</strong>: Đạt và Không đạt, nhãn ít hơn nên chiếm từ 30%. Nếu 90% là Không đạt, một prompt “loại tất cả” cũng đúng 90%.</li>
+            <li><strong>CV thật, đa dạng</strong>: nhiều trường, nhiều mức kinh nghiệm, có cả CV khó quyết định — đó là chỗ prompt hay sai.</li>
+            <li><strong>Nhãn do HR quyết định sau khi đọc CV</strong>, không lấy từ điểm AI. Gợi ý nhãn chỉ để HR duyệt lại.</li>
+            <li><strong>Bỏ CV chưa đọc được chữ</strong>: AI không đọc được thì luôn chấm sai, làm thấp tỷ lệ đúng của mọi prompt như nhau.</li>
+            <li><strong>Không sửa nhãn giữa hai lượt so sánh</strong>: đổi thành viên hoặc nhãn làm tăng phiên bản bộ; khi đó cần chạy lại cả hai prompt.</li>
+        </ol>
+    </details>
+
+    <EvaluationSetManager EvaluationSetId="SetId" OnSetChanged="SelectSet" OnSaved="SetSavedAsync" OnSetsLoaded="count => setCount = count"
+                          OnDirtyChanged="value => labelsDirty = value">
+        <SetInsights>
+            @if (SetId is > 0)
+            {
+                <section id="set-runs" class="runs-card" aria-labelledby="set-runs-title" aria-busy="@(runsLoading ? "true" : "false")">
+                    <div class="runs-head">
+                        <div>
+                            <h2 id="set-runs-title">Lượt Prompt Test trên bộ này</h2>
+                            <p>Năm lượt gần nhất. Tỷ lệ đúng tính theo nhãn HR hiện tại của bộ.</p>
+                        </div>
+                        <div class="runs-actions">
+                            <button id="reload-runs" type="button" class="btn sc-btn-tertiary" disabled="@runsLoading" @onclick="LoadRunsAsync">@(runsLoading ? "Đang tải…" : "Tải lại")</button>
+                            <a class="btn sc-btn-tertiary" href="/runs?type=PromptTest">Xem tất cả lượt</a>
+                        </div>
+                    </div>
+                    @if (runsError is not null)
+                    {
+                        <div class="runs-state error" role="alert"><p>@runsError</p><button type="button" class="btn sc-btn-secondary" @onclick="LoadRunsAsync">Thử lại</button></div>
+                    }
+                    else if (runs is null)
+                    {
+                        <p class="runs-state" role="status">Đang tải lượt Prompt Test…</p>
+                    }
+                    else if (runs.Count == 0)
+                    {
+                        <div class="runs-state" role="status"><p>Bộ này chưa có lượt Prompt Test nào. Khi bộ đủ điều kiện, hãy chạy Prompt Test ở trang System Prompt.</p><a class="btn sc-btn-secondary" href="@PromptsHref">Đến trang chạy Prompt Test</a></div>
+                    }
+                    else
+                    {
+                        @if (runs.Any(r => r.SetChangedSinceRun))
+                        {
+                            <p class="revision-warning" role="status"><span aria-hidden="true">!</span> Bộ đã thay đổi (thêm/bỏ hồ sơ hoặc sửa nhãn) sau một số lượt bên dưới. Chỉ so sánh các lượt chạy trên cùng phiên bản bộ.</p>
+                        }
+                        <table class="runs-table">
+                            <thead><tr><th scope="col">Lượt</th><th scope="col">Phiên bản prompt</th><th scope="col">Trạng thái</th><th scope="col">Phiên bản bộ</th><th scope="col" class="num">Tỷ lệ đúng</th></tr></thead>
+                            <tbody>
+                                @foreach (var run in runs.Take(5))
+                                {
+                                    var (statusText, variant) = StatusText.ForRun(run.Status);
+                                    <tr @key="run.RunId">
+                                        <td data-label="Lượt"><a href="@($"/runs/{run.RunId}")">#@run.RunId</a><span class="sub">@RunText.VnDateTime(run.CreatedAt)</span></td>
+                                        <td data-label="Prompt"><strong>@run.PromptVersionName</strong><span class="sub">@run.ModelName</span></td>
+                                        <td data-label="Trạng thái"><StatusBadge Text="@statusText" Variant="variant" /></td>
+                                        <td data-label="Phiên bản bộ">
+                                            @if (run.EvaluationSetRevision is { } revision)
+                                            {
+                                                <span>@revision</span>
+                                                @if (run.SetChangedSinceRun) { <span class="changed">Bộ đã đổi (hiện tại @run.CurrentSetRevision)</span> }
+                                            }
+                                            else { <span class="sub">Không rõ (lượt cũ)</span> }
+                                        </td>
+                                        <td data-label="Tỷ lệ đúng" class="num"><strong>@AccuracyText.Percent(run.AccuracyPercent)</strong>@if (run.TotalLabeledCount is { } n) { <span class="sub">@n CV có nhãn</span> }</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        @if (runs.Count > 5) { <p class="runs-more">Còn @(runs.Count - 5) lượt cũ hơn trong Lịch sử lượt chấm.</p> }
+                    }
+                </section>
+            }
+        </SetInsights>
+    </EvaluationSetManager>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "set")] public int? SetId { get; set; }
+    private readonly CancellationTokenSource lifetime = new();
+    private bool labelsDirty, runsLoading, disposed, focusNotice;
+    private int? setCount;
+    private string? pendingLocation, runsError;
+    private List<PromptTestRunDto>? runs;
+    private int loadedRunsFor, runsGeneration;
+    private ElementReference discardNotice;
+
+    private string PromptsHref => SetId is > 0 ? $"/prompts?set={SetId}#prompt-test-panel" : "/prompts#prompt-test-panel";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SetId is > 0 && SetId != loadedRunsFor) await LoadRunsAsync();
+        else if (SetId is not > 0) { runs = null; runsError = null; loadedRunsFor = 0; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusNotice) return;
+        focusNotice = false;
+        try { await discardNotice.FocusAsync(); } catch (InvalidOperationException) { }
+    }
+
+    /// <summary>Bộ đang mở nằm trên URL (?set=) để tải lại / chia sẻ link vẫn mở đúng bộ. Thay thế lịch sử, không thêm bước Back.</summary>
+    private void SelectSet(int id)
+    {
+        if (id <= 0 || id == SetId) return;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("set", id), replace: true);
+    }
+
+    private async Task SetSavedAsync(int id)
+    {
+        // Ghi thành viên / nhãn làm tăng phiên bản bộ → đọc lại cảnh báo "bộ đã đổi sau lượt chạy".
+        if (id > 0 && id == SetId) await LoadRunsAsync();
+    }
+
+    private async Task LoadRunsAsync()
+    {
+        if (SetId is not > 0 || disposed) return;
+        var setId = SetId.Value;
+        var generation = ++runsGeneration;
+        loadedRunsFor = setId;
+        runsLoading = true;
+        runsError = null;
+        if (runs is not null && runs.FirstOrDefault()?.EvaluationSetId != setId) runs = null;
+        try
+        {
+            var result = await PromptApi.GetAccuracyRunsAsync(setId, lifetime.Token);
+            if (disposed || generation != runsGeneration) return;
+            if (result.IsSuccess)
+                runs = result.Data!.Where(r => r.EvaluationSetId == setId)
+                    .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.RunId).ToList();
+            // Thông báo cố định: không đưa nguyên văn lỗi API ra giao diện.
+            else { runsError = "Không tải được lượt Prompt Test của bộ này. Kiểm tra kết nối API rồi thử lại."; runs = null; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed && generation == runsGeneration) runsLoading = false; }
+    }
+
+    private Task BeforeInternalNavigation(LocationChangingContext context)
+    {
+        // Đổi ?set= trên cùng trang do chính bộ quản lý kiểm soát bản nháp; chỉ chặn khi rời trang.
+        if (new Uri(context.TargetLocation).AbsolutePath == new Uri(Nav.Uri).AbsolutePath) return Task.CompletedTask;
+        if (labelsDirty)
+        {
+            context.PreventNavigation();
+            pendingLocation = context.TargetLocation;
+            focusNotice = true;
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
+
+    private void KeepDraft() => pendingLocation = null;
+
+    private void DiscardAndContinue()
+    {
+        if (pendingLocation is not { } location) return;
+        pendingLocation = null;
+        labelsDirty = false;
+        Nav.NavigateTo(location);
+    }
+
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

@@ -1,5 +1,5 @@
-.flag-backdrop { position:fixed; inset:0; background:rgba(10,46,45,.45); z-index:1050; }
-.flag-dialog { position:fixed; z-index:1051; left:50%; top:50%; transform:translate(-50%, -50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 64px -16px rgba(10,46,45,.45); display:grid; }
+.flag-backdrop { position:fixed; inset:0; background:rgba(10, 42, 50,.45); z-index:1050; }
+.flag-dialog { position:fixed; z-index:1051; left:50%; top:50%; transform:translate(-50%, -50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 64px -16px rgba(10, 42, 50,.45); display:grid; }
 header { padding:20px 20px 0; }
 h2 { font:600 18px var(--sc-font-display); margin:0 0 4px; outline:none; }
 header p { margin:0; color:var(--text-muted); font-size:13px; overflow-wrap:anywhere; }

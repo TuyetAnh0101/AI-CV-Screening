@@ -11,7 +11,7 @@ h1:focus { outline:none; }
 .view-tabs { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:4px; width:fit-content; max-width:100%; border:1px solid var(--sc-line-200); border-radius:12px; background:var(--sc-surface-50); }
 .view-tab { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:9px; font-size:14px; font-weight:600; color:var(--sc-ink-700); text-decoration:none; }
 .view-tab:hover { color:var(--sc-brand-700); }
-.view-tab.on { background:#fff; color:var(--sc-brand-700); box-shadow:0 1px 4px #0a2e2d14; }
+.view-tab.on { background:#fff; color:var(--sc-brand-700); box-shadow:0 1px 4px #0a2a3214; }
 .view-tab:focus-visible { outline:3px solid var(--sc-brand-700); outline-offset:2px; }
 .tab-icon { font-size:13px; opacity:.8; }
 .tab-count { font-size:11px; font-weight:600; padding:1px 7px; border-radius:999px; background:var(--sc-surface-100); color:var(--sc-ink-700); font-variant-numeric:tabular-nums; }

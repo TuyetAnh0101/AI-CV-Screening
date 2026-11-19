@@ -6,14 +6,13 @@
     font-display: swap;
 }
 
-/* B34: semantic colors of HR application stages. */
+/* B34: màu giai đoạn tuyển dụng (luôn đi kèm chữ). */
 .stage-new { --stage-fg: #475569; --stage-bg: #f1f5f9; }
 .stage-reviewing { --stage-fg: #0369a1; --stage-bg: #e0f2fe; }
 .stage-shortlisted { --stage-fg: #047857; --stage-bg: #d1fae5; }
 .stage-interview { --stage-fg: #4338ca; --stage-bg: #eef2ff; }
 .stage-rejected { --stage-fg: #be123c; --stage-bg: #ffe4e6; }
 .stage-onhold { --stage-fg: #92400e; --stage-bg: #fef3c7; }
-.stage-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--stage-fg, currentColor); flex: none; }
 
 html, body {
     font-family: var(--sc-font-body);
@@ -23,35 +22,21 @@ a, .btn-link {
     color: var(--sc-brand-700);
 }
 
-.btn-primary {
-    --bs-btn-bg: var(--brand);
-    --bs-btn-border-color: var(--brand);
-    --bs-btn-hover-bg: var(--brand-hover);
-    --bs-btn-hover-border-color: var(--brand-hover);
-    --bs-btn-active-bg: var(--brand-hover);
-    --bs-btn-active-border-color: var(--brand-hover);
-    --bs-btn-disabled-bg: var(--brand);
-    --bs-btn-disabled-border-color: var(--brand);
-    --bs-btn-focus-shadow-rgb: 15, 118, 110;
-    color: #fff;
-    background-color: var(--brand);
-    border-color: var(--brand);
-}
 
 h1:focus {
     outline: none;
 }
 
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+    outline: 1px solid var(--sc-success-line);
 }
 
 .invalid {
-    outline: 1px solid #e50000;
+    outline: 1px solid var(--sc-danger);
 }
 
 .validation-message {
-    color: #e50000;
+    color: var(--sc-danger);
 }
 
 .blazor-error-boundary {
@@ -76,83 +61,112 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
-/* ===== SmartCV: bảng màu và thành phần chung theo Figma Project_GD (cập nhật ở B3) ===== */
-
-/* Bảng màu theo Figma (Project_GD) */
+/* ===== SCApp design system — B25 "Modern Enterprise ATS": Deep Teal + AI Glow + Mint/Cyan =====
+   Mọi trang đọc màu, bóng, bo góc, khoảng cách qua các biến dưới đây. Tên cũ (--brand, --border, --text-*, --sc-brand-*)
+   được giữ để CSS scoped của từng trang không vỡ, chỉ đổi giá trị sang bảng màu mới. */
 :root {
-    --bs-body-font-family: "Inter", "Segoe UI", system-ui, sans-serif;
-    --bs-body-color: #0f2a2a;
-    --bs-body-bg: #f5f8f8;
-    --bs-border-color: #dde7e6;
-    --bs-link-color: #0f766e;
-    --bs-link-hover-color: #115e59;
-    --brand: #0f766e;          /* nút chính, menu đang chọn, liên kết quan trọng */
-    --brand-hover: #115e59;    /* hover, nhấn nút, viền ô kéo thả */
-    --brand-accent: #14b8a6;   /* điểm nhấn sáng, chỉ báo AI */
-    --brand-dark: #115e59;     /* (giữ tên cũ của B2 để không vỡ chỗ khác) */
+    /* --- Bảng màu gốc (tham chiếu B25) --- */
+    --sc-deep-teal: #0e3640;   /* nền tối, chữ nhấn, đầu gradient */
+    --sc-teal: #164c56;        /* nút chính, liên kết, mục đang chọn */
+    --sc-mint: #28bfa8;        /* điểm nhấn sáng, thanh tiến độ */
+    --sc-cyan: #54b9d2;        /* điểm nhấn phụ, AI Glow */
+    --sc-ink: #20343c;         /* chữ chính */
+    --sc-mist: #edf6f5;        /* nền nhạt pha teal */
+    --sc-paper: #f5f7f5;       /* nền vùng nội dung */
 
-    /* Design System "SC v2 · Color" (Figma Project_GD, Teal Lab). Tên cũ bên dưới trỏ sang đây để mọi trang cùng một tông. */
-    --sc-brand-900: #0a2e2d;  --sc-brand-800: #0e4a47;  --sc-brand-700: #0f766e;  --sc-brand-600: #0d9488;
-    --sc-brand-500: #14b8a6;  --sc-brand-100: #ccfbf1;  --sc-brand-50: #f0fdfa;
-    --sc-ink-700: #2c4645;    --sc-ink-500: #5b7372;    --sc-ink-400: #8aa09f;
-    --sc-surface-0: #ffffff;  --sc-surface-50: #f5f8f8; --sc-surface-100: #edf3f2;
-    --sc-line-200: #dde7e6;   --sc-line-300: #c5d4d3;
-    --sc-grad-sidebar: linear-gradient(180deg, #0a2e2d, #0e4a47);   /* "Sidebar Deep" */
-    --sc-shadow-card: 0 1px 2px rgba(15, 42, 42, .05), 0 8px 24px -8px rgba(15, 42, 42, .10);
-    --sc-radius-card: 16px;
-    --sc-radius-section: 20px;
+    --sc-brand-900: #0a2a32;  --sc-brand-800: #0e3640;  --sc-brand-700: #164c56;  --sc-brand-600: #1d6a72;
+    --sc-brand-500: #28bfa8;  --sc-brand-100: #d3efe9;  --sc-brand-50: #edf6f5;
+    --sc-cyan-600: #2f8fab;   --sc-cyan-100: #d8eff6;   --sc-cyan-50: #eef8fb;
+    --sc-ink-900: #20343c;    --sc-ink-700: #3a525b;    --sc-ink-500: #5b7078;    --sc-ink-400: #8a9ca2;
+    --sc-surface-0: #ffffff;  --sc-surface-50: #f5f7f5; --sc-surface-100: #edf3f2;
+    --sc-line-200: #dce6e4;   --sc-line-300: #c4d4d2;
 
-    /* Khung ứng dụng: khối logo và thanh trên cùng cao bằng nhau để hai đường kẻ thẳng hàng */
-    --sc-sidebar-w: 256px;
-    --sc-shell-header-h: 72px;
-    --sc-shell-gutter: 32px;
-    --sc-sidebar-accent: #5eead4;   /* vạch và icon mục đang mở trên nền tối */
+    /* --- Ngữ nghĩa: chữ / nền / viền. Không dùng màu xanh lá cho thao tác xóa. --- */
+    --sc-success: #0f6e55;  --sc-success-bg: #def3ea;  --sc-success-line: #b5e0cf;
+    --sc-warning: #8a5a0f;  --sc-warning-bg: #fdf4df;  --sc-warning-line: #ecd7a5;
+    --sc-danger: #b42318;   --sc-danger-bg: #fdecea;   --sc-danger-line: #f1c5bf;   --sc-danger-hover: #912018;
+    --sc-info: #22708c;     --sc-info-bg: #e6f4f9;     --sc-info-line: #bfe0ec;
+    --sc-neutral: #4d6168;  --sc-neutral-bg: #eef2f2;
+    --sc-error: var(--sc-danger); --sc-error-bg: var(--sc-danger-bg);   /* Lỗi xử lý (Status = Failed) */
 
-    --page-bg: var(--sc-surface-50);       /* nền vùng nội dung */
-    --surface-soft: var(--sc-surface-50);  /* nền nhạt: tiêu đề bảng, ô kéo thả, nút phụ */
-    --border: var(--sc-line-200);          /* viền thẻ, bảng, ô nhập */
-    --text-main: var(--sc-ink-900);        /* tiêu đề, nội dung chính */
-    --text-muted: var(--sc-ink-500);       /* mô tả, nhãn phụ */
+    /* 4 mức đánh giá (B8): giữ nguyên nghĩa và ngưỡng, chỉnh sắc độ cho hợp bảng màu */
+    --fit-excellent: #0f6e55;  --fit-excellent-bg: #d9f2e7;   /* Rất phù hợp  85–100 */
+    --fit-good: #16626b;       --fit-good-bg: #d6eeec;        /* Phù hợp      70–84 */
+    --fit-potential: #9a5b0b;  --fit-potential-bg: #fcf0d6;   /* Tiềm năng    55–69 */
+    --fit-poor: #b2293e;       --fit-poor-bg: #fce6e9;        /* Chưa phù hợp 0–54 */
 
-    /* 4 mức đánh giá (B8, Design System v2): chữ + nền nhạt. Tên biến giữ như B2 để chỗ cũ dùng tiếp. */
-    --fit-excellent: #047857;  --fit-excellent-bg: #d1fae5;   /* Rất phù hợp  85–100 */
-    --fit-good: #0f766e;       --fit-good-bg: #ccfbf1;        /* Phù hợp      70–84 */
-    --fit-potential: #b45309;  --fit-potential-bg: #fef3c7;   /* Tiềm năng    55–69 */
-    --fit-poor: #be123c;       --fit-poor-bg: #ffe4e6;        /* Chưa phù hợp 0–54 */
+    /* --- Gradient: mỗi loại một vai trò, không dùng tràn lan --- */
+    --sc-grad-brand: linear-gradient(135deg, #0e3640 0%, #164c56 60%, #1b6068 100%);        /* nút chính, icon nhấn */
+    --sc-grad-brand-hover: linear-gradient(135deg, #0a2a32 0%, #123f48 60%, #164c56 100%);
+    --sc-grad-mint: linear-gradient(90deg, #28bfa8, #54b9d2);                              /* thanh tiến độ, tỷ lệ */
+    --sc-grad-ai: linear-gradient(135deg, #28bfa8 0%, #54b9d2 100%);                       /* AI Glow: chỉ cho thứ do Gemini tạo */
+    --sc-grad-sidebar: radial-gradient(130% 55% at 0% 0%, rgba(40, 191, 168, .16), transparent 62%), linear-gradient(180deg, #0e3640 0%, #0a2a32 100%);
+    --sc-grad-page: linear-gradient(180deg, #e9f3f1 0, #f5f7f5 300px);                     /* nền vùng nội dung: pha teal ở trên */
+    --sc-grad-head: linear-gradient(110deg, #ffffff 40%, #eef8f6 100%);                    /* thẻ đầu trang / thẻ nổi bật */
 
-    /* Trạng thái xử lý (B8): KHÁC mức đánh giá */
-    --sc-error: #b91c1c;   --sc-error-bg: #fee2e2;    /* Lỗi xử lý (Status = Failed) */
-    --sc-info: #0369a1;    --sc-info-bg: #e0f2fe;     /* Đang chấm (Status = Pending) */
-    --sc-neutral: #475569; --sc-neutral-bg: #f1f5f9;  /* Chỉ chấm Keyword (ScoreSource = KeywordOnly), chưa có kết quả */
-    --sc-ink-900: #0f2a2a;                            /* vạch ngưỡng Đạt */
+    /* --- Hình khối --- */
+    --sc-shadow-xs: 0 1px 2px rgba(14, 54, 64, .06);
+    --sc-shadow-card: 0 1px 2px rgba(14, 54, 64, .05), 0 8px 24px -12px rgba(14, 54, 64, .16);
+    --sc-shadow-pop: 0 18px 48px -16px rgba(14, 54, 64, .35), 0 2px 6px rgba(14, 54, 64, .08);
+    --sc-radius-sm: 8px;  --sc-radius-md: 10px;  --sc-radius-lg: 12px;
+    --sc-radius-card: 16px;  --sc-radius-section: 20px;  --sc-radius-pill: 999px;
+    --sc-space-1: 4px; --sc-space-2: 8px; --sc-space-3: 12px; --sc-space-4: 16px; --sc-space-5: 20px; --sc-space-6: 24px; --sc-space-8: 32px;
 
-    /* AI Glow: chỉ dùng cho thứ do Gemini tạo ra */
-    --sc-grad-ai: linear-gradient(135deg, #14b8a6, #06b6d4 50%, #6366f1);
-
-    /* Inter cục bộ có đầy đủ dấu tiếng Việt; giữ font chữ đều cho dữ liệu kỹ thuật. */
+    /* --- Chữ (Inter): tiêu đề trang 24–28, tiêu đề mục 16–20, nội dung 13–14, nhãn 12–13, huy hiệu 11–12 --- */
     --sc-font-body: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
     --sc-font-display: var(--sc-font-body);
     --sc-font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sc-text-badge: 12px; --sc-text-label: 12px; --sc-text-body: 13px; --sc-text-base: 14px;
+    --sc-text-section: 17px; --sc-text-page: clamp(24px, 2.3vw, 28px);
+
+    /* --- Điều khiển --- */
+    --sc-control-h: 40px;  --sc-control-h-sm: 32px;
+    --sc-focus: #1f8f87;                                   /* viền focus: đủ tương phản trên nền trắng */
+    --sc-focus-ring: 0 0 0 3px rgba(40, 191, 168, .28);
+    --sc-disabled-bg: #e8eeed; --sc-disabled-fg: #8a9ca2; --sc-disabled-line: #dce6e4;
+
+    /* --- Khung ứng dụng --- */
+    --sc-sidebar-w: 256px;
+    --sc-shell-header-h: 72px;
+    --sc-shell-gutter: 32px;
+    --sc-sidebar-accent: #5fdcc8;   /* vạch và icon mục đang mở trên nền tối */
+
+    /* --- Tên cũ trỏ sang token mới --- */
+    --brand: var(--sc-brand-700);
+    --brand-hover: var(--sc-brand-800);
+    --brand-dark: var(--sc-brand-800);
+    --brand-accent: var(--sc-focus);
+    --page-bg: var(--sc-surface-50);
+    --surface-soft: var(--sc-surface-50);
+    --border: var(--sc-line-200);
+    --text-main: var(--sc-ink-900);
+    --text-muted: var(--sc-ink-500);
+
+    --bs-body-font-family: var(--sc-font-body);
+    --bs-body-color: var(--sc-ink-900);
+    --bs-body-bg: var(--sc-surface-50);
+    --bs-border-color: var(--sc-line-200);
+    --bs-link-color: var(--sc-brand-700);
+    --bs-link-hover-color: var(--sc-brand-800);
+    --bs-link-color-rgb: 22, 76, 86;
+    --bs-link-hover-color-rgb: 14, 54, 64;
 }
 
 body {
     font-family: var(--sc-font-body);
-    font-size: 14px;
+    font-size: var(--sc-text-base);
     line-height: 22px;
     color: var(--text-main);
     background: var(--page-bg);
 }
 
+::selection { background: rgba(40, 191, 168, .28); }
+
 .btn:focus-visible,
-.btn-link.nav-link:focus-visible,
+.btn-link.nav-link:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; box-shadow: none; }
 .form-control:focus,
 .form-select:focus,
-.form-check-input:focus {
-    box-shadow: 0 0 0 3px rgba(15, 118, 110, .18);
-}
-
-.form-control:focus,
-.form-select:focus { border-color: var(--brand); }
+.form-check-input:focus { border-color: var(--sc-focus); box-shadow: var(--sc-focus-ring); }
 
 .table {
     --bs-table-bg: var(--sc-surface-0);
@@ -162,40 +176,104 @@ body {
 }
 .table thead { --bs-table-bg: var(--sc-surface-50); font-weight: 600; }
 
-/* ---------- Nút (Figma: Component button 1 / 2) ---------- */
-.btn.sc-btn-primary {
+/* ---------- Nút: Primary / Secondary / Tertiary / Danger / Success; cùng chiều cao, cùng bo góc ----------
+   Disabled: nền xám nhạt, không mờ cả khối. Loading: thêm class is-loading (vòng quay, giữ nguyên kích thước). */
+.btn:is(.sc-btn-primary, .sc-btn-secondary, .sc-btn-tertiary, .sc-btn-danger, .sc-btn-danger-outline, .sc-btn-success, .c-btn-danger, .c-btn-danger-outline) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 40px;
-    padding: 10px 16px;
-    border: 0;
-    border-radius: 8px;
-    background: var(--brand);
-    color: #f4f8f8;
-    font-size: 15px;
+    gap: 8px;
+    min-height: var(--sc-control-h);
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--sc-radius-md);
+    font-size: var(--sc-text-base);
     font-weight: 600;
+    line-height: 20px;
+    letter-spacing: -.005em;
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
 }
-.btn.sc-btn-primary:hover { background: var(--brand-hover); color: #fff; }
-.btn.sc-btn-primary:disabled { background: var(--brand); opacity: .7; color: #f4f8f8; }
+.btn.sc-btn-primary { background: var(--sc-grad-brand); border-color: var(--sc-brand-800); color: #fff; box-shadow: 0 1px 2px rgba(14, 54, 64, .22), inset 0 1px 0 rgba(255, 255, 255, .08); }
+.btn.sc-btn-primary:hover:not(:disabled) { background: var(--sc-grad-brand-hover); color: #fff; }
+.btn.sc-btn-primary:active:not(:disabled) { background: var(--sc-brand-900); }
 
-.btn.sc-btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 144px;
-    height: 40px;
-    padding: 10px 16px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface-soft);
-    color: var(--brand-hover);
-    font-size: 15px;
-    font-weight: 600;
+.btn.sc-btn-secondary { background: var(--sc-surface-0); border-color: var(--sc-line-300); color: var(--sc-brand-700); box-shadow: var(--sc-shadow-xs); }
+.btn.sc-btn-secondary:hover:not(:disabled) { background: var(--sc-brand-50); border-color: #a9c7c3; color: var(--sc-brand-800); }
+.btn.sc-btn-secondary:active:not(:disabled) { background: var(--sc-brand-100); }
+
+.btn.sc-btn-tertiary { background: transparent; color: var(--sc-brand-700); padding-inline: 12px; }
+.btn.sc-btn-tertiary:hover:not(:disabled) { background: var(--sc-brand-50); color: var(--sc-brand-800); }
+
+.btn:is(.sc-btn-danger, .c-btn-danger) { background: var(--sc-danger); border-color: var(--sc-danger); color: #fff; }
+.btn:is(.sc-btn-danger, .c-btn-danger):hover:not(:disabled) { background: var(--sc-danger-hover); border-color: var(--sc-danger-hover); color: #fff; }
+.btn.sc-btn-danger-outline, .btn.c-btn-danger-outline { background: var(--sc-surface-0); border: 1px solid var(--sc-danger-line); color: var(--sc-danger); }
+.btn.sc-btn-danger-outline:hover:not(:disabled), .btn.c-btn-danger-outline:hover:not(:disabled) { background: var(--sc-danger-bg); color: var(--sc-danger-hover); }
+
+.btn.sc-btn-success { background: var(--sc-success); border-color: var(--sc-success); color: #fff; }
+.btn.sc-btn-success:hover:not(:disabled) { background: #0b5945; color: #fff; }
+
+.btn:is(.sc-btn-primary, .sc-btn-secondary, .sc-btn-danger, .sc-btn-success, .c-btn-danger, .c-btn-danger-outline, .sc-btn-danger-outline):disabled,
+.btn:is(.sc-btn-primary, .sc-btn-secondary, .sc-btn-danger, .sc-btn-success).disabled {
+    background: var(--sc-disabled-bg);
+    border-color: var(--sc-disabled-line);
+    color: var(--sc-disabled-fg);
+    box-shadow: none;
+    opacity: 1;
+    cursor: not-allowed;
 }
-.btn.sc-btn-secondary:hover { background: #e7f0ef; color: var(--brand-hover); border-color: var(--border); }
+.btn.sc-btn-tertiary:disabled { background: transparent; color: var(--sc-disabled-fg); opacity: 1; cursor: not-allowed; }
+.btn.sc-btn-sm { min-height: var(--sc-control-h-sm); padding: 5px 12px; font-size: var(--sc-text-body); border-radius: var(--sc-radius-sm); }
+.btn.is-loading { position: relative; color: transparent !important; pointer-events: none; }
+.btn.is-loading::after { content: ""; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: sc-spin .8s linear infinite; }
+.btn.sc-btn-secondary.is-loading::after, .btn.sc-btn-tertiary.is-loading::after { border-color: var(--sc-brand-100); border-top-color: var(--sc-brand-700); }
+@keyframes sc-spin { to { transform: rotate(360deg); } }
 
-/* ---------- Tiêu đề trang (component PageHeader của B2) ---------- */
+/* Nút Bootstrap còn sót (btn-primary): cùng màu thương hiệu */
+.btn-primary {
+    --bs-btn-bg: var(--sc-brand-700);
+    --bs-btn-border-color: var(--sc-brand-700);
+    --bs-btn-hover-bg: var(--sc-brand-800);
+    --bs-btn-hover-border-color: var(--sc-brand-800);
+    --bs-btn-active-bg: var(--sc-brand-900);
+    --bs-btn-active-border-color: var(--sc-brand-900);
+    --bs-btn-disabled-bg: var(--sc-disabled-bg);
+    --bs-btn-disabled-border-color: var(--sc-disabled-line);
+    --bs-btn-disabled-color: var(--sc-disabled-fg);
+    --bs-btn-focus-shadow-rgb: 40, 191, 168;
+}
+.btn-outline-danger { --bs-btn-color: var(--sc-danger); --bs-btn-border-color: var(--sc-danger-line); --bs-btn-hover-bg: var(--sc-danger); --bs-btn-hover-border-color: var(--sc-danger); }
+
+/* Nút "⋯" mở thao tác phụ: vuông, cùng chiều cao với nút thường */
+.sc-more-btn { display: inline-grid; place-items: center; width: var(--sc-control-h); height: var(--sc-control-h); padding: 0; border: 1px solid var(--sc-line-300); border-radius: var(--sc-radius-md); background: var(--sc-surface-0); color: var(--sc-ink-700); font-size: 18px; line-height: 1; }
+.sc-more-btn:hover:not(:disabled) { background: var(--sc-brand-50); color: var(--sc-brand-800); }
+.sc-more-btn:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
+
+/* ---------- Ô nhập dùng chung (sc-field / sc-label / sc-input / sc-help / sc-field-error) ----------
+   Lỗi hiển thị trong vùng đã chừa sẵn (min-height) để bố cục không nhảy khi báo lỗi. */
+.sc-field { display: grid; gap: 6px; min-width: 0; }
+.sc-label { font-size: var(--sc-text-label); font-weight: 600; color: var(--sc-ink-700); }
+.sc-input, .c-input {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--sc-control-h);
+    padding: 8px 12px;
+    border: 1px solid var(--sc-line-300);
+    border-radius: var(--sc-radius-sm);
+    background: var(--sc-surface-0);
+    color: var(--sc-ink-900);
+    font: 400 var(--sc-text-body)/20px var(--sc-font-body);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.sc-input:hover:not(:disabled), .c-input:hover:not(:disabled) { border-color: #a9c0bd; }
+.sc-input:focus, .c-input:focus { outline: none; border-color: var(--sc-focus); box-shadow: var(--sc-focus-ring); }
+.sc-input:disabled, .c-input:disabled { background: var(--sc-disabled-bg); color: var(--sc-disabled-fg); cursor: not-allowed; }
+.sc-input[aria-invalid="true"], .c-input[aria-invalid="true"] { border-color: var(--sc-danger); }
+.sc-input[aria-invalid="true"]:focus, .c-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(180, 35, 24, .16); }
+.sc-help { margin: 0; font-size: var(--sc-text-label); line-height: 1.6; color: var(--sc-ink-500); }
+.sc-field-error { min-height: 18px; margin: 0; font-size: var(--sc-text-label); line-height: 18px; color: var(--sc-danger); }
+
+/* ---------- Tiêu đề trang (PageHeader) ---------- */
 .page-header {
     display: flex;
     flex-wrap: wrap;
@@ -203,16 +281,16 @@ body {
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 1.5rem;
-    padding: 22px 31px 24px;
+    padding: 22px 28px 24px;
     border: 1px solid var(--border);
     border-radius: var(--sc-radius-card);
-    background: var(--sc-surface-0);
+    background: var(--sc-grad-head);
     box-shadow: var(--sc-shadow-card);
 }
-.page-header h1 { font-size: 28px; font-weight: 600; margin-bottom: .25rem; color: var(--text-main); }
+.page-header h1 { font-size: var(--sc-text-page); font-weight: 650; letter-spacing: -.025em; margin-bottom: .25rem; color: var(--text-main); }
 
-/* ---------- Khung trắng, thẻ lối tắt (trang chủ B2) ---------- */
-.card-panel {
+/* ---------- Thẻ và khung dùng chung ---------- */
+.card-panel, .sc-card {
     background: var(--sc-surface-0);
     border: 1px solid var(--border);
     border-radius: var(--sc-radius-card);
@@ -232,12 +310,12 @@ body {
     text-decoration: none;
     transition: border-color .15s, box-shadow .15s;
 }
-.quick-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(15, 118, 110, .12); }
-.quick-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.quick-card:hover { border-color: var(--sc-brand-600); box-shadow: 0 6px 18px -8px rgba(14, 54, 64, .28); }
+.quick-card:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 3px; }
 .quick-card h2 { font-size: 1.1rem; font-weight: 700; color: var(--brand); }
 .quick-card p { margin-bottom: 0; color: var(--text-muted); }
 
-/* ---------- Huy hiệu trạng thái API (ApiStatusBadge của B2) ---------- */
+/* ---------- Trạng thái API (ApiStatusBadge): chấm là trạng thái sống, luôn đi kèm chữ ---------- */
 .api-status {
     display: inline-flex;
     flex: 0 0 auto;
@@ -255,18 +333,20 @@ body {
     transition: border-color .15s ease, background-color .15s ease;
 }
 .api-status:hover:not(:disabled) { border-color: var(--sc-line-300); background: var(--sc-surface-50); }
-.api-status:focus-visible { outline: 2px solid var(--sc-brand-600); outline-offset: 2px; }
+.api-status:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
 .api-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc-ink-400); }
-.api-status.online .dot { background: var(--sc-brand-500); box-shadow: 0 0 0 3px rgba(20, 184, 166, .18); }
-.api-status.offline { color: var(--fit-poor); border-color: #fecaca; background: #fef2f2; }
-.api-status.offline .dot { background: var(--fit-poor); }
+.api-status.online { border-color: var(--sc-brand-100); background: var(--sc-brand-50); color: var(--sc-brand-800); }
+.api-status.online .dot { background: var(--sc-mint); box-shadow: 0 0 0 3px rgba(40, 191, 168, .22); }
+.api-status.offline { color: var(--sc-danger); border-color: var(--sc-danger-line); background: var(--sc-danger-bg); }
+.api-status.offline .dot { background: var(--sc-danger); }
 
 @media (prefers-reduced-motion: reduce) {
-    .quick-card, .api-status { transition: none; }
+    .quick-card, .api-status, .btn:is(.sc-btn-primary, .sc-btn-secondary, .sc-btn-tertiary, .sc-btn-danger, .sc-btn-success), .sc-input, .c-input { transition: none; }
+    .btn.is-loading::after { animation-duration: 2.4s; }
 }
 
-/* ---------- Nhãn mức đánh giá (B8): viên thuốc nền nhạt + chấm tròn ----------
-   Dùng chung cho component FitBadge (B7 bảng xếp hạng) và thẻ tiến độ B6. Màu lấy từ biến --fit-* / --sc-* ở trên. */
+/* ---------- Nhãn mức đánh giá (FitBadge, B8): viên thuốc nền nhạt, chữ đậm ----------
+   B25: bỏ chấm trang trí; chỉ "Đang chấm" (is-pending) giữ chấm nhấp nháy vì là trạng thái đang chạy. */
 .fit-badge {
     display: inline-flex;
     align-items: center;
@@ -275,20 +355,12 @@ body {
     padding: 0 10px;
     border: 1px solid transparent;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: var(--sc-text-badge);
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
     color: var(--sc-neutral);
     background: var(--sc-neutral-bg);
-}
-.fit-badge::before {
-    content: "";
-    flex: 0 0 6px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
 }
 .fit-badge.fit-excellent { color: var(--fit-excellent); background: var(--fit-excellent-bg); }
 .fit-badge.fit-good      { color: var(--fit-good);      background: var(--fit-good-bg); }
@@ -297,10 +369,9 @@ body {
 .fit-badge.fit-none      { color: var(--sc-neutral);    background: var(--sc-neutral-bg); }
 .fit-badge.is-error      { color: var(--sc-error);      background: var(--sc-error-bg); }
 .fit-badge.is-pending    { color: var(--sc-info);       background: var(--sc-info-bg); }
-.fit-badge.is-pending::before { animation: fit-pulse 1.2s ease-in-out infinite; }
+.fit-badge.is-pending::before { content: ""; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: fit-pulse 1.2s ease-in-out infinite; }
 /* Nhãn phụ (vd "Chỉ chấm Keyword"): viền thay nền để không lẫn với mức đánh giá */
-.fit-badge.is-keyword    { color: var(--sc-neutral);    background: #fff; border-color: #cbd5e1; }
-.fit-badge.is-keyword::before { border-radius: 1px; }
+.fit-badge.is-keyword    { color: var(--sc-neutral);    background: #fff; border-color: #c9d5d6; }
 @keyframes fit-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .fit-badge.is-pending::before { animation: none; } }
 
@@ -308,14 +379,12 @@ body {
 .c-fields { display:grid; gap:6px; border:0; margin:0; padding:0; min-width:0; }
 .c-fields label, .c-label { display:block; font-size:12px; font-weight:600; color:var(--sc-ink-700); margin-top:8px; }
 .c-label { margin-bottom:6px; }
-.c-input { width:100%; min-width:0; min-height:42px; padding:9px 10px; border:1px solid var(--sc-line-200); border-radius:8px; background:#fff; color:var(--sc-ink-900); font:400 13px var(--sc-font-body); }
 textarea.c-input { min-height:64px; resize:vertical; }
-.c-input:focus-visible, .c-check input:focus-visible { outline:3px solid var(--sc-brand-700); outline-offset:2px; }
-.c-input[aria-invalid="true"] { border-color:#c2415a; }
-.c-error { color:#aa3045; font-size:12px; line-height:1.5; }
+.c-error { color:var(--sc-danger); font-size:12px; line-height:1.5; }
 .c-error:empty { display:none; }
+.c-check input:focus-visible { outline:2px solid var(--sc-focus); outline-offset:2px; }
 .c-hint { display:block; color:var(--sc-ink-500); font-size:12px; line-height:1.6; margin:6px 0 0; }
-.req { color:#b42318; }
+.req { color:var(--sc-danger); }
 .c-alert { margin:14px 0 0; padding:10px 12px; border:1px solid #f2dce1; border-radius:8px; background:#fff1f3; color:#a53044; font-size:12px; line-height:1.7; }
 .c-notice { margin:0 0 12px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.6; }
 .c-notice p { margin:4px 0 0; font-size:12px; }
@@ -329,15 +398,12 @@ textarea.c-input { min-height:64px; resize:vertical; }
 .c-match-list .btn { flex:none; font-size:12px; min-height:38px; }
 .c-check { display:flex; gap:8px; align-items:flex-start; margin-top:14px; font-size:13px; line-height:1.5; }
 .c-check input { width:18px; height:18px; margin-top:1px; accent-color:var(--sc-brand-700); flex:none; }
-.c-btn-danger { background:#b42318; border:1px solid #b42318; color:#fff; }
-.c-btn-danger:hover:not(:disabled) { background:#912018; color:#fff; }
-.c-btn-danger:disabled { background:#d9a19b; border-color:#d9a19b; color:#fff; }
-.modal-foot .btn { min-height:42px; font-size:13px; }
+.modal-foot .btn { min-height:var(--sc-control-h); }
 .merge-choice { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; border:0; margin:0; padding:0; }
 .merge-card { position:relative; display:grid; gap:8px; padding:14px; border:1px solid var(--sc-line-200); border-radius:12px; cursor:pointer; min-width:0; }
 .merge-card.on { border-color:var(--sc-brand-700); box-shadow:0 0 0 2px var(--sc-brand-100); background:var(--sc-brand-50); }
 .merge-card input { position:absolute; opacity:0; width:1px; height:1px; }
-.merge-card:focus-within { outline:3px solid var(--sc-brand-accent, #14b8a6); outline-offset:2px; }
+.merge-card:focus-within { outline:2px solid var(--sc-focus); outline-offset:2px; }
 .merge-card strong { font-size:15px; overflow-wrap:anywhere; }
 .merge-card dl { margin:0; display:grid; gap:4px; font-size:12px; }
 .merge-card dl div { display:flex; justify-content:space-between; gap:8px; }

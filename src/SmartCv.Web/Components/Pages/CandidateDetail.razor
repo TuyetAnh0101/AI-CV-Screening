@@ -106,7 +106,7 @@
                                         <li class="app" @key="a.ApplicationId">
                                             <div class="app-main">
                                                 <div class="app-job"><strong>@a.JobTitle</strong><span>Ứng tuyển @CandidateText.Date(a.AppliedAt) · hồ sơ #@a.ApplicationId</span></div>
-                                                <span class="stage @StageText.Css(a.Stage)"><i class="stage-dot" aria-hidden="true"></i>@StageText.Name(a.Stage)@if (a.Stage == ApplicationStages.Rejected && CvLibraryText.Reason(a.RejectReason, anon) is { } reason) { <small> · @reason</small> }</span>
+                                                <span class="stage @StageText.Css(a.Stage)">@StageText.Name(a.Stage)@if (a.Stage == ApplicationStages.Rejected && CvLibraryText.Reason(a.RejectReason, anon) is { } reason) { <small> · @reason</small> }</span>
                                                 <div class="app-score">@if (a.LatestFinalScore is { } score) { <strong>@Display.Score(score)</strong><span>điểm lần ứng tuyển này</span>@if (a.LatestFitLabel is { } fit && FitLevel.IsKnown(fit)) { <span class="fit">@fit</span> } } else { <span class="muted">Chưa chấm</span> }</div>
                                             </div>
                                             <button id="@($"timeline-{a.ApplicationId}")" type="button" class="timeline-toggle" aria-expanded="@(open ? "true" : "false")" aria-controls="@($"timeline-panel-{a.ApplicationId}")" @onclick="() => Toggle(a.ApplicationId)">@(open ? "Ẩn" : "Xem") dòng thời gian (@a.Events.Count)</button>

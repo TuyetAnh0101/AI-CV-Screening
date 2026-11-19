@@ -1,12 +1,12 @@
 /* SCApp v2 – biểu đồ đường kết hợp. Deep Teal = hồ sơ mới (trục trái), Mint = tỷ lệ qua vòng CV (trục phải). */
-.trend { --apps: var(--sc-brand-700, #0f766e); --rate: var(--sc-brand-500, #14b8a6); --apps-soft: rgba(15, 118, 110, .14);
+.trend { --apps: var(--sc-brand-700); --rate: var(--sc-brand-500); --apps-soft: rgba(22, 76, 86, .14);
     display:grid; gap:10px; min-width:0; }
 .trend-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px 16px; align-items:flex-start; }
 .trend-title { flex:1 1 300px; min-width:0; }
 h2 { font:600 16px/1.4 var(--sc-font-display); margin:0 0 2px; color:var(--text-main); }
 .trend-head p { margin:0; color:var(--text-muted); font-size:12px; line-height:1.5; }
 .trend-totals { display:flex; gap:8px; margin:0; }
-.trend-totals div { background:var(--sc-brand-50, #f0fdfa); border:1px solid var(--sc-brand-100, #ccfbf1); border-radius:10px; padding:6px 12px; min-width:96px; }
+.trend-totals div { background:var(--sc-brand-50); border:1px solid var(--sc-brand-100); border-radius:10px; padding:6px 12px; min-width:96px; }
 .trend-totals dt { font-size:11px; color:var(--text-muted); font-weight:600; }
 .trend-totals dd { margin:0; font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text-main); }
 .trend-totals small { font-size:11px; color:var(--text-muted); font-weight:600; }
@@ -45,23 +45,23 @@ h2 { font:600 16px/1.4 var(--sc-font-display); margin:0 0 2px; color:var(--text-
 .dot-rate { background:#fff; border:2px solid var(--rate); }
 .dot.on { width:11px; height:11px; }
 .dot-apps.on { box-shadow:0 0 0 3px #fff, 0 0 0 5px var(--apps-soft); }
-.dot-rate.on { border-width:2.5px; box-shadow:0 0 0 3px rgba(20, 184, 166, .18); }
+.dot-rate.on { border-width:2.5px; box-shadow:0 0 0 3px rgba(40, 191, 168, .18); }
 
 .hits { position:absolute; inset:0; display:flex; }
 .hit { flex:1 1 0; cursor:crosshair; }
 
 .tip { position:absolute; top:4px; transform:translateX(-50%); z-index:3; display:grid; gap:3px; min-width:168px; padding:8px 10px; border-radius:10px;
-    background:rgba(10, 46, 45, .94); color:#fff; font-size:12px; line-height:1.45; pointer-events:none; box-shadow:0 10px 24px -10px rgba(10, 46, 45, .5); white-space:nowrap; }
+    background:rgba(10, 42, 50, .94); color:#fff; font-size:12px; line-height:1.45; pointer-events:none; box-shadow:0 10px 24px -10px rgba(10, 42, 50, .5); white-space:nowrap; }
 /* Máy tính: chú thích nằm cạnh đường dóng, không che điểm đang xem. Điện thoại: canh giữa, kẹp trong khung. */
 .tip-right { transform:translateX(14px); }
 .tip-left { transform:translateX(calc(-100% - 14px)); }
-.tip strong { font-size:12px; font-weight:600; color:var(--sc-brand-100, #ccfbf1); }
+.tip strong { font-size:12px; font-weight:600; color:var(--sc-brand-100); }
 .tip span { display:flex; align-items:center; gap:6px; }
 .tip b { margin-left:auto; padding-left:10px; font-variant-numeric:tabular-nums; }
 .tip small { color:#a7c4c2; }
 .tip .key { width:16px; }
 .tip .key::after { left:4px; }
-.tip .key-rate::after { background:rgba(10, 46, 45, .94); }
+.tip .key-rate::after { background:rgba(10, 42, 50, .94); }
 
 .y-labels { grid-row:2; position:relative; font-size:11px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .y-labels.left { grid-column:1; }

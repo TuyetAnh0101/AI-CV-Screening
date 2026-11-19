@@ -49,8 +49,7 @@ tr.is-inactive { background:#fafcfb; }
 .stage-shortlisted { background:#f1faf6; border-color:#d5eadf; } .stage-interview { background:#f1f6fc; border-color:#dce5f0; } .stage-rejected { background:#fff6f6; border-color:#f4dddd; }
 .unavailable { color:var(--sc-ink-500); font-size:12px; }
 .status-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:8px; font-size:11px; font-weight:550; line-height:1.6; white-space:nowrap; }
-.status-badge i { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0; }
-.status-badge.is-active { color:#146b50; background:#eaf7f0; } .status-badge.is-expired { color:#875415; background:#fff4dc; } .status-badge.is-inactive { color:#56686a; background:#edf1f1; }
+.status-badge.is-active { color:var(--sc-success); background:var(--sc-success-bg); } .status-badge.is-expired { color:var(--sc-warning); background:var(--sc-warning-bg); } .status-badge.is-inactive { color:var(--sc-neutral); background:var(--sc-neutral-bg); }
 .row-actions { display:grid; justify-items:stretch; gap:3px; }
 .row-actions a { display:flex; align-items:center; justify-content:center; min-height:32px; font-size:12px; text-decoration:none; gap:5px; }
 .results-link { color:var(--sc-brand-700); font-weight:550; } .edit-link { color:var(--sc-ink-500); } .row-actions a:hover { text-decoration:underline; }

@@ -34,7 +34,7 @@
     transition: background .15s ease, border-color .15s ease;
 }
 .history-pick:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--border); }
-.is-selected .history-pick { border-color: #99dcd3; background: #f0fdfa; }
+.is-selected .history-pick { border-color: #99dcd3; background: var(--sc-brand-50); }
 .is-current .history-pick { box-shadow: inset 3px 0 0 var(--brand); }
 .history-pick:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
 .history-pick:disabled { cursor: wait; opacity: .7; }

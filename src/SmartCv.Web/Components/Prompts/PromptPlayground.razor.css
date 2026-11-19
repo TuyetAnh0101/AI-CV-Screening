@@ -56,11 +56,8 @@
     border: 1px solid var(--sc-line-200); border-radius: 999px; background: #fff;
     color: var(--sc-ink-700); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.pg-quota-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--sc-brand-500); box-shadow: 0 0 0 3px rgba(20, 184, 166, .18); }
 .pg-quota.tone-low { color: var(--pg-warn-ink); background: var(--pg-warn-bg); border-color: var(--pg-warn-line); }
-.pg-quota.tone-low .pg-quota-dot { background: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .18); }
 .pg-quota.tone-empty { color: var(--pg-error-ink); background: var(--pg-error-bg); border-color: var(--pg-error-line); }
-.pg-quota.tone-empty .pg-quota-dot { background: #e11d48; box-shadow: none; }
 .pg-quota.tone-unknown, .pg-quota.is-loading { color: var(--text-muted); background: var(--surface-soft); font-weight: 500; }
 .pg-sim { padding: 3px 8px; border-radius: 6px; background: var(--pg-ai-soft); color: var(--pg-ai-ink); font-size: 11px; font-weight: 600; white-space: nowrap; }
 
@@ -109,10 +106,10 @@
 .pg-field .form-select:disabled { background-color: var(--surface-soft); color: var(--text-muted); }
 .pg-run { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .pg-run-btn { gap: 8px; min-height: 42px; height: auto; max-width: 280px; font-size: 13.5px; white-space: nowrap; }
-.pg-run-btn:not(:disabled) { box-shadow: 0 8px 18px -10px rgba(15, 118, 110, .8); }
+.pg-run-btn:not(:disabled) { box-shadow: 0 8px 18px -10px rgba(22, 76, 86, .8); }
 .btn.sc-btn-primary.pg-run-btn:disabled { background: #d5e5e3; color: #4b6563; opacity: 1; cursor: not-allowed; }
 .pg-run-btn:disabled .pg-run-mark { color: #7c9a97; }
-.pg-run-mark { color: #99f6e4; font-size: 13px; }
+.pg-run-mark { color: #b9ded7; font-size: 13px; }
 .pg-run-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pg-hint { margin: -6px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
 .pg-hint.is-blocked { color: var(--pg-warn-ink); }
@@ -171,7 +168,7 @@
 .pg-card.is-trial {
     border-color: transparent;
     background: linear-gradient(#fff, #fff) padding-box, var(--sc-grad-ai) border-box;
-    box-shadow: 0 14px 30px -18px rgba(99, 102, 241, .45), 0 1px 2px rgba(15, 42, 42, .05);
+    box-shadow: 0 14px 30px -18px rgba(99, 102, 241, .45), 0 1px 2px rgba(14, 54, 64, .05);
 }
 .pg-card.is-trial.is-stale { border: 1px dashed var(--pg-warn-line); background: #fff; box-shadow: none; }
 .pg-card.is-stale .pg-card-body { opacity: .62; }
@@ -216,7 +213,7 @@
 /* ---------- Nội dung gửi Gemini ---------- */
 .pg-mask-line {
     display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 14px;
-    border: 1px solid #99f6e4; border-radius: 12px; background: var(--sc-brand-50); color: var(--brand-hover); font-size: 13px;
+    border: 1px solid #b9ded7; border-radius: 12px; background: var(--sc-brand-50); color: var(--brand-hover); font-size: 13px;
 }
 .pg-mask-line strong { font-weight: 650; }
 .pg-shield { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 11px; }

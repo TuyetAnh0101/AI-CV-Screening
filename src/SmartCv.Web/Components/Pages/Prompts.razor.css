@@ -4,9 +4,9 @@
 .eyebrow { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
 .prompts-heading h1 { font-family: var(--sc-font-display); color: var(--text-main); font-size: clamp(24px, 2.3vw, 28px); font-weight: 700; line-height: 1.4; margin: 0 0 8px; }
 .prompts-heading p:last-child { color: var(--text-muted); font-size: 13px; line-height: 1.8; margin: 0; }
-.active-version { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 9px 13px; border: 1px solid #99f6e4; border-radius: 24px; color: var(--brand-hover); background: #f0fdfa; font-size: 12px; overflow-wrap: anywhere; }
+.active-version { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 9px 13px; border: 1px solid var(--sc-brand-100); border-radius: 24px; color: var(--sc-brand-800); background: var(--sc-brand-50); font-size: 12px; overflow-wrap: anywhere; }
 .active-version strong { font-family: var(--sc-font-mono); font-size: 11px; }
-.active-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--brand); }
+.active-check { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: 0 0 18px; border-radius: 6px; background: var(--sc-brand-700); color: #fff; font-size: 11px; font-weight: 800; }
 .active-version.is-empty { background: var(--surface-soft); border-color: var(--border); color: var(--text-muted); }
 .active-version.is-stale { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
 .activation-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border: 1px solid #fecaca; background: #fff7f7; color: var(--sc-error); border-radius: 10px; font-size: 13px; }
@@ -25,3 +25,12 @@
 button:focus-visible { outline: 3px solid var(--brand-accent); outline-offset: 3px; }
 @media (max-width: 1100px) { .prompt-workspace { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .prompts-page { gap: 16px; } .discard-actions { width: 100%; } }
+
+/* B25: lối sang trang Bộ dữ liệu đánh giá (thay khối quản lý bộ trước đây nằm ngay trên trang này) */
+.sets-link { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; margin-top: 24px; padding: 16px 20px; border: 1px solid var(--sc-line-200); border-radius: var(--sc-radius-card); background: linear-gradient(110deg, var(--sc-brand-50), var(--sc-surface-0) 65%); box-shadow: var(--sc-shadow-card); }
+.sets-link > div { flex: 1 1 320px; min-width: 0; }
+.sets-link strong { font-size: 15px; font-weight: 600; color: var(--text-main); }
+.sets-link p { margin: 2px 0 0; font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.sets-link-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--sc-grad-brand); }
+.sets-link-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 600px) { .sets-link { padding: 14px 16px; } .sets-link .btn { width: 100%; } }

@@ -39,7 +39,7 @@
     @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
     <div class="dialog-actions">
         <button type="button" class="btn sc-btn-secondary" disabled="@(Busy || submitting)" @onclick="CancelAsync">Hủy</button>
-        <button type="button" class="btn @(IsReject ? "btn-danger" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">
+        <button type="button" class="btn @(IsReject ? "sc-btn-danger" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">
             @(Busy || submitting ? "Đang lưu..." : ActorOnly ? "Lưu tên HR" : IsReject ? "Loại hồ sơ" : "Lưu quyết định")
         </button>
     </div>
