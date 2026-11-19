@@ -1,0 +1,42 @@
+@*
+    B27: người đang đăng nhập (chữ viết tắt, họ tên, vai trò) và nút Đăng xuất trên thanh trên cùng.
+    Đăng xuất: xóa phiên trong bộ nhớ và sessionStorage, rồi tải lại /login — circuit cũ bị bỏ nên không còn dữ liệu cũ
+    nào trên giao diện (Back của trình duyệt cũng chỉ về được trang đăng nhập).
+*@
+@implements IDisposable
+@inject AuthSession Session
+@inject NavigationManager Nav
+
+@if (Session.User is { } u)
+{
+    <div class="user-menu">
+        <span class="avatar" aria-hidden="true">@AuthText.Initials(u.FullName)</span>
+        <span class="who">
+            <span class="name" title="@u.Email">@u.FullName</span>
+            <span class="role">@AuthText.RoleName(u.Role)</span>
+        </span>
+        <span class="visually-hidden">Đang đăng nhập: @u.FullName, @AuthText.RoleName(u.Role).</span>
+        <button type="button" class="logout" @onclick="SignOutAsync" disabled="@signingOut" aria-label="Đăng xuất" title="Đăng xuất khỏi SCApp">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zm-.6 4.4L11 9l-2 2h8v2H9l2 2-1.6 1.6L4.8 12z" /></svg>
+            <span>Đăng xuất</span>
+        </button>
+    </div>
+}
+
+@code {
+    private bool signingOut;
+
+    protected override void OnInitialized() => Session.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task SignOutAsync()
+    {
+        if (signingOut) return;
+        signingOut = true;
+        await Session.SignOutAsync();
+        Nav.NavigateTo(AuthText.LoginPath + "?signedOut=1", forceLoad: true, replace: true);
+    }
+
+    public void Dispose() => Session.Changed -= OnChanged;
+}

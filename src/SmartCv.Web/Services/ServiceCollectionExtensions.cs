@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
 namespace SmartCv.Web.Services;
 
 public static class ServiceCollectionExtensions
@@ -19,19 +21,46 @@ public static class ServiceCollectionExtensions
         // Địa chỉ gốc phải kết thúc bằng "/" thì "api/jobs" mới ghép đúng thành https://.../api/jobs
         var baseUri = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
-        void Add<TClient>(TimeSpan timeout) where TClient : class
+        // B27: phiên đăng nhập của từng tab (Scoped = một circuit Blazor). Không singleton/static giữ token.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<ITokenStore, ProtectedSessionTokenStore>();
+        services.AddScoped<AuthSession>();
+        services.AddScoped<IAuthApi>(sp => sp.GetRequiredService<AuthApiClient>());
+
+        // authenticated = true: client được gắn AuthSession của scope đang yêu cầu nó (scope của circuit khi một component
+        // inject client). Token được đặt lên từng HttpRequestMessage lúc gửi (ApiClientBase), không đặt lên HttpClient dùng chung.
+        void Add<TClient>(TimeSpan timeout, bool authenticated = true) where TClient : ApiClientBase
         {
-            var clientBuilder = services.AddHttpClient<TClient>(client =>
+            var clientBuilder = services.AddHttpClient(typeof(TClient).Name, client =>
             {
                 client.BaseAddress = baseUri;
                 client.Timeout = timeout;
             });
+            // Log của HttpClientFactory (mức Trace) không bao giờ in giá trị header, kể cả Authorization.
+            clientBuilder.RedactLoggedHeaders(_ => true);
             // HttpClient's default logger includes the entire URI, including private search queries.
             if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient))
                 clientBuilder.RemoveAllLoggers();
+            if (authenticated)
+            {
+                clientBuilder.AddTypedClient<TClient>((http, scope) =>
+                {
+                    var client = ActivatorUtilities.CreateInstance<TClient>(scope, http);
+                    client.UseSession(scope.GetRequiredService<AuthSession>());
+                    return client;
+                });
+            }
+            else
+            {
+                clientBuilder.AddTypedClient<TClient>();
+            }
         }
 
-        Add<HealthApiClient>(TimeSpan.FromSeconds(5));
+        // Công khai: kiểm tra API còn chạy và đăng nhập không cần (và không được gửi) Bearer.
+        Add<HealthApiClient>(TimeSpan.FromSeconds(5), authenticated: false);
+        Add<AuthApiClient>(TimeSpan.FromSeconds(20), authenticated: false); // B27: A28 đăng nhập, /api/auth/me với token chỉ định
+
+        // Mọi client nghiệp vụ dưới đây đều gửi kèm Bearer của tab đang dùng (A29 bắt buộc).
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
         Add<DashboardApiClient>(TimeSpan.FromSeconds(30)); // B19: A19 summary, read-only.
         Add<ApplicationApiClient>(TimeSpan.FromSeconds(30));

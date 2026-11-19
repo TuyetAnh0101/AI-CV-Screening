@@ -1,0 +1,174 @@
+/* B27 — bố cục trang đăng nhập (Deep Teal + AI Glow). Chỉ dùng token của app.css; không tạo bảng màu mới.
+   ≥ 1024px: hai cột (giới thiệu | form). < 1024px: khối giới thiệu thu gọn thành dải logo phía trên, form ở giữa. */
+
+.auth-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    /* Khối giới thiệu ~44% nhưng không quá 760px: màn 1920px không bị một mảng tối quá rộng */
+    grid-template-columns: minmax(400px, min(44%, 760px)) 1fr;
+    background: var(--sc-grad-page) no-repeat, var(--sc-surface-50);
+    color: var(--sc-ink-900);
+}
+
+/* ---------- Khối giới thiệu ---------- */
+.auth-brand {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding: 40px clamp(32px, 4vw, 64px);
+    background: var(--sc-grad-sidebar);
+    color: #fff;
+}
+
+.brand-glow {
+    position: absolute;
+    inset: auto -20% -30% auto;
+    width: 520px;
+    height: 520px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(84, 185, 210, .22), rgba(40, 191, 168, .08) 55%, transparent 72%);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.brand-head { display: flex; align-items: center; gap: 12px; }
+/* Cùng cách hiển thị với logo trên menu trái (NavMenu): nền sáng, bo 8px, đọc rõ trên nền tối */
+.brand-logo { width: 60px; height: auto; flex-shrink: 0; border-radius: 8px; background: var(--sc-surface-0); }
+.brand-name { font-size: 22px; font-weight: 600; letter-spacing: -.01em; line-height: 1; }
+.brand-name span { color: var(--sc-brand-500); }
+
+.brand-body { max-width: 460px; margin-top: auto; }
+
+.brand-eyebrow {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--sc-sidebar-accent);
+}
+
+.brand-title {
+    margin: 0 0 16px;
+    font-size: clamp(26px, 2.4vw, 32px);
+    line-height: 1.22;
+    font-weight: 650;
+    letter-spacing: -.02em;
+}
+.brand-title span { color: #bfeee5; }
+
+.brand-lead { margin: 0 0 24px; font-size: 15px; line-height: 1.65; color: rgba(255, 255, 255, .78); }
+
+.brand-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.brand-points li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; line-height: 1.5; color: rgba(255, 255, 255, .9); }
+.brand-points svg {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 7px;
+    border-radius: 10px;
+    fill: var(--sc-sidebar-accent);
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .1);
+}
+.brand-points span { padding-top: 6px; }
+
+/* Minh họa trừu tượng: thẻ "so khớp hồ sơ" bằng khối CSS, không chữ/số */
+.brand-visual { position: relative; align-self: flex-start; margin-bottom: auto; }
+
+.match-card {
+    width: 300px;
+    padding: 16px;
+    border-radius: var(--sc-radius-card);
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 0 24px 48px -24px rgba(0, 0, 0, .45);
+    display: grid;
+    gap: 12px;
+}
+
+.match-head { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+.chip { width: 24px; height: 24px; border-radius: 8px; background: var(--sc-grad-ai); opacity: .9; }
+
+.match-row { display: grid; grid-template-columns: 28px 1fr 72px; align-items: center; gap: 12px; }
+.dot { width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, .14); }
+.lines { display: grid; gap: 6px; }
+.line { display: block; height: 7px; border-radius: 99px; background: rgba(255, 255, 255, .22); }
+.line.faint { background: rgba(255, 255, 255, .12); }
+.w-60 { width: 60%; } .w-40 { width: 40%; } .w-35 { width: 35%; }
+.meter { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.fill { display: block; height: 100%; border-radius: inherit; background: var(--sc-grad-mint); }
+.fill.f-0 { width: 88%; } .fill.f-1 { width: 66%; } .fill.f-2 { width: 40%; opacity: .7; }
+
+.spark {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--sc-grad-ai);
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.spark.s-1 { top: -10px; right: -12px; }
+.spark.s-2 { bottom: -8px; left: -10px; width: 9px; height: 9px; opacity: .7; }
+
+.brand-foot { margin: 0; font-size: 12px; color: rgba(255, 255, 255, .56); }
+
+/* ---------- Vùng form ---------- */
+.auth-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    min-width: 0;
+}
+
+.auth-panel { width: 100%; max-width: 420px; }
+
+/* ---------- Màn hình vừa / thấp ---------- */
+@media (max-height: 780px) and (min-width: 1024px) {
+    .brand-visual { display: none; }
+    .brand-body { margin-bottom: auto; }
+}
+
+@media (max-width: 1279.98px) and (min-width: 1024px) {
+    .brand-lead { font-size: 14px; }
+    .match-card { width: 260px; }
+}
+
+/* ---------- Máy tính bảng và điện thoại: dải logo + form ---------- */
+@media (max-width: 1023.98px) {
+    .auth-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .auth-brand { flex-direction: row; align-items: center; gap: 12px; padding: 14px 24px; }
+    .brand-glow { width: 260px; height: 260px; inset: -120px -60px auto auto; }
+    .brand-logo { width: 44px; border-radius: 6px; }
+    .brand-name { font-size: 18px; }
+    .brand-body { margin: 0 0 0 auto; max-width: none; }
+    .brand-eyebrow { margin: 0; font-size: 11px; letter-spacing: .06em; text-align: right; }
+    .brand-title, .brand-lead, .brand-points, .brand-visual, .brand-foot { display: none; }
+    .auth-main { align-items: flex-start; padding: clamp(24px, 8vh, 72px) 24px 32px; }
+}
+
+@media (max-width: 575.98px) {
+    .auth-brand { padding: 12px 16px; }
+    .brand-eyebrow { display: none; }
+    .auth-main { padding: 24px 16px 32px; }
+}
+
+/* Khung lỗi mặc định của Blazor (giống MainLayout): ẩn cho tới khi có lỗi */
+#blazor-error-ui {
+    background: #fff3cd;
+    color: #664d03;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, .2);
+    display: none;
+    left: 0;
+    padding: .6rem 1.25rem .7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+#blazor-error-ui .reload { margin-left: .5rem; }
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }

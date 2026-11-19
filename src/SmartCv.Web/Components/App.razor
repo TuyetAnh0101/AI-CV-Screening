@@ -12,11 +12,13 @@
     <link rel="stylesheet" href="@Assets["SmartCv.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="images/brand/scapp-logo.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    @* B27: tắt prerender. Phiên đăng nhập nằm trong ProtectedSessionStorage (cần JavaScript của circuit); prerender sẽ
+       chạy trang khi chưa biết ai đăng nhập và gọi API không có token (401). Trang chỉ vẽ sau khi circuit đã kết nối. *@
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <ReconnectModal />
     <script src="@Assets["js/row-menus.js"]" defer></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>

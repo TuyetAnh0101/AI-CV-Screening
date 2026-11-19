@@ -14,7 +14,10 @@ public sealed class EvaluationApiClient(HttpClient http, ILogger<EvaluationApiCl
     {
         try
         {
-            using var response = await Http.GetAsync(CvUrl(id), HttpCompletionOption.ResponseHeadersRead, ct);
+            // B27: gắn Bearer của phiên hiện tại. Bản thân link CvUrl mở thẳng trên trình duyệt thì không mang token (B43).
+            using var request = new HttpRequestMessage(HttpMethod.Get, CvUrl(id));
+            using var response = await SendAuthorizedAsync(request, ct, HttpCompletionOption.ResponseHeadersRead);
+            if (response is null) return ApiResult<bool>.LocalFailure(SignedOutMessage, ApiFailureKind.SignedOut, 401, AuthenticationRequiredCode);
             return response.IsSuccessStatusCode ? ApiResult<bool>.Success(true)
                 : ApiResult<bool>.Failure("Không mở được CV.", (int)response.StatusCode);
         }

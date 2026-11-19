@@ -1,0 +1,71 @@
+@*
+    B27: bố cục cho trang đăng nhập (B29 dùng lại cho đổi mật khẩu). Không có menu bên trái hay thanh trên cùng của ứng dụng.
+    Màn hình rộng: khối giới thiệu Deep Teal bên trái + vùng form bên phải. Màn hình hẹp: khối giới thiệu thu thành dải logo.
+    Hình minh họa chỉ là khối trừu tượng (không số liệu giả). Kiểu ở AuthLayout.razor.css.
+*@
+@inherits LayoutComponentBase
+
+<div class="auth-shell">
+    <aside class="auth-brand" aria-label="Giới thiệu SCApp">
+        <div class="brand-glow" aria-hidden="true"></div>
+
+        <div class="brand-head">
+            <img class="brand-logo" src="images/brand/scapp-logo.png" width="60" height="48" alt="" />
+            <span class="brand-name">SC<span>App</span></span>
+        </div>
+
+        <div class="brand-body">
+            <p class="brand-eyebrow">Sàng lọc hồ sơ ứng viên ứng dụng AI</p>
+            <p class="brand-title">Tìm đúng ứng viên nhanh hơn, <span>quyết định vẫn thuộc về bạn.</span></p>
+            <p class="brand-lead">SCApp đọc CV, đối chiếu với tiêu chí của từng vị trí và gợi ý mức độ phù hợp, để đội tuyển dụng tập trung vào những hồ sơ đáng xem nhất.</p>
+
+            <ul class="brand-points">
+                <li>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6zm8 1.5V8h4.5zM9 12h8v1.6H9zm0 3.4h8V17H9zm0-6.8h4v1.6H9z" /></svg>
+                    <span>Đọc và chuẩn hóa nội dung CV tự động</span>
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z" /></svg>
+                    <span>Xếp hạng hồ sơ theo kỹ năng và kinh nghiệm yêu cầu</span>
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5zm-1.2 13.6-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4z" /></svg>
+                    <span>Chuyên viên tuyển dụng xem xét và đưa ra quyết định cuối cùng</span>
+                </li>
+            </ul>
+        </div>
+
+        @* Minh họa trừu tượng: ba hồ sơ được AI so khớp với một vị trí. Không có chữ, không có số. *@
+        <div class="brand-visual" aria-hidden="true">
+            <div class="match-card">
+                <div class="match-head"><span class="chip"></span><span class="line w-40"></span></div>
+                @for (var i = 0; i < 3; i++)
+                {
+                    var level = i;
+                    <div class="match-row">
+                        <span class="dot"></span>
+                        <span class="lines"><span class="line w-60"></span><span class="line w-35 faint"></span></span>
+                        <span class="meter"><span class="fill f-@level"></span></span>
+                    </div>
+                }
+            </div>
+            <span class="spark s-1"></span>
+            <span class="spark s-2"></span>
+        </div>
+
+        <p class="brand-foot">Hệ thống nội bộ dành cho đội ngũ tuyển dụng.</p>
+    </aside>
+
+    <main class="auth-main">
+        <div class="auth-panel">
+            @Body
+        </div>
+    </main>
+</div>
+
+@* Khung báo lỗi mặc định của Blazor (ẩn, chỉ hiện khi giao diện gặp lỗi không xử lý được) *@
+<div id="blazor-error-ui" data-nosnippet>
+    Đã có lỗi xảy ra trên giao diện.
+    <a href="." class="reload">Tải lại trang</a>
+    <span class="dismiss">🗙</span>
+</div>
