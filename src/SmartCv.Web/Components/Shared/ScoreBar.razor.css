@@ -23,7 +23,7 @@
 }
 
 /* Lớp mờ: điểm keyword */
-.kw { background: rgba(20, 184, 166, .28); }
+.kw { background: rgba(40, 191, 168, .28); }
 /* Vạch nhỏ ở cuối lớp keyword, nằm TRÊN lớp đậm để không bị che */
 .kw-tick {
     position: absolute;
@@ -33,7 +33,7 @@
     margin-left: -1px;
     border-radius: 1px;
     background: rgba(255, 255, 255, .9);
-    box-shadow: 0 0 0 1px rgba(15, 118, 110, .35);
+    box-shadow: 0 0 0 1px rgba(22, 76, 86, .35);
     z-index: 2;
 }
 

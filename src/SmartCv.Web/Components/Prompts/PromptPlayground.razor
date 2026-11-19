@@ -26,7 +26,7 @@
                 @if (quota is { } q)
                 {
                     <span class="pg-quota tone-@PlaygroundRules.QuotaTone(q.Remaining)" title="Mỗi lần chấm thử dùng 1 lượt AI. Xem nội dung gửi Gemini không tốn lượt.">
-                        <span class="pg-quota-dot" aria-hidden="true"></span>@PlaygroundRules.QuotaText(q.Remaining, q.Limit, q.WindowMinutes)
+                        @PlaygroundRules.QuotaText(q.Remaining, q.Limit, q.WindowMinutes)
                     </span>
                     @if (q.AiSimulated)
                     {
@@ -75,8 +75,8 @@
     {
         <div class="pg-empty" role="status">
             <strong>Chưa có bộ CV đánh giá</strong>
-            <p>Hồ sơ để thử được lấy từ bộ CV đánh giá đang chọn của trang. Hãy tạo bộ ở mục “Bộ CV đánh giá” bên dưới.</p>
-            <a href="#evaluation-set-manager">Tạo bộ CV đánh giá</a>
+            <p>Hồ sơ để thử được lấy từ bộ CV đánh giá đang chọn của trang. Hãy tạo bộ ở trang “Bộ dữ liệu đánh giá”.</p>
+            <a href="/evaluation-sets">Tạo bộ CV đánh giá</a>
         </div>
     }
     else

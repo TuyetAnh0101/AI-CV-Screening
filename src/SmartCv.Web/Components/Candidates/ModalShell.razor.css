@@ -1,6 +1,6 @@
-.modal-shell { width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 48px); padding:0; border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); color:var(--sc-ink-900); box-shadow:0 24px 80px #0a2e2d40; overflow:auto; }
+.modal-shell { width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 48px); padding:0; border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); color:var(--sc-ink-900); box-shadow:0 24px 80px #0a2a3240; overflow:auto; }
 .modal-shell.wide { width:min(760px, calc(100vw - 32px)); }
-.modal-shell::backdrop { background:#0a2e2d70; }
+.modal-shell::backdrop { background:#0a2a3270; }
 .modal-head { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:20px 20px 12px; background:var(--sc-surface-0); }
 .modal-eyebrow { margin:0 0 4px; color:var(--sc-brand-700); font-size:12px; font-weight:600; }
 .danger .modal-eyebrow { color:#b42318; }

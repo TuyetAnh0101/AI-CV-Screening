@@ -5,7 +5,7 @@
 @inject NavigationManager Nav
 
 <PageTitle>Prompt &amp; độ chính xác · SCApp</PageTitle>
-<NavigationLock ConfirmExternalNavigation="@(draft.IsDirty || labelsDirty)" OnBeforeInternalNavigation="BeforeInternalNavigation" />
+<NavigationLock ConfirmExternalNavigation="@draft.IsDirty" OnBeforeInternalNavigation="BeforeInternalNavigation" />
 
 <div class="prompts-page">
     <header class="prompts-heading">
@@ -20,7 +20,7 @@
         }
         else if (active is not null)
         {
-            <div class="active-version" role="status" aria-live="polite"><span class="active-dot" aria-hidden="true"></span><span>Đang dùng: <strong>@active.VersionName</strong> · @Accuracy(active.LatestAccuracyPercent)</span></div>
+            <div class="active-version" role="status" aria-live="polite"><span class="active-check" aria-hidden="true">✓</span><span>Đang dùng: <strong>@active.VersionName</strong> · @Accuracy(active.LatestAccuracyPercent)</span></div>
         }
         else if (loaded)
         {
@@ -59,7 +59,7 @@
         @if (pendingId is not null || pendingLocation is not null)
         {
             <section class="discard-notice" role="alert" aria-label="Xác nhận bỏ bản nháp" tabindex="-1" @ref="discardNotice">
-                <div><strong>Bạn có bản nháp chưa lưu</strong><p>Chuyển sang nội dung khác sẽ bỏ các thay đổi prompt hoặc nhãn/ghi chú HR đang soạn.</p></div>
+                <div><strong>Bạn có bản nháp chưa lưu</strong><p>Chuyển sang nội dung khác sẽ bỏ các thay đổi prompt đang soạn.</p></div>
                 <div class="discard-actions">
                     <button type="button" class="btn sc-btn-secondary" @onclick="KeepDraft">Giữ bản nháp</button>
                     <button type="button" class="btn sc-btn-primary" @onclick="DiscardAndContinue">Bỏ bản nháp và chuyển</button>
@@ -73,7 +73,7 @@
         <div class="prompt-workspace">
             <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(activatingId is not null || synchronizingActivation || pendingId is not null || pendingLocation is not null)"
                           Error="@error" OnSave="SaveAsync" OnDirtyChanged="DraftChanged"
-                          EvaluationSetId="evaluationSetId" LabelsVersion="setsRefresh" OnEvaluationSetChanged="SelectEvaluationSet" />@* B39 *@
+                          EvaluationSetId="evaluationSetId" OnEvaluationSetChanged="SelectEvaluationSet" />@* B39 *@
             <PromptHistory Versions="versions" SelectedId="draft.Source?.PromptVersionId" CreatedId="createdId" Disabled="Busy"
                            ActivatingId="activatingId" ActivationBlocked="@(activationNeedsRefresh || pendingId is not null || pendingLocation is not null)"
                            OnSelect="SelectVersion" OnActivate="ActivateAsync" />
@@ -81,8 +81,13 @@
     }
 </div>
 
-<EvaluationSetManager EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" OnSaved="EvaluationSetSaved" OnDirtyChanged="value => labelsDirty = value" />
-<PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" EvaluationSetId="evaluationSetId" SetsRefresh="setsRefresh" OnSetChanged="SelectEvaluationSet" />
+@* B25: tạo bộ, chọn CV và gán nhãn HR đã chuyển sang trang riêng /evaluation-sets. Trang này giữ chỗ DUY NHẤT để chạy Prompt Test. *@
+<aside id="sets-link" class="sets-link" aria-label="Bộ dữ liệu đánh giá">
+    <span class="sets-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9" /></svg></span>
+    <div><strong>Bộ dữ liệu đánh giá</strong><p>Tạo bộ, chọn CV đã quét, gán nhãn HR và kiểm tra độ tin cậy ở trang riêng. Prompt Test bên dưới dùng các bộ đó.</p></div>
+    <a class="btn sc-btn-secondary" href="@SetsHref">Quản lý bộ đánh giá</a>
+</aside>
+<PromptTestPanel Versions="versions" DefaultVersionId="draft.Source?.PromptVersionId" RunToken="@TestRunId" OnTokenChanged="UpdateTestToken" OnCompleted="RefreshTestVersionsAsync" EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" />
 <AccuracyCompare Versions="versions" RefreshVersion="accuracyRefresh" SelectedRunId="mismatchRunId" OnPick="SelectMismatchRun" EvaluationSetId="evaluationSetId" OnSetChanged="SelectEvaluationSet" />
 <MismatchTable Versions="versions" RunId="mismatchRunId" RefreshVersion="accuracyRefresh" EvaluationSetId="evaluationSetId" ShowMatrix="false" />
 @if (testHistoryWarning is not null)
@@ -92,21 +97,14 @@
 
 @code {
     [SupplyParameterFromQuery(Name = "testRunId")] public string? TestRunId { get; set; }
+    /// <summary>B25: trang /evaluation-sets dẫn sang đây với ?set= để chọn sẵn bộ khi chạy Prompt Test (chỉ là mã bộ).</summary>
+    [SupplyParameterFromQuery(Name = "set")] public int? SetQuery { get; set; }
     private string? testHistoryWarning;
     private int accuracyRefresh;
     private int? mismatchRunId;
     private int? evaluationSetId;
-    private int setsRefresh;
-    private bool labelsDirty;
+    private string SetsHref => evaluationSetId is > 0 ? $"/evaluation-sets?set={evaluationSetId}" : "/evaluation-sets";
     private void SelectEvaluationSet(int id) { evaluationSetId = id > 0 ? id : null; mismatchRunId = null; }
-    private async Task EvaluationSetSaved(int id)
-    {
-        if (evaluationSetId is null) SelectEvaluationSet(id);
-        ++setsRefresh;
-        // Refresh history/header accuracy through the same draft-preserving path used after a test completes.
-        try { await RefreshTestVersionsAsync(); }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-    }
     private void SelectMismatchRun(int runId) => mismatchRunId = runId;
     private void UpdateTestToken(string token)
     {
@@ -137,7 +135,11 @@
     private bool Busy => saving || activatingId is not null || synchronizingActivation;
     private static string Accuracy(decimal? percent) => percent is null ? "—" : RankingView.Score(percent) + "%";
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override Task OnInitializedAsync()
+    {
+        if (SetQuery is > 0) evaluationSetId = SetQuery;
+        return LoadAsync();
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!focusNotice) return;
@@ -291,7 +293,7 @@
     {
         if (new Uri(context.TargetLocation).AbsolutePath == new Uri(Nav.Uri).AbsolutePath) return Task.CompletedTask;
         if (Busy) { context.PreventNavigation(); return Task.CompletedTask; }
-        if (draft.IsDirty || labelsDirty)
+        if (draft.IsDirty)
         {
             context.PreventNavigation(); pendingId = null; pendingLocation = context.TargetLocation; focusNotice = true; StateHasChanged();
         }

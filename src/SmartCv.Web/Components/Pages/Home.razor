@@ -44,7 +44,7 @@
     }
     @if (workspace.ShowData && validationError is null && workspace.Data is { } data)
     {
-        <div class="scope-line"><p><span class="scope-dot" aria-hidden="true"></span>@ScopeName · @DashboardText.Period(workspace.Filter!)</p>@if (workspace.Loading) { <span role="status">Đang làm mới số liệu…</span> }</div>
+        <div class="scope-line"><p>@ScopeName · @DashboardText.Period(workspace.Filter!)</p>@if (workspace.Loading) { <span role="status">Đang làm mới số liệu…</span> }</div>
         <section class="kpi-grid @(NeedsWideKpis(data) ? "large-values" : "")" aria-label="Năm số liệu chính">
             <article class="kpi" data-kpi="cvs"><div class="kpi-head"><h2>Tổng CV</h2><span class="kpi-symbol" aria-hidden="true">CV</span></div><strong class="kpi-number">@DashboardText.Number(data.TotalCvs)</strong><p>@DashboardText.Number(data.TotalApplications) hồ sơ ứng tuyển</p></article>
             <article class="kpi @(data.FailedCvs > 0 ? "has-error" : "")" data-kpi="failed"><div class="kpi-head"><h2>CV đọc lỗi</h2><span class="kpi-symbol" aria-hidden="true">!</span></div><strong class="kpi-number">@DashboardText.Number(data.FailedCvs)</strong><p>@(data.FailedCvs > 0 ? "Lỗi trích xuất nội dung CV" : "Không có lỗi trích xuất")</p></article>

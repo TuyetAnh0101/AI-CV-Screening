@@ -1,7 +1,7 @@
 @*
-    SCApp v2 – Bộ CV đánh giá theo 5 bước:
+    SCApp v2 – Bộ CV đánh giá theo 5 bước (B25: nằm ở trang /evaluation-sets, chỉ một chỗ dùng):
       1 Tạo bộ (nút "+ Tạo bộ CV" luôn hiện) · 2 Chọn CV đã quét (lọc, chọn nhiều, không upload lại, không trùng)
-      3 Gán nhãn HR (Đạt / Không đạt / Chưa đánh giá) · 4 Kiểm tra bộ · 5 Chạy Prompt Test (PromptTestPanel bên dưới).
+      3 Gán nhãn HR (Đạt / Không đạt / Chưa đánh giá) · 4 Kiểm tra bộ (+ độ tin cậy B25) · 5 Chạy Prompt Test (chỉ ở trang /prompts).
     Thành viên bộ tách khỏi nhãn HR (EvaluationSetMembers). Nhãn KHÔNG BAO GIỜ lấy từ dự đoán AI.
     EvaluationSetWorkspace giữ danh sách bộ và luồng tạo an toàn (không POST lại khi chưa xác minh).
     SetMembersWorkspace giữ thành viên, bản nháp nhãn và bước chọn CV của bộ đang mở.
@@ -15,7 +15,7 @@
 <section id="evaluation-set-manager" class="set-studio" aria-labelledby="set-manager-title" aria-busy="@(Busy ? "true" : "false")">
     <header class="studio-head">
         <div>
-            <p class="eyebrow">Dữ liệu tham chiếu cho Prompt Test</p>
+            <p class="eyebrow">Bước 1–4 · Chuẩn bị dữ liệu tham chiếu</p>
             <h2 id="set-manager-title">Bộ CV đánh giá</h2>
             <p>Tạo nhiều bộ, chọn CV đã quét và để HR tự kết luận Đạt / Không đạt. Không cần upload lại CV đã có.</p>
         </div>
@@ -61,10 +61,19 @@
             {
                 var on = set.EvaluationSetId == members.SetId;
                 var ready = set.LabelCount > 0 && set.PassCount > 0 && set.PassCount < set.LabelCount && set.UnreadyCount == 0;
-                <button type="button" role="listitem" class="set-card @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")" disabled="@Busy" @onclick="() => SelectAsync(set.EvaluationSetId)">
-                    <span class="set-card-top"><strong>@set.Name</strong><span class="chip @(ready ? "chip-ok" : "chip-warn")">@(ready ? "Sẵn sàng chạy" : "Chưa đủ điều kiện")</span></span>
-                    <span class="set-card-meta">@(set.JobTitle ?? "Nhiều vị trí") · @set.RunCount lượt chạy</span>
-                    <span class="set-card-stats"><b>@set.MemberCount</b> hồ sơ · <b>@set.LabelCount</b> đã gán · <b>@set.UnlabeledCount</b> chưa gán</span>
+                var cardHealth = EvaluationSetHealth.Assess(set.LabelCount, set.PassCount, failedExtractionCount: set.UnreadyCount);
+                var marginText = cardHealth.MarginOfError is { } cardMargin ? $" · sai số ±{cardMargin.ToString("0.#", Vi)}" : "";
+                var passShare = set.LabelCount > 0 ? Math.Round(100m * Math.Min(set.PassCount, set.LabelCount) / set.LabelCount, 1) : 0m;
+                <button type="button" role="listitem" class="set-card verdict-@cardHealth.LevelCss @(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")" disabled="@Busy" @onclick="() => SelectAsync(set.EvaluationSetId)">
+                    <span class="set-card-top"><strong>@set.Name</strong><span class="chip health-@cardHealth.LevelCss">@cardHealth.LevelText</span></span>
+                    <span class="set-card-meta">@(set.JobTitle ?? "Nhiều vị trí") · Phiên bản @set.Revision · @set.RunCount lượt chạy</span>
+                    @if (set.LabelCount > 0)
+                    {
+                        <span class="card-ratio" aria-hidden="true"><span style="@($"width:{passShare.ToString(System.Globalization.CultureInfo.InvariantCulture)}%")"></span></span>
+                    }
+                    <span class="set-card-stats"><b>@set.LabelCount</b> CV có nhãn · <b>@set.PassCount</b> Đạt · <b>@Math.Max(0, set.LabelCount - set.PassCount)</b> Không đạt<span>@marginText</span></span>
+                    <span class="set-card-stats"><b>@set.MemberCount</b> hồ sơ · <b>@set.UnlabeledCount</b> chưa gán</span>
+                    @if (!ready) { <span class="set-card-warn">Chưa đủ điều kiện chạy Prompt Test</span> }
                 </button>
             }
         </div>
@@ -81,7 +90,7 @@
         <div class="set-workspace">
             <div class="workspace-title">
                 <div><h3>@detail.Name</h3><p>@(detail.JobTitle ?? "Nhiều vị trí")@(string.IsNullOrWhiteSpace(detail.Purpose) ? "" : " · " + detail.Purpose) · Phiên bản bộ @detail.Revision</p></div>
-                <a class="btn sc-btn-secondary" href="#prompt-test-panel">Bước 5 · Chạy Prompt Test ↓</a>
+                <a id="run-test-link" class="btn sc-btn-secondary" href="@($"/prompts?set={detail.EvaluationSetId}#prompt-test-panel")"><span class="step-no" aria-hidden="true">5</span> Chạy Prompt Test ở trang System Prompt</a>
             </div>
 
             <section class="readiness" aria-label="Bước 4: Kiểm tra bộ dữ liệu">
@@ -97,7 +106,31 @@
                 @if (readiness.CanRun) { <p class="ready-line" role="status"><span aria-hidden="true">✓</span> Bộ đủ điều kiện chạy Prompt Test trên @readiness.LabeledCount hồ sơ có nhãn.</p> }
                 @foreach (var blocker in readiness.Blockers) { <p class="blocker">@blocker</p> }
                 @foreach (var warning in readiness.Warnings) { <p class="hint warn-line">@warning</p> }
+                @{ var health = SelectedHealth(readiness); }
+                <div id="set-health" class="health health-@health.LevelCss" aria-label="Độ tin cậy của bộ để so sánh prompt">
+                    <div class="health-head">
+                        <span class="health-verdict"><span class="health-icon" aria-hidden="true">@HealthIcon(health.Level)</span>@health.LevelText</span>
+                        @if (health.MarginOfError is { } margin) { <span class="health-margin" title="Nửa độ rộng khoảng tin cậy 95% (Wilson) khi prompt đúng khoảng 80% trên bộ này">Sai số tỷ lệ đúng ≈ ±@margin.ToString("0.#", Vi) điểm %</span> }
+                    </div>
+                    @if (health.Total > 0)
+                    {
+                        var passPercent = Math.Round(100m * health.Pass / health.Total, 1);
+                        <div class="ratio" role="img" aria-label="@($"Tỷ lệ nhãn: {health.Pass} Đạt, {health.Fail} Không đạt")">
+                            <span class="ratio-pass" style="@($"width:{passPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)}%")"></span>
+                        </div>
+                        <p class="ratio-legend"><span>Đạt <b>@health.Pass</b> (@passPercent.ToString("0.#", Vi)%)</span><span>Không đạt <b>@health.Fail</b></span></p>
+                    }
+                    @if (health.Issues.Count > 0)
+                    {
+                        <ul class="health-issues">
+                            @foreach (var issue in health.Issues) { <li class="issue-@issue.Severity.ToString().ToLowerInvariant()"><span class="issue-tag">@IssueText(issue.Severity)</span> @issue.Text</li> }
+                        </ul>
+                    }
+                    else { <p class="hint">Bộ đủ cỡ và cân bằng nhãn để so sánh hai phiên bản prompt.</p> }
+                </div>
             </section>
+
+            @SetInsights
 
             <div class="tabs" role="tablist" aria-label="Thao tác với bộ CV">
                 <button id="tab-labels" type="button" role="tab" aria-selected="@(tab == Tab.Labels ? "true" : "false")" class="tab @(tab == Tab.Labels ? "on" : null)" @onclick="() => tab = Tab.Labels"><span class="step-no" aria-hidden="true">3</span> Gán nhãn HR <span class="count">@readiness.MemberCount</span></button>
@@ -142,7 +175,7 @@
                                         <label class="pick">
                                             <input type="checkbox" aria-label="@($"Chọn hồ sơ {c.ApplicationId} để thêm")" checked="@members.Selected.Contains(c.ApplicationId)" disabled="@(Busy || c.IsAnonymized)" @onchange="e => members.Toggle(c.ApplicationId, e.Value is true)" />
                                             <span class="pick-main"><strong>@Anonymity.Name(c.CandidateName, null, c.ApplicationId)</strong><span>@Anonymity.FileName(c.FileName)</span></span>
-                                            <span class="pick-meta"><span>@c.JobTitle · Hồ sơ #@c.ApplicationId</span><span><i class="stage-dot @StageText.Css(c.Stage)" aria-hidden="true"></i> @StageText.Name(c.Stage) · @RankingView.VnTime(c.AppliedAt)</span></span>
+                                            <span class="pick-meta"><span>@c.JobTitle · Hồ sơ #@c.ApplicationId</span><span>@StageText.Name(c.Stage) · @RankingView.VnTime(c.AppliedAt)</span></span>
                                             @if (reason is not null) { <span class="chip chip-warn">@reason</span> }
                                         </label>
                                     </li>
@@ -195,7 +228,7 @@
                                     <button type="button" class="icon-btn" aria-label="@($"Bỏ hồ sơ {m.ApplicationId} khỏi bộ")" title="Bỏ khỏi bộ" disabled="@Busy" @onclick="() => confirmRemove = m.ApplicationId">✕</button>
                                     @if (confirmRemove == m.ApplicationId)
                                     {
-                                        <div class="inline-confirm" role="alert">Bỏ hồ sơ #@m.ApplicationId khỏi bộ? Nhãn HR của hồ sơ trong bộ này cũng bị bỏ; kết quả chấm đã lưu không thay đổi. <button type="button" class="btn sc-btn-secondary" @onclick="() => confirmRemove = null">Hủy</button> <button type="button" class="btn bulk-reject" @onclick="() => RemoveAsync(m.ApplicationId)">Bỏ khỏi bộ</button></div>
+                                        <div class="inline-confirm" role="alert">Bỏ hồ sơ #@m.ApplicationId khỏi bộ? Nhãn HR của hồ sơ trong bộ này cũng bị bỏ; kết quả chấm đã lưu không thay đổi. <button type="button" class="btn sc-btn-secondary" @onclick="() => confirmRemove = null">Hủy</button> <button type="button" class="btn sc-btn-danger" @onclick="() => RemoveAsync(m.ApplicationId)">Bỏ khỏi bộ</button></div>
                                     }
                                 </li>
                             }
@@ -226,6 +259,10 @@
     [Parameter] public EventCallback<bool> OnDirtyChanged { get; set; }
     [Parameter] public int? EvaluationSetId { get; set; }
     [Parameter] public EventCallback<int> OnSetChanged { get; set; }
+    /// <summary>B25: số bộ sau mỗi lần tải danh sách (trang dùng để mở sẵn hướng dẫn khi chưa có bộ).</summary>
+    [Parameter] public EventCallback<int> OnSetsLoaded { get; set; }
+    /// <summary>B25: nội dung trang chèn ngay sau bước 4 của bộ đang mở (lượt Prompt Test của bộ), để không bị đẩy xuống dưới danh sách hồ sơ.</summary>
+    [Parameter] public RenderFragment? SetInsights { get; set; }
     private EvaluationSetWorkspace sets = default!;
     private SetMembersWorkspace members = default!;
     private AnonymityState Anonymity => anonymity ??= Services.GetService<AnonymityState>() ?? new();
@@ -250,6 +287,7 @@
         var jobLoad = LoadJobsAsync();
         await sets.LoadAsync(lifetime.Token);
         await jobLoad;
+        if (sets.Loaded) await OnSetsLoaded.InvokeAsync(sets.Sets.Count);
         if (EvaluationSetId is > 0 && sets.Sets.Any(s => s.EvaluationSetId == EvaluationSetId)) await OpenSetAsync(EvaluationSetId.Value, notify: false);
     }
 
@@ -275,6 +313,7 @@
         try
         {
             await sets.LoadAsync(lifetime.Token);
+            if (sets.Loaded) await OnSetsLoaded.InvokeAsync(sets.Sets.Count);
             if (members.SetId > 0) await members.LoadAsync(members.SetId, lifetime.Token);
             if (tab == Tab.Picker) await members.LoadCandidatesAsync(lifetime.Token);
         }
@@ -290,6 +329,7 @@
             await sets.CreateAsync(lifetime.Token);
             if (sets.Error is null && sets.SetId > 0)
             {
+                await OnSetsLoaded.InvokeAsync(Math.Max(1, sets.Sets.Count));
                 creatingOpen = false;
                 creating = false;
                 await OpenSetAsync(sets.SetId, notify: true, force: true);
@@ -388,6 +428,7 @@
     private async Task AfterWriteAsync()
     {
         await sets.LoadAsync(lifetime.Token);
+        if (sets.Loaded) await OnSetsLoaded.InvokeAsync(sets.Sets.Count);
         NotifyDirty();
         await OnSaved.InvokeAsync(members.SetId);
     }
@@ -405,6 +446,17 @@
         lastDirty = dirty;
         _ = OnDirtyChanged.InvokeAsync(dirty);
     }
+
+    private static readonly System.Globalization.CultureInfo Vi = System.Globalization.CultureInfo.GetCultureInfo("vi-VN");
+
+    /// <summary>B25: đánh giá độ tin cậy từ nhãn ĐÃ LƯU (không tính bản nháp) và số vị trí của các hồ sơ có nhãn.</summary>
+    private SetHealth SelectedHealth(EvaluationSetReadinessDto readiness)
+    {
+        var jobCount = members.Rows.Where(r => r.Member.IsPass is not null).Select(r => r.Member.JobId).Distinct().Count();
+        return EvaluationSetHealth.Assess(readiness.LabeledCount, readiness.PassCount, jobCount, readiness.LabeledNotReadyCount);
+    }
+    private static string HealthIcon(SetHealthLevel level) => level switch { SetHealthLevel.Good => "✓", SetHealthLevel.Caution => "!", SetHealthLevel.Poor => "✕", _ => "–" };
+    private static string IssueText(IssueSeverity severity) => severity switch { IssueSeverity.Severe => "Nghiêm trọng", IssueSeverity.Caution => "Cần lưu ý", _ => "Thông tin" };
 
     private static string Date(DateOnly? d) => d?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
     private static DateOnly? ParseDate(object? value) => DateOnly.TryParseExact(value?.ToString(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) ? d : null;

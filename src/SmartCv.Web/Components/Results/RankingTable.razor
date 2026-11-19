@@ -67,7 +67,7 @@
             @foreach (var stage in ApplicationStages.All)
             {
                 <button id="stage-filter-@stage" type="button" class="stage-filter @StageText.Css(stage) @(stageFilter == stage ? "on" : null)" aria-pressed="@(stageFilter == stage ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(stage)">
-                    <i class="stage-dot" aria-hidden="true"></i>@StageText.Name(stage) <span>@StageCount(stage)</span>
+                    @StageText.Name(stage) <span>@StageCount(stage)</span>
                 </button>
             }
         </div>

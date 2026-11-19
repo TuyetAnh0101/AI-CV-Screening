@@ -1,5 +1,5 @@
-/* SCApp v2 – Bộ CV đánh giá: thẻ bộ, các bước, chọn CV, gán nhãn. Dùng token Deep Teal có sẵn. */
-.set-studio { margin-top:24px; padding:24px; border:1px solid var(--border); border-radius:var(--sc-radius-card, 16px); background:var(--sc-surface-0, #fff); min-width:0; box-shadow:var(--sc-shadow-card); }
+/* SCApp v2 – Bộ CV đánh giá: thẻ bộ, các bước, chọn CV, gán nhãn. B25: trang /evaluation-sets, thêm khối độ tin cậy. Dùng token chung. */
+.set-studio { padding:24px; border:1px solid var(--border); border-radius:var(--sc-radius-card, 16px); background:var(--sc-surface-0, #fff); min-width:0; box-shadow:var(--sc-shadow-card); }
 .studio-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:16px; }
 .studio-head > div:first-child { flex:1 1 320px; min-width:0; }
 .head-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
@@ -32,7 +32,7 @@ a, .link-btn { color:var(--brand); }
 .set-card { text-align:left; display:grid; gap:6px; padding:14px; border:1px solid var(--border); border-radius:12px; background:#fff; cursor:pointer; min-width:0; transition:border-color .15s, box-shadow .15s; }
 .set-card:hover:not(:disabled) { border-color:var(--sc-line-300); box-shadow:var(--sc-shadow-card); }
 .set-card.on { border-color:var(--brand); box-shadow:0 0 0 2px var(--sc-brand-100); }
-.set-card-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+.set-card-top { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
 .set-card-top strong { font-size:14px; overflow-wrap:anywhere; }
 .set-card-meta, .set-card-stats { font-size:12px; color:var(--text-muted); }
 .set-card-stats b { color:var(--text-main); }
@@ -70,7 +70,6 @@ a, .link-btn { color:var(--brand); }
 .pick-main, .pick-meta, .member-who { display:grid; gap:3px; min-width:0; }
 .pick-main strong, .member-who strong { font-size:13px; overflow-wrap:anywhere; }
 .pick-main span, .pick-meta span, .member-who > span { font-size:12px; color:var(--text-muted); overflow-wrap:anywhere; }
-.stage-dot { display:inline-block; vertical-align:middle; }
 
 .member { display:grid; grid-template-columns:minmax(0, 1.3fr) auto minmax(0, 1fr) auto; gap:14px; align-items:start; padding:14px; }
 .member.dirty { background:#fffdf5; box-shadow:inset 3px 0 0 var(--fit-potential); }
@@ -90,7 +89,7 @@ a, .link-btn { color:var(--brand); }
 .icon-btn:hover:not(:disabled) { color:var(--fit-poor); border-color:var(--fit-poor); }
 .inline-confirm { grid-column:1 / -1; background:var(--fit-poor-bg); color:var(--fit-poor); padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.7; }
 
-.sticky-actions { position:sticky; bottom:0; z-index:2; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:flex-end; padding:12px; margin-top:12px; background:rgba(255,255,255,.96); border:1px solid var(--border); border-radius:12px; box-shadow:0 -6px 18px -12px rgba(15,42,42,.25); }
+.sticky-actions { position:sticky; bottom:0; z-index:2; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:flex-end; padding:12px; margin-top:12px; background:rgba(255,255,255,.96); border:1px solid var(--border); border-radius:12px; box-shadow:0 -6px 18px -12px rgba(14, 54, 64,.25); }
 .sticky-actions label { flex:0 1 260px; }
 
 .set-empty { background:var(--surface-soft); padding:14px; border-radius:10px; line-height:1.8; font-size:13px; margin:0; }
@@ -98,7 +97,6 @@ a, .link-btn { color:var(--brand); }
 .set-error, .set-success { padding:10px 14px; border-radius:9px; font-size:13px; line-height:1.7; margin:12px 0 0; }
 .set-error { color:var(--fit-poor); background:var(--fit-poor-bg); }
 .set-success { color:var(--fit-excellent); background:var(--fit-excellent-bg); }
-.bulk-reject { background:var(--fit-poor); color:#fff; border:0; }
 
 @media (max-width: 1100px) {
     .stat-row { grid-template-columns:repeat(3, minmax(0, 1fr)); }
@@ -118,7 +116,46 @@ a, .link-btn { color:var(--brand); }
     .label-choice { width:100%; } .seg { flex:1; justify-content:center; }
     .icon-btn { justify-self:end; }
     .sticky-actions { justify-content:stretch; } .sticky-actions label, .sticky-actions button { flex:1 1 100%; }
-    .head-actions { width:100%; } .head-actions .btn { flex:1; }
+    .head-actions { width:100%; } .head-actions .btn { flex:1; white-space:nowrap; padding-inline:12px; }
 }
-.set-card-top .chip { flex:none; white-space:nowrap; }
+.set-card-top .chip { flex:none; white-space:normal; }
 .head-actions .btn > span[aria-hidden] { margin-right:6px; }
+
+/* ---------- B25: độ tin cậy của bộ (mức + chữ, không dựa riêng vào màu) ---------- */
+.chip.health-good { background:var(--sc-success-bg); color:var(--sc-success); }
+.chip.health-caution { background:var(--sc-warning-bg); color:var(--sc-warning); }
+.chip.health-poor { background:var(--sc-danger-bg); color:var(--sc-danger); }
+.chip.health-empty { background:var(--sc-neutral-bg); color:var(--sc-neutral); }
+.health { margin-top:12px; padding:14px 16px; border:1px solid var(--border); border-left-width:4px; border-radius:12px; background:var(--sc-surface-0); display:grid; gap:10px; min-width:0; }
+.health-good { border-left-color:var(--sc-success); }
+.health-caution { border-left-color:var(--sc-warning); }
+.health-poor { border-left-color:var(--sc-danger); }
+.health-empty { border-left-color:var(--sc-line-300); }
+.health-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; }
+.health-verdict { display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:650; color:var(--text-main); }
+.health-icon { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:7px; font-size:12px; font-weight:800; background:var(--sc-neutral-bg); color:var(--sc-neutral); }
+.health-good .health-icon { background:var(--sc-success-bg); color:var(--sc-success); }
+.health-caution .health-icon { background:var(--sc-warning-bg); color:var(--sc-warning); }
+.health-poor .health-icon { background:var(--sc-danger-bg); color:var(--sc-danger); }
+.health-margin { font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.ratio { height:8px; border-radius:999px; background:var(--fit-poor-bg); overflow:hidden; }
+.ratio-pass { display:block; height:100%; background:var(--sc-grad-mint); border-radius:999px 0 0 999px; }
+.ratio-legend { display:flex; justify-content:space-between; gap:12px; margin:0; font-size:12px; color:var(--text-muted); }
+.ratio-legend b { color:var(--text-main); font-variant-numeric:tabular-nums; }
+.health-issues { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.health-issues li { font-size:13px; line-height:1.6; color:var(--sc-ink-700); }
+.issue-tag { display:inline-block; margin-right:6px; padding:0 7px; border-radius:6px; font-size:11px; font-weight:700; line-height:20px; vertical-align:1px; }
+.issue-severe .issue-tag { background:var(--sc-danger-bg); color:var(--sc-danger); }
+.issue-caution .issue-tag { background:var(--sc-warning-bg); color:var(--sc-warning); }
+.issue-info .issue-tag { background:var(--sc-info-bg); color:var(--sc-info); }
+.workspace-title .btn .step-no { margin-right:8px; }
+/* B25: thẻ bộ có viền trên theo kết luận (xanh / vàng / đỏ / xám) + chữ kết luận, không chỉ dựa vào màu */
+.set-card { border-top-width:4px; }
+.set-card.verdict-good { border-top-color:var(--sc-success); }
+.set-card.verdict-caution { border-top-color:#d39b2a; }
+.set-card.verdict-poor { border-top-color:var(--sc-danger); }
+.set-card.verdict-empty { border-top-color:var(--sc-line-300); }
+.set-card.on { border-top-width:4px; }
+.card-ratio { display:block; height:6px; border-radius:999px; background:var(--fit-poor-bg); overflow:hidden; }
+.card-ratio > span { display:block; height:100%; background:var(--sc-grad-mint); }
+.set-card-warn { font-size:12px; font-weight:600; color:var(--sc-warning); }

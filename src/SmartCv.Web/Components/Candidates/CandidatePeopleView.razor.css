@@ -1,5 +1,5 @@
 .people-view { display:grid; gap:16px; min-width:0; }
-.toolbar { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px; padding:16px; border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e4a4705; }
+.toolbar { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px; padding:16px; border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e364005; }
 .search-wrap { flex:1 1 380px; min-width:0; }
 .search-box { display:flex; align-items:center; gap:10px; height:42px; padding:0 12px; border:1px solid var(--sc-line-200); border-radius:10px; background:var(--sc-surface-50); min-width:0; }
 .search-box svg { width:18px; height:18px; fill:none; stroke:var(--sc-brand-700); stroke-width:1.7; flex:none; }
@@ -16,7 +16,7 @@
 .unattached-strip > span:nth-child(2) { flex:1; min-width:0; }
 .strip-icon { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:8px; background:#fdeccb; font-weight:700; }
 
-.list-card { border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e4a4705; min-width:0; overflow:hidden; }
+.list-card { border:1px solid var(--sc-line-200); border-radius:14px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e364005; min-width:0; overflow:hidden; }
 .list-head { padding:16px 20px; }
 h2 { margin:0; font-size:17px; font-weight:600; letter-spacing:-.02em; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 h2:focus { outline:none; }

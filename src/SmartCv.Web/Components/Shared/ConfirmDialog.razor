@@ -2,10 +2,10 @@
 @inject IJSRuntime JS
 
 <dialog class="confirm-dialog" @ref="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text" aria-busy="@Busy.ToString().ToLowerInvariant()">
-    <span class="dialog-icon @(Danger ? "danger-icon" : null)" aria-hidden="true">@(Danger ? "Ⅱ" : "↗")</span>
+    <span class="dialog-icon @(Danger ? "danger-icon" : null)" aria-hidden="true">@(Danger ? "!" : "?")</span>
     <h2 id="confirm-title">@Title</h2>
     <p id="confirm-text">@Text</p>
-    <div class="dialog-actions"><button id="jobs-confirm-cancel" type="button" class="btn sc-btn-secondary" disabled="@(Busy || submitting)" @onclick="CancelAsync" autofocus>Hủy</button><button id="jobs-confirm-submit" type="button" class="btn @(Danger ? "danger-button" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">@(Busy || submitting ? "Đang xử lý..." : ConfirmText)</button></div>
+    <div class="dialog-actions"><button id="jobs-confirm-cancel" type="button" class="btn sc-btn-secondary" disabled="@(Busy || submitting)" @onclick="CancelAsync" autofocus>Hủy</button><button id="jobs-confirm-submit" type="button" class="btn @(Danger ? "sc-btn-danger" : "sc-btn-primary")" disabled="@(Busy || submitting)" @onclick="ConfirmAsync">@(Busy || submitting ? "Đang xử lý..." : ConfirmText)</button></div>
 </dialog>
 
 @code {

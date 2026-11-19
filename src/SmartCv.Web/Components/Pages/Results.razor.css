@@ -1,4 +1,4 @@
-/* B7: trang Kết quả & xếp hạng. Chỉ dùng biến màu sẵn có (Deep Teal --brand...), không đổi app.css toàn cục. */
+/* B7: trang Kết quả & xếp hạng. Màu, gradient, cỡ chữ lấy từ token chung trong app.css (B25). */
 
 .results-page {
     display: flex;
@@ -15,7 +15,7 @@
     padding: 24px 28px;
     border: 1px solid var(--border);
     border-radius: var(--sc-radius-card);
-    background: var(--sc-surface-0);
+    background: var(--sc-grad-head);
     box-shadow: var(--sc-shadow-card);
 }
 
@@ -41,15 +41,16 @@
     text-transform: uppercase;
 }
 .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.eyebrow.is-running { color: #0369a1; }
-.eyebrow.is-failed { color: #b91c1c; }
+.eyebrow.is-running { color: var(--sc-info); }
+.eyebrow.is-failed { color: var(--sc-danger); }
 
 .hero h1 {
     margin: 0;
     font-family: var(--sc-font-display);
-    font-size: 30px;
-    font-weight: 700;
-    line-height: 1.2;
+    font-size: var(--sc-text-page);
+    font-weight: 650;
+    letter-spacing: -.025em;
+    line-height: 1.25;
     color: var(--text-main);
     overflow-wrap: anywhere;
 }
@@ -220,7 +221,7 @@
     .state-card { padding: 32px 16px; }
 }
 .attention { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 16px 20px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; color: #475569; }
-.attention strong { color: #0f766e; }
+.attention strong { color: var(--sc-brand-700); }
 .attention small { flex-basis: 100%; }
 .processing-indicator { animation: processing-pulse 1.8s ease-in-out infinite; }
 @keyframes processing-pulse { 50% { opacity: .45; } }

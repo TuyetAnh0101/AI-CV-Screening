@@ -1,6 +1,6 @@
-/* Khung ứng dụng v2 (Figma "SC v2", Teal Lab): menu trái 256px nền "Sidebar Deep" (#0A2E2D → #0E4A47);
-   thanh trên cùng nền trắng, cao bằng khối logo (--sc-shell-header-h) để hai đường kẻ thẳng hàng;
-   vùng nội dung nền --sc-surface-50. Chỉ đổi khung chung, không đổi bố cục bên trong từng trang. */
+/* Khung ứng dụng (B25 Deep Teal): menu trái 256px nền --sc-grad-sidebar (Deep Teal + ánh Mint nhẹ);
+   thanh trên cùng trắng mờ, cao bằng khối logo (--sc-shell-header-h) để hai đường kẻ thẳng hàng;
+   vùng nội dung nền --sc-grad-page (pha teal ở trên, không trắng tinh). Không đổi bố cục bên trong từng trang. */
 
 .app-shell {
     display: flex;
@@ -25,7 +25,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: var(--sc-surface-50);
+    background: var(--sc-grad-page) no-repeat, var(--sc-surface-50);
 }
 
 /* Thanh trên cùng: nền trắng tách khỏi vùng nội dung, kẻ dưới mảnh, bóng rất nhẹ */
@@ -36,9 +36,11 @@
     justify-content: space-between;
     gap: 16px;
     padding: 0 var(--sc-shell-gutter);
-    background: var(--sc-surface-0);
+    background: rgba(255, 255, 255, .9);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    backdrop-filter: saturate(140%) blur(8px);
     border-bottom: 1px solid var(--sc-line-200);
-    box-shadow: 0 1px 2px rgba(15, 42, 42, .04);
+    box-shadow: 0 1px 2px rgba(14, 54, 64, .04);
     position: sticky;
     top: 0;
     z-index: 10;

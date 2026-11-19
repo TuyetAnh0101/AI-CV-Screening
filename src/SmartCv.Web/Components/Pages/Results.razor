@@ -15,7 +15,7 @@
 @inject NavigationManager Nav
 @inject AnonymityState Anonymity
 
-<PageTitle>Kết quả &amp; xếp hạng · SmartCV</PageTitle>
+<PageTitle>Kết quả &amp; xếp hạng · SCApp</PageTitle>
 
 <div class="results-page">
     <section class="hero" aria-label="Lượt chấm và vị trí tuyển dụng">
@@ -25,7 +25,7 @@
                 {
                     var (statusText, _) = StatusText.ForRun(CurrentStatus);
                     <p class="eyebrow @StatusCss(CurrentStatus)">
-                        <span class="dot" aria-hidden="true"></span>
+                        @if (RunText.IsActive(CurrentStatus)) { <span class="dot" aria-hidden="true"></span> }
                         Lượt chấm #@ranking!.RunId · @statusText
                         @if (meta is not null)
                         {

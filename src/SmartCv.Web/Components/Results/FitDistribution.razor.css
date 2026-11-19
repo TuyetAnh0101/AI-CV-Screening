@@ -13,7 +13,7 @@
 .dist-range { margin-left: 3px; }
 .dist-legend strong { font-variant-numeric: tabular-nums; color: var(--sc-ink-900, #143333); }
 .fit-excellent { background: #047857; }
-.fit-good { background: #0f766e; }
+.fit-good { background: var(--sc-brand-700); }
 .fit-potential { background: #b45309; }
 .fit-poor { background: #be123c; }
 .is-error { background: repeating-linear-gradient(135deg, #b91c1c 0 4px, #fca5a5 4px 8px); }

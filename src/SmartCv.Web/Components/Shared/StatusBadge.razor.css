@@ -2,7 +2,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 100px;
+    min-width: 88px;
     height: 24px;
     padding: 0 10px;
     border-radius: 100px;
@@ -11,9 +11,9 @@
     white-space: nowrap;
 }
 
-/* Màu theo Figma: Hoàn thành = nền #DCEBE9, chữ #15803D */
-.is-success { background: #dcebe9; color: #15803d; }
-.is-info    { background: #e0f2fe; color: #0369a1; }
-.is-warning { background: #fef3c7; color: #b45309; }
-.is-danger  { background: #fee2e2; color: #b91c1c; }
-.is-neutral { background: #eef2f2; color: #526767; }
+/* B25: màu lấy từ token ngữ nghĩa trong app.css; chữ luôn nói rõ trạng thái, không chỉ dựa vào màu */
+.is-success { background: var(--sc-success-bg); color: var(--sc-success); }
+.is-info    { background: var(--sc-info-bg);    color: var(--sc-info); }
+.is-warning { background: var(--sc-warning-bg); color: var(--sc-warning); }
+.is-danger  { background: var(--sc-danger-bg);  color: var(--sc-danger); }
+.is-neutral { background: var(--sc-neutral-bg); color: var(--sc-neutral); }

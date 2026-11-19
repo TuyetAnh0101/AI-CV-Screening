@@ -1,5 +1,5 @@
-.drawer-backdrop { position:fixed; inset:0; background:rgba(10,46,45,.35); z-index:1040; }
-.drawer { position:fixed; z-index:1041; top:0; right:0; bottom:0; width:min(480px, 100vw); background:#fff; box-shadow:-16px 0 48px -16px rgba(10,46,45,.4); overflow-y:auto; display:flex; flex-direction:column; }
+.drawer-backdrop { position:fixed; inset:0; background:rgba(10, 42, 50,.35); z-index:1040; }
+.drawer { position:fixed; z-index:1041; top:0; right:0; bottom:0; width:min(480px, 100vw); background:#fff; box-shadow:-16px 0 48px -16px rgba(10, 42, 50,.4); overflow-y:auto; display:flex; flex-direction:column; }
 header { display:flex; justify-content:space-between; gap:12px; padding:20px 20px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; background:#fff; z-index:1; }
 header > div { min-width:0; }
 .eyebrow { color:var(--brand); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin:0 0 4px; }

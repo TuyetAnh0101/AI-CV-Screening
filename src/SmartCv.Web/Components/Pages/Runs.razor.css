@@ -52,7 +52,7 @@ select:hover,input:hover { border-color:#a9bdbc; }
 .runs-table small { display:block; margin-top:3px; font-size:12px; line-height:1.5; color:var(--sc-ink-500); }
 .num { text-align:right !important; font-variant-numeric:tabular-nums; }
 
-.run-link { display:inline-flex; align-items:center; min-height:24px; color:var(--sc-brand-700); font-size:14px; font-weight:650; font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:rgba(15,118,110,.35); text-underline-offset:4px; border-radius:6px; }
+.run-link { display:inline-flex; align-items:center; min-height:24px; color:var(--sc-brand-700); font-size:14px; font-weight:650; font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:rgba(22, 76, 86,.35); text-underline-offset:4px; border-radius:6px; }
 .run-link:hover { color:var(--sc-brand-800); text-decoration-color:currentColor; }
 .type-chip { display:block; width:fit-content; max-width:100%; margin-top:6px; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:550; line-height:1.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .type-chip.is-screening { color:#11665f; background:#e7f5f2; }

@@ -7,8 +7,8 @@ h1 { margin:0 0 8px; font-size:28px; font-weight:650; letter-spacing:-.035em; di
 .library-heading p:last-child { margin:0; color:var(--sc-ink-500); font-size:13px; line-height:1.8; }
 .heading-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .heading-actions .btn { min-height:42px; padding:10px 14px; display:inline-flex; align-items:center; gap:8px; font-size:13px; }
-.filter-panel,.list-panel { border:1px solid var(--sc-line-200); border-radius:16px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e4a4705; min-width:0; }
-.filter-panel { padding:20px; box-shadow:0 -1px 0 #b7ede13b,0 4px 20px #0e4a4706; }
+.filter-panel,.list-panel { border:1px solid var(--sc-line-200); border-radius:16px; background:var(--sc-surface-0); box-shadow:0 3px 16px #0e364005; min-width:0; }
+.filter-panel { padding:20px; box-shadow:0 -1px 0 #b7ede13b,0 4px 20px #0e364006; }
 .filter-heading,.list-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
 .filter-heading { margin-bottom:18px; }
 h2 { margin:0; font-size:17px; font-weight:600; letter-spacing:-.02em; }
@@ -48,7 +48,10 @@ tbody tr:hover { background:#f9fcfb; }
 .file-name { display:block; font-size:12px; line-height:1.7; color:var(--sc-ink-500); margin-top:2px; overflow-wrap:anywhere; }
 .cv-code { display:block; font-size:11px; color:var(--sc-ink-500); margin-top:4px; font-variant-numeric:tabular-nums; }
 .extraction { display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 6px; border-radius:5px; margin-top:10px; max-width:100%; }
-.extraction i { width:5px; height:5px; border-radius:50%; background:currentColor; flex:none; }
+.extraction i { display:none; }   /* B25: chấm chỉ dùng cho trạng thái đang chạy (đang đọc chữ) */
+.extraction.pending i { display:block; width:6px; height:6px; border-radius:50%; background:currentColor; flex:none; animation:extract-pulse 1.2s ease-in-out infinite; }
+@keyframes extract-pulse { 50% { opacity:.3; } }
+@media (prefers-reduced-motion: reduce) { .extraction.pending i { animation:none; } }
 .complete { background:#edf8f1; color:#1e694a; } .failed { background:#fff0f1; color:#ad3448; } .pending { background:#fff6e4; color:#82551b; } .muted { background:#eaf0f0; color:#526768; }
 .source-label { display:block; font-size:12px; font-weight:500; margin-bottom:8px; }
 time { display:block; font-size:12px; font-variant-numeric:tabular-nums; }
