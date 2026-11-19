@@ -1,0 +1,167 @@
+@using SmartCv.Core.Candidates
+@using SmartCv.Core.Cvs
+@implements IAsyncDisposable
+@inject CvApiClient CvApi
+@inject CandidateApiClient CandidateApi
+@inject AnonymityState Anonymity
+@inject IJSRuntime JS
+
+<dialog class="attach-dialog" @ref="dialog" aria-labelledby="attach-title" aria-describedby="attach-description" aria-busy="@busy.ToString().ToLowerInvariant()">
+    <div class="dialog-heading"><div><p>Quản lý hồ sơ</p><h2 id="attach-title">Gắn ứng viên cho CV</h2></div><button id="attach-close" type="button" aria-label="Đóng hộp thoại" disabled="@busy" @onclick="CloseAsync">×</button></div>
+    <p id="attach-description">Kiểm tra thông tin trước khi gắn. Hệ thống chỉ lưu khi bạn xác nhận.</p>
+    @if (!Anonymity.Enabled)
+    {
+        @if (loading) { <div class="loading" role="status">Đang đọc thông tin gợi ý từ CV…</div> }
+        else if (matches.Count > 0)
+        {
+            <div class="notice" role="status"><strong>Có thể là ứng viên nộp lại</strong><p>Đã có người cùng email hoặc số điện thoại. Chọn người phù hợp hoặc xác nhận đây là người khác.</p></div>
+            <ul class="candidate-list">@foreach (var match in matches) { <li><div><strong>@match.FullName</strong><span>@Display.Text(match.Email) · @Display.Text(match.PhoneNumber)</span><small>@match.CvCount CV · Trùng: @string.Join(", ", match.MatchedOn.Select(m => m == "Email" ? "email" : m == "Phone" ? "điện thoại" : "liên hệ"))</small></div><button id="match-@match.CandidateId" type="button" class="btn sc-btn-primary" disabled="@(busy || uncertain)" @onclick="() => AttachExistingAsync(match.CandidateId)">Gắn vào người này</button></li> }</ul>
+            <div class="dialog-actions"><button type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="EditAgain">Sửa thông tin</button><button id="attach-confirm-new" type="button" class="btn sc-btn-primary" disabled="@(busy || uncertain)" @onclick="() => SaveAsync(true)">Vẫn tạo người mới</button></div>
+        }
+        else
+        {
+            <div class="modes" role="group" aria-label="Chọn cách gắn ứng viên"><button id="attach-new" type="button" aria-pressed="@(!existingMode ? "true" : "false")" class="@(!existingMode ? "active" : null)" disabled="@busy" @onclick="() => SwitchMode(false)">Người mới</button><button id="attach-existing" type="button" aria-pressed="@(existingMode ? "true" : "false")" class="@(existingMode ? "active" : null)" disabled="@busy" @onclick="() => SwitchMode(true)">Người đã có</button></div>
+            @if (!existingMode)
+            {
+                @if (suggested) { <p class="hint">Đã điền sẵn từ chữ đọc được trong CV. Hãy kiểm tra vì nội dung trích xuất có thể chưa chính xác.</p> }
+                <div class="fields">
+                    <label for="attach-name">Họ tên <span aria-hidden="true">*</span></label><input id="attach-name" class="sc-input" value="@fullName" @oninput="NameChanged" disabled="@busy" required autocomplete="off" aria-invalid="@(Err("fullName") is not null ? "true" : "false")" aria-describedby="attach-name-error" />
+                    <span id="attach-name-error" class="field-error">@Err("fullName")</span>
+                    <label for="attach-email">Email</label><input id="attach-email" class="sc-input" type="email" value="@email" @oninput="EmailChanged" disabled="@busy" autocomplete="off" aria-invalid="@(Err("email") is not null ? "true" : "false")" aria-describedby="attach-email-error" />
+                    <span id="attach-email-error" class="field-error">@Err("email")</span>
+                    <label for="attach-phone">Số điện thoại</label><input id="attach-phone" class="sc-input" inputmode="tel" value="@phone" @oninput="PhoneChanged" disabled="@busy" autocomplete="off" aria-invalid="@(Err("phoneNumber") is not null ? "true" : "false")" aria-describedby="attach-phone-error attach-contact-error" placeholder="0912 345 678 hoặc +84 912 345 678" />
+                    <span id="attach-phone-error" class="field-error">@Err("phoneNumber")</span><span id="attach-contact-error" class="field-error">@Err("contact")</span>
+                </div>
+                <div class="dialog-actions"><button type="button" class="btn sc-btn-secondary" disabled="@busy" @onclick="CloseAsync">Hủy</button><button id="attach-save" type="button" class="btn sc-btn-primary" disabled="@(busy || uncertain)" @onclick="() => SaveAsync(false)">@(busy ? "Đang lưu…" : "Lưu và gắn ứng viên")</button></div>
+            }
+            else
+            {
+                <label class="existing-label" for="attach-search">Tìm người đã có</label><input id="attach-search" class="sc-input" type="search" value="@existingSearch" @oninput="SearchAsync" placeholder="Tên, email hoặc số điện thoại" disabled="@busy" autocomplete="off" />
+                @if (searching) { <p class="hint" role="status">Đang tìm ứng viên…</p> }
+                else if (existing.Count == 0) { <p class="hint" role="status">@(searchAttempted ? "Không tìm thấy ứng viên phù hợp." : "Nhập từ 2–100 ký tự để tìm ứng viên.")</p> }
+                else
+                {
+                    <ul class="candidate-list">@foreach (var candidate in existing) { <li><div><strong>@candidate.FullName</strong><span>@Display.Text(candidate.Email) · @Display.Text(candidate.PhoneNumber)</span><small>@candidate.CvCount CV</small></div><button id="choose-@candidate.CandidateId" type="button" class="btn sc-btn-secondary" disabled="@(busy || uncertain)" @onclick="() => AttachExistingAsync(candidate.CandidateId)">Chọn</button></li> }</ul>
+                    <nav class="candidate-pager" aria-label="Trang ứng viên"><button id="candidate-prev" type="button" disabled="@(candidatePage <= 1 || busy)" @onclick="() => SearchExistingAsync(candidatePage - 1)">← Trước</button><span>Trang @candidatePage/@candidatePages</span><button id="candidate-next" type="button" disabled="@(candidatePage >= candidatePages || busy)" @onclick="() => SearchExistingAsync(candidatePage + 1)">Sau →</button></nav>
+                }
+            }
+        }
+        @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
+    }
+</dialog>
+
+@code {
+    [Parameter] public Guid CvId { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnAttached { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<AttachCandidateDialog>? reference;
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly Debouncer debouncer = new();
+    private CancellationTokenSource? searchRequest;
+    private bool loading = true, busy, existingMode, suggested, disposed, searching, searchAttempted, validated, uncertain;
+    private int searchVersion, candidatePage = 1, candidatePages = 1;
+    private string fullName = "", email = "", phone = "", existingSearch = "";
+    private string? error;
+    private Dictionary<string, string[]> errors = [];
+    private List<DuplicateMatchDto> matches = [];
+    private List<CandidateListItemDto> existing = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Anonymity.Enabled) { loading = false; return; }
+        try
+        {
+            var result = await CvApi.GetCandidateSuggestionAsync(CvId, lifetime.Token);
+            if (disposed || Anonymity.Enabled) return;
+            if (!result.IsSuccess) { error = CvLibraryText.Error(result.StatusCode); uncertain = result.StatusCode is 404 or 409 or 410; return; }
+            fullName = result.Data!.FullName ?? ""; email = result.Data.Email ?? ""; phone = result.Data.PhoneNumber ?? "";
+            suggested = fullName.Length + email.Length + phone.Length > 0;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { loading = false; }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !RendererInfo.IsInteractive) return;
+        try
+        {
+            var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/CvLibrary/AttachCandidateDialog.razor.js");
+            if (disposed) { await imported.DisposeAsync(); return; }
+            module = imported; reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    private void Revalidate() { if (validated) errors = CandidateRules.Validate(fullName, email, phone).Errors; }
+    private void NameChanged(ChangeEventArgs e) { fullName = e.Value?.ToString() ?? ""; Revalidate(); }
+    private void EmailChanged(ChangeEventArgs e) { email = e.Value?.ToString() ?? ""; Revalidate(); }
+    private void PhoneChanged(ChangeEventArgs e) { phone = e.Value?.ToString() ?? ""; Revalidate(); }
+    private string? Err(string field) => errors.TryGetValue(field, out var messages) ? messages.FirstOrDefault() : null;
+    private void SwitchMode(bool value) { existingMode = value; debouncer.Cancel(); ++searchVersion; searchRequest?.Cancel(); searching = false; error = null; }
+    private void EditAgain() { matches = []; uncertain = false; }
+    private async Task SaveAsync(bool confirm)
+    {
+        if (busy || uncertain || Anonymity.Enabled) return;
+        validated = true;
+        var (input, found) = CandidateRules.Validate(fullName, email, phone); errors = found;
+        if (input is null) return;
+        await SendAsync(new() { FullName = input.FullName, Email = input.Email, PhoneNumber = input.PhoneNumber, ConfirmNew = confirm });
+    }
+    private Task AttachExistingAsync(int id) => SendAsync(new() { CandidateId = id });
+    private async Task SendAsync(AttachCandidateRequest request)
+    {
+        if (busy || uncertain || disposed || Anonymity.Enabled) return;
+        busy = true; error = null;
+        try
+        {
+            var result = await CvApi.AttachCandidateAsync(CvId, request, lifetime.Token);
+            if (disposed || Anonymity.Enabled) return;
+            if (!result.IsSuccess) { error = CvLibraryText.Error(result.StatusCode, writing: true); uncertain = result.StatusCode is null or 404 or 409 or 410 or >= 500; return; }
+            if (result.Data!.Outcome == AttachOutcomes.NeedsDecision) { matches = result.Data.Matches; return; }
+            if (result.Data.Outcome != AttachOutcomes.Attached) { uncertain = true; error = CvLibraryText.Error(null, writing: true); return; }
+            await OnAttached.InvokeAsync();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+    private async Task SearchAsync(ChangeEventArgs e)
+    {
+        existingSearch = e.Value?.ToString() ?? ""; debouncer.Cancel(); ++searchVersion; searchRequest?.Cancel();
+        existing = []; searchAttempted = false; error = null; searching = false;
+        if (CvListQuery.NormalizeSearch(existingSearch) is not { Length: >= 2 and <= 100 }) return;
+        searching = true;
+        await debouncer.Trigger(() => InvokeAsync(() => SearchExistingAsync(1)));
+    }
+    private async Task SearchExistingAsync(int page)
+    {
+        if (busy || Anonymity.Enabled || disposed || !existingMode) return;
+        searchRequest?.Cancel();
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        searchRequest = request; var version = ++searchVersion; searching = true; error = null;
+        try
+        {
+            var result = await CandidateApi.ListAsync(existingSearch, page, request.Token);
+            if (disposed || version != searchVersion || Anonymity.Enabled) return;
+            if (!result.IsSuccess) { error = CvLibraryText.Error(result.StatusCode); existing = []; return; }
+            existing = result.Data!.Items; candidatePage = result.Data.Page; candidatePages = Math.Max(1, result.Data.TotalPages); searchAttempted = true;
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+        finally { if (ReferenceEquals(searchRequest, request)) searchRequest = null; if (version == searchVersion) searching = false; }
+    }
+    [JSInvokable] public Task CancelFromBrowser() => InvokeAsync(CloseAsync);
+    private Task CloseAsync() => busy ? Task.CompletedTask : OnClose.InvokeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true; ++searchVersion; debouncer.Dispose(); searchRequest?.Cancel(); lifetime.Cancel(); lifetime.Dispose();
+        fullName = email = phone = existingSearch = ""; matches = []; existing = [];
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog, ReturnFocusId); await module.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException) { }
+        }
+        reference?.Dispose();
+    }
+}

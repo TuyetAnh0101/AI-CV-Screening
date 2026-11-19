@@ -1,0 +1,6 @@
+<div class="application"><span class="job-title">@Display.Text(Application.JobTitle)</span><span class="stage @StageText.Css(Application.Stage)" title="@CvLibraryText.Reason(Application.RejectReason, Anonymous)"><i class="stage-dot" aria-hidden="true"></i>@CvLibraryText.Stage(Application.Stage)</span></div>
+
+@code {
+    [Parameter, EditorRequired] public CvJobStatusDto Application { get; set; } = default!;
+    [Parameter] public bool Anonymous { get; set; }
+}

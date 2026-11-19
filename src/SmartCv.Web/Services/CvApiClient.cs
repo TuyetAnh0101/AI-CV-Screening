@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
 using SmartCv.Core.Options;
+using SmartCv.Web.Helpers;
 
 namespace SmartCv.Web.Services;
 
@@ -47,4 +48,19 @@ public sealed class CvApiClient(HttpClient http, IOptions<CvUploadOptions> optio
     /// <summary>B38 (A42): GET /api/cvs/{id}/text — chữ đã đọc + chỉ số chất lượng; 410 khi CV đã ẩn danh hóa (A39).</summary>
     public Task<ApiResult<CvTextDto>> GetTextAsync(Guid cvId, CancellationToken ct = default) =>
         GetAsync<CvTextDto>($"api/cvs/{cvId}/text", ct);
+
+    public Task<ApiResult<CvPageDto>> ListAsync(CvLibraryFilter filter, CancellationToken ct = default)
+    {
+        var (valid, error) = filter.Validate();
+        return valid is null ? Task.FromResult(ApiResult<CvPageDto>.Failure(error!, 400))
+            : GetPrivateAsync<CvPageDto>("api/cvs?" + valid.ApiQuery, "CV library", ct);
+    }
+
+    public Task<ApiResult<CandidateSuggestionDto>> GetCandidateSuggestionAsync(Guid id, CancellationToken ct = default) =>
+        GetPrivateAsync<CandidateSuggestionDto>($"api/cvs/{id}/candidate-suggestion", "CV candidate suggestion", ct);
+
+    public Task<ApiResult<AttachCandidateResponse>> AttachCandidateAsync(Guid id, AttachCandidateRequest request, CancellationToken ct = default) =>
+        PutPrivateJsonAsync<AttachCandidateResponse>($"api/cvs/{id}/candidate", request, ct);
+
+    public string FileUrl(Guid id) => new Uri(Http.BaseAddress!, $"api/cvs/{id}/file").AbsoluteUri;
 }
