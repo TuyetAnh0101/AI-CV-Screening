@@ -92,6 +92,9 @@ internal sealed class A21SqlEnvironment : IAsyncDisposable
 
     internal WebApplicationFactory<Program> Api(IInterceptor? interceptor = null, string environment = "Development", bool enabled = true, bool kestrel = false)
     {
+        // Test migration vẫn dừng ở A20/A21. Chỉ test HTTP cần schema startup hiện tại (A27 đọc Users).
+        using (var guard = OpenAsync().GetAwaiter().GetResult())
+        using (var db = Context()) db.Database.Migrate();
         var factory = JobCrudEndpointTests.Factory(environment, enabled).WithWebHostBuilder(b =>
         {
             b.ConfigureLogging(l => l.ClearProviders());
@@ -119,12 +122,15 @@ internal sealed class A21SqlEnvironment : IAsyncDisposable
         {
             var cv = JobCrudEndpointTests.Cv(); if (i == 1) firstCv = cv.CvId;
             var app = new Application { Cv = cv, JobId = i, Stage = ApplicationStages.Interview, CreatedAt = DateTime.UtcNow };
-            app.Events.Add(new ApplicationEvent { FromStage = ApplicationStages.New, ToStage = ApplicationStages.Interview, Actor = "Synthetic HR", CreatedAt = DateTime.UtcNow });
             var evaluation = new Evaluation { Application = app, Run = run, Status = EvaluationStatuses.Completed, KeywordScore = 70, AiScore = 80, FinalScore = 77, ScoreSource = ScoreSources.Combined, FitLabel = "Good", PredictedPass = true, Reasoning = "Synthetic evidence", CreatedAt = DateTime.UtcNow };
             evaluation.Skills.Add(new EvaluationSkill { JobId = i, SkillCode = "csharp", IsMatched = true, Evidence = "synthetic" });
             db.Add(evaluation); db.Add(new HrLabel { Application = app, EvaluationSet = set, IsPass = true, LabeledBy = "Synthetic HR", LabeledAt = DateTime.UtcNow });
         }
-        await db.SaveChangesAsync(); return firstCv;
+        await db.SaveChangesAsync();
+        // Fixture dùng cả schema trước A27: chèn lịch sử bằng các cột đã tồn tại ở A35.
+        foreach (var app in db.ChangeTracker.Entries<Application>().Select(e => e.Entity))
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ApplicationEvents(ApplicationId,FromStage,ToStage,Actor,CreatedAt) VALUES({app.ApplicationId},{ApplicationStages.New},{ApplicationStages.Interview},{"Synthetic HR"},{DateTime.UtcNow})");
+        return firstCv;
     }
 
     internal async Task AssertCurrentSchemaAsync()

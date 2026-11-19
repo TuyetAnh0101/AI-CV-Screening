@@ -1,5 +1,11 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using SmartCv.Infrastructure.Data;
 
 namespace SmartCv.Tests;
 
@@ -24,6 +30,14 @@ public class TestHostLifecycleTests
             b.UseSetting("ConnectionStrings:SmartCvDb", "Server=(local);Database=SmartCv_Test_NotUsed;Trusted_Connection=True");
             b.UseSetting("Gemini:ApiKey", "test-not-a-real-key");
             b.UseSetting("Scoring:AiWeight", aiWeight);
+            // A27 startup đọc Users: dùng cùng database giả độc lập như các test API khác.
+            var database = Guid.NewGuid().ToString("N");
+            b.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<SmartCvDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<SmartCvDbContext>>();
+                services.AddDbContext<SmartCvDbContext>(o => o.UseInMemoryDatabase(database));
+            });
         });
 
     [Fact]

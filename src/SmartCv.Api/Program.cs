@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using SmartCv.Api.Background;
+using SmartCv.Api.Auth;
 using SmartCv.Api.Endpoints;
 using SmartCv.Api.Middleware;
 using SmartCv.Core.Ai;
+using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure;
@@ -14,6 +17,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 // A7: tiến trình chạy nền đọc chữ CV (PdfPig / OCR Tesseract) từ hàng đợi; đăng ký các service trong AddInfrastructure.
 builder.Services.AddHostedService<CvExtractionWorker>();
@@ -73,6 +78,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 var app = builder.Build();
+await app.SeedAdminAsync();
 
 if (app.Environment.IsDevelopment())
 {

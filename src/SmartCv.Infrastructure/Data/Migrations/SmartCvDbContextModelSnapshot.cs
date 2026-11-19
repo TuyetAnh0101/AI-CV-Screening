@@ -124,8 +124,14 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
                     b.HasKey("EventId")
                         .HasName("PK_ApplicationEvents");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ApplicationEvents_UserId");
 
                     b.HasIndex("ApplicationId", "CreatedAt")
                         .IsDescending(false, true)
@@ -1507,6 +1513,68 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.ToTable("PromptVersions", (string)null);
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.User", b =>
+                {
+                    b.Property<int>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("UserId")
+                        .HasName("PK_Users");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_Users_Email");
+
+                    b.ToTable("Users", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Users_Role", "[Role] COLLATE Latin1_General_100_BIN2 IN (N'Admin', N'HR') AND DATALENGTH([Role]) = CASE WHEN [Role] = N'Admin' THEN 10 ELSE 4 END");
+                        });
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>
                 {
                     b.HasOne("SmartCv.Core.Entities.Cv", "Cv")
@@ -1537,7 +1605,15 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ApplicationEvents_Applications");
 
+                    b.HasOne("SmartCv.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_ApplicationEvents_Users");
+
                     b.Navigation("Application");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.ApplicationFlag", b =>

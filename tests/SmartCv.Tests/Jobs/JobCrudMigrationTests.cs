@@ -45,7 +45,7 @@ public class JobCrudMigrationTests
         Assert.Equal(5, job.GetSeedData().Count());
         Assert.Equal("DF_Jobs_CreatedAt", job.FindProperty(nameof(Job.CreatedAt))!.FindAnnotation("Relational:DefaultConstraintName")!.Value);
         Assert.False(db.Database.HasPendingModelChanges());
-        // A43 appends its journal migration and SCApp v2 its workflow migration; keep the exact A20/A21/A43/v2 order checked.
-        Assert.Equal(new[] { Previous, Current, "20261118131430_CandidateDataRequests", "20261119024613_ScappWorkflowV2" }, db.Database.GetMigrations().TakeLast(4));
+        // Giữ nguyên thứ tự A20/A21/A43/v2 và kiểm tra A27 được nối vào cuối.
+        Assert.Equal(new[] { Previous, Current, "20261118131430_CandidateDataRequests", "20261119024613_ScappWorkflowV2", Auth.A27MigrationTests.Current }, db.Database.GetMigrations().TakeLast(5));
     }
 }

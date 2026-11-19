@@ -18,6 +18,7 @@ public class SmartCvDbContext : DbContext
     public DbSet<Cv> Cvs => Set<Cv>();
     public DbSet<Application> Applications => Set<Application>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
+    public DbSet<User> Users => Set<User>();
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
     public DbSet<EvaluationSet> EvaluationSets => Set<EvaluationSet>();
     public DbSet<HrLabel> HrLabels => Set<HrLabel>();
