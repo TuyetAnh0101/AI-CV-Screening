@@ -70,7 +70,9 @@ public sealed class CandidateApiClient(HttpClient http, ILogger<CandidateApiClie
         try
         {
             using var request = new HttpRequestMessage(method, url) { Content = JsonContent.Create(body, options: Json) };
-            using var response = await Http.SendAsync(request, ct);
+            // B27: gắn Bearer của phiên hiện tại; tab chưa đăng nhập thì không gửi thao tác ghi.
+            using var response = await SendAuthorizedAsync(request, ct);
+            if (response is null) return CandidateWriteResult<T>.Fail(401, CandidateText.Error(401, writing: true));
             var status = (int)response.StatusCode;
             if (response.IsSuccessStatusCode)
             {
