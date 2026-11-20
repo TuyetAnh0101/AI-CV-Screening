@@ -84,7 +84,7 @@
     [Parameter] public EventCallback<int> OnSelect { get; set; }
     [Parameter] public EventCallback<int> OnActivate { get; set; }
 
-    // B28: kích hoạt (POST /api/prompts/{id}/activate) chỉ Admin (A29) → HR không thấy nút.
+    // Kích hoạt prompt dùng cùng quyền nghiệp vụ Admin/HR như API.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanActivate => AccessRules.Can(AuthState, AppPermission.ManagePromptVersions);
 

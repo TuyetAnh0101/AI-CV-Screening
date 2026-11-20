@@ -92,7 +92,11 @@ public class A29AuditTests
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var session = (await login.Content.ReadFromJsonAsync<LoginResponse>())!;
         http.DefaultRequestHeaders.Authorization = new("Bearer", session.Token);
-        Assert.Equal(HttpStatusCode.Forbidden, (await http.PostAsJsonAsync("/api/jobs", new { title = "FORGED" })).StatusCode);
+        using var job = await http.PostAsJsonAsync("/api/jobs", new { title = "Synthetic HR recruitment job" });
+        Assert.Equal(HttpStatusCode.Created, job.StatusCode);
+        // The approved matrix opens recruitment writes; account administration remains forbidden.
+        using var forbidden = await http.PostAsJsonAsync("/api/users", new { fullName = "FORGED", role = "Admin" });
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         using var changed = await http.PatchAsJsonAsync($"/api/applications/{id}/stage", new { toStage = "Reviewing", actor = "FORGED", userId = 999 });
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         var history = (await http.GetFromJsonAsync<List<ApplicationEventDto>>($"/api/applications/{id}/events"))!;

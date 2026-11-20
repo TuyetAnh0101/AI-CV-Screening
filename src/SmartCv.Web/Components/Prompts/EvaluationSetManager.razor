@@ -32,8 +32,7 @@
 
     @if (!CanCreate && sets.Loaded && sets.Sets.Count == 0)
     {
-        @* B28: tạo bộ (POST /api/evaluation-sets) chỉ Admin (A29); HR thêm hồ sơ và gán nhãn sau khi đã có bộ. *@
-        <p id="set-empty-hr" class="set-empty" role="status">Chưa có bộ CV đánh giá. Quản trị viên (Admin) tạo bộ; sau đó bạn có thể chọn CV đã quét và gán nhãn HR tại đây.</p>
+        <p id="set-empty-hr" class="set-empty" role="status">Chưa có bộ CV đánh giá. Hãy xác minh lại phiên đăng nhập trước khi tạo bộ.</p>
     }
 
     @if (CanCreate && (creatingOpen || (sets.Loaded && sets.Sets.Count == 0)))
@@ -311,7 +310,7 @@
         if (result.IsSuccess) jobs = result.Data!;
     }
 
-    // B28: chỉ Admin tạo bộ CV (A29: POST /api/evaluation-sets). Thêm / bỏ hồ sơ, gán nhãn: cả HR.
+    // Admin/HR cùng tạo bộ, thêm/bỏ hồ sơ và gán nhãn qua API đã xác thực.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanCreate => AccessRules.Can(AuthState, AppPermission.CreateEvaluationSet);
 

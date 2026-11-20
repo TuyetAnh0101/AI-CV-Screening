@@ -19,7 +19,7 @@ public enum AccessLevel
     Admin
 }
 
-/// <summary>Thao tác chỉ một số vai trò được làm. Mỗi giá trị ứng với đúng các API có chính sách riêng ở A29.</summary>
+/// <summary>Quyền thao tác nghiệp vụ và quản trị, đồng bộ với chính sách trên API.</summary>
 public enum AppPermission
 {
     /// <summary>POST /api/jobs, PUT /api/jobs/{id}, POST /{id}/deactivate, /{id}/activate, cả nhóm /api/jobs/{id}/skills.</summary>
@@ -28,7 +28,7 @@ public enum AppPermission
     ManagePromptVersions,
     /// <summary>POST /api/prompts/assembled-preview (xem nội dung sẽ gửi Gemini).</summary>
     PreviewAssembledPrompt,
-    /// <summary>POST /api/evaluation-sets (tạo bộ CV đánh giá). Thêm/bỏ hồ sơ, gán nhãn: HR cũng được.</summary>
+    /// <summary>POST /api/evaluation-sets. Admin/HR cùng tạo bộ, thêm/bỏ hồ sơ và gán nhãn.</summary>
     CreateEvaluationSet,
     /// <summary>B29: cả nhóm /api/users (xem, tạo, sửa, khóa / mở khóa, đặt lại mật khẩu HR).</summary>
     ManageUsers,
@@ -36,8 +36,8 @@ public enum AppPermission
 }
 
 /// <summary>
-/// B28: một chỗ duy nhất quyết định "ai thấy / làm được gì" trên giao diện, bám đúng bảng quyền A29
-/// (src/SmartCv.Api — AuthPolicies.Admin). Hàm thuần → unit test được. Đây chỉ là lớp HIỂN THỊ:
+/// Một chỗ duy nhất quyết định "ai thấy / làm được gì" trên giao diện: nghiệp vụ dành cho Admin/HR,
+/// quản lý tài khoản và audit dành cho Admin. Hàm thuần → unit test được. Đây chỉ là lớp HIỂN THỊ:
 /// API (A29) luôn kiểm tra lại và là nơi quyết định cuối cùng.
 /// Nguyên tắc fail-closed: thiếu thông tin, chưa xác minh, vai trò lạ → không có quyền.
 /// </summary>
@@ -72,13 +72,13 @@ public static class AccessRules
 
     public static bool IsAdmin(ClaimsPrincipal? user) => Level(user) == AccessLevel.Admin;
 
-    /// <summary>Bảng quyền thao tác. Hiện mọi thao tác có chính sách riêng ở A29 đều chỉ dành cho Admin.</summary>
+    /// <summary>Quyền nghiệp vụ cần phiên Admin/HR hợp lệ; quyền quản trị vẫn chỉ dành cho Admin.</summary>
     public static bool Can(ClaimsPrincipal? user, AppPermission permission) => permission switch
     {
-        AppPermission.ManageJobs => IsAdmin(user),
-        AppPermission.ManagePromptVersions => IsAdmin(user),
-        AppPermission.PreviewAssembledPrompt => IsAdmin(user),
-        AppPermission.CreateEvaluationSet => IsAdmin(user),
+        AppPermission.ManageJobs => CanUseApp(user),
+        AppPermission.ManagePromptVersions => CanUseApp(user),
+        AppPermission.PreviewAssembledPrompt => CanUseApp(user),
+        AppPermission.CreateEvaluationSet => CanUseApp(user),
         AppPermission.ManageUsers => IsAdmin(user),
         AppPermission.ViewAudit => IsAdmin(user),
         _ => false

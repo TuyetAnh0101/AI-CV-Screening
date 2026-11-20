@@ -199,7 +199,7 @@ public class B27EndToEndTests
         await using var web = Web(api);
         var (scope, _) = await LoginAsync(web, user.Email, password);
         await using var _s = scope;
-        var result = await scope.ServiceProvider.GetRequiredService<JobApiClient>().CreateAsync(new JobUpsertRequest { Title = "Thử" });
+        var result = await scope.ServiceProvider.GetRequiredService<UserApiClient>().ListAsync(new());
         Assert.Equal(403, result.StatusCode);
         Assert.Equal("access_denied", result.ErrorCode);
         Assert.True(scope.ServiceProvider.GetRequiredService<AuthSession>().IsSignedIn);

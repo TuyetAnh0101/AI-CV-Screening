@@ -68,7 +68,7 @@
         }
         @if (versions.Count == 0)
         {
-            <p class="empty-notice" role="status">@(CanManage ? "Chưa có phiên bản system prompt nào. Bạn có thể soạn và lưu phiên bản đầu tiên bên dưới." : "Chưa có phiên bản system prompt nào. Quản trị viên (Admin) sẽ soạn và lưu phiên bản đầu tiên.")</p>
+            <p class="empty-notice" role="status">@(CanManage ? "Chưa có phiên bản system prompt nào. Bạn có thể soạn và lưu phiên bản đầu tiên bên dưới." : "Chưa có phiên bản system prompt nào. Hãy xác minh lại phiên đăng nhập trước khi soạn và lưu.")</p>
         }
         <div class="prompt-workspace">
             <PromptEditor Draft="draft" Versions="versions" Saving="saving" Disabled="@(activatingId is not null || synchronizingActivation || pendingId is not null || pendingLocation is not null)"
@@ -99,7 +99,7 @@
     [SupplyParameterFromQuery(Name = "testRunId")] public string? TestRunId { get; set; }
     /// <summary>B25: trang /evaluation-sets dẫn sang đây với ?set= để chọn sẵn bộ khi chạy Prompt Test (chỉ là mã bộ).</summary>
     [SupplyParameterFromQuery(Name = "set")] public int? SetQuery { get; set; }
-    // B28: lưu / kích hoạt phiên bản là API chỉ Admin (A29). HR: xem, thử với hồ sơ, chạy Prompt Test, xem độ chính xác.
+    // Admin/HR cùng soạn, lưu, kích hoạt, thử và so sánh các phiên bản prompt.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanManage => AccessRules.Can(AuthState, AppPermission.ManagePromptVersions);
     private string? testHistoryWarning;

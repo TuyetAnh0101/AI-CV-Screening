@@ -12,7 +12,7 @@ public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
 /// B28: danh mục menu trái theo vai trò (Figma "SC v2"). Một nguồn cho NavMenu và cho nút "quay lại" của trang 403.
 ///
 /// Đối chiếu A29: mọi trang dưới đây HR và Admin đều MỞ được (API đọc của các trang là chính sách nghiệp vụ chung); khác biệt
-/// nằm ở thao tác ghi bên trong trang (xem AccessRules). Trang chỉ Admin (/jobs/new, /jobs/{id}) không có mục menu riêng.
+/// nằm ở các trang quản trị (xem AccessRules). /jobs/new và /jobs/{id} dùng quyền nghiệp vụ Admin/HR.
 /// B29 thêm "Tài khoản" (/users) với AdminOnly: true. Nhóm không còn mục nào với vai trò hiện tại thì bị ẩn cả nhóm.
 /// </summary>
 public static class AppNavigation

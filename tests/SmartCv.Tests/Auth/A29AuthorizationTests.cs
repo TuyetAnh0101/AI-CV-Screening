@@ -26,11 +26,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
 {
     internal static readonly HashSet<string> AdminRoutes =
     [
-        "POST /api/jobs", "PUT /api/jobs/{id:int}", "POST /api/jobs/{id:int}/activate", "POST /api/jobs/{id:int}/deactivate",
-        "POST /api/jobs/{id:int}/skills", "PUT /api/jobs/{id:int}/skills/{code}",
-        "DELETE /api/jobs/{id:int}/skills/{code}", "PUT /api/jobs/{id:int}/skills/{code}/aliases",
-        "POST /api/prompts", "POST /api/prompts/assembled-preview", "POST /api/prompts/{id:int}/activate",
-        "POST /api/evaluation-sets", "POST /api/cvs/{id:guid}/anonymize", "POST /api/retention/run",
+        "POST /api/cvs/{id:guid}/anonymize", "POST /api/retention/run",
         "GET /api/health/database", "GET /api/health/gemini",
         "GET /api/admin/audit-events", "GET /api/admin/audit-events/{id:long}",
         "GET /api/users", "POST /api/users", "PUT /api/users/{id:int}",

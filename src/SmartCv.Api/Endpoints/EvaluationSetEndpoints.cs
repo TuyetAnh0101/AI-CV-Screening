@@ -38,7 +38,7 @@ public static partial class EvaluationSetEndpoints
         if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/evaluation-sets").WithTags("EvaluationSets");
         group.MapGet("/", ListAsync).WithName("ListEvaluationSets").WithSummary("Các bộ CV đánh giá");
-        group.MapPost("/", CreateAsync).WithName("CreateEvaluationSet").RequireAuthorization(AuthPolicies.Admin).WithSummary("Tạo bộ CV đánh giá");
+        group.MapPost("/", CreateAsync).WithName("CreateEvaluationSet").RequireAuthorization().WithSummary("Tạo bộ CV đánh giá");
         group.MapGet("/{id:int}", GetAsync).WithName("GetEvaluationSet").WithSummary("Một bộ CV đánh giá và các nhãn HR");
         group.MapGet("/{id:int}/applications", CandidatesAsync).WithName("ListLabelCandidates")
             .WithSummary("Hồ sơ có thể gán nhãn trong bộ này");

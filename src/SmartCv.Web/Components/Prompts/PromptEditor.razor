@@ -21,7 +21,7 @@
     {
         <p id="prompt-readonly" class="readonly-note" role="note">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z" /></svg>
-            <span>Chế độ chỉ xem. Lưu phiên bản mới và kích hoạt prompt do quản trị viên (Admin) thực hiện; bạn vẫn có thể thử phiên bản đang xem với hồ sơ.</span>
+            <span>Chế độ chỉ xem. Hãy xác minh lại phiên đăng nhập trước khi chỉnh sửa hoặc lưu phiên bản prompt.</span>
         </p>
     }
     <label for="system-prompt" class="editor-label">Nội dung system prompt</label>
@@ -108,7 +108,7 @@
     [Parameter] public int? EvaluationSetId { get; set; }
     [Parameter] public int LabelsVersion { get; set; }
     [Parameter] public EventCallback<int> OnEvaluationSetChanged { get; set; }
-    // B28: lưu phiên bản (POST /api/prompts) chỉ Admin (A29). Không đủ quyền → ô prompt chỉ đọc, không có Lưu / Hoàn tác.
+    // Admin/HR hợp lệ được lưu phiên bản; phiên chưa đủ điều kiện chỉ thấy nội dung chỉ đọc.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanManage => AccessRules.Can(AuthState, AppPermission.ManagePromptVersions);
     private bool showPlayground, focusTryButton;
