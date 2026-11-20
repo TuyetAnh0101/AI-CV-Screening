@@ -64,6 +64,9 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+logs/
+logs-thu/
+keys-thu/
 
 # Tye
 .tye/
