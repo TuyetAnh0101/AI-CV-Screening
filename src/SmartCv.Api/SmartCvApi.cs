@@ -13,6 +13,7 @@ public static class SmartCvApi
         api.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
         api.MapEvaluationEndpoints();
         api.MapRunEndpoints();
+        api.MapExportEndpoints();
         api.MapCvEndpoints();
         api.MapCandidateEndpoints();
         api.MapRetentionEndpoints();

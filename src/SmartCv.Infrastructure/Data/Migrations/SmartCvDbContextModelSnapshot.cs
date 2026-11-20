@@ -868,6 +868,83 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.ToTable("EvaluationSkills", (string)null);
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.ExportLog", b =>
+                {
+                    b.Property<long>("ExportId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ExportId"));
+
+                    b.Property<bool>("Anonymized")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("AuditEventId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Fit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<int>("JobId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ManualFlags")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("NeedsReview")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("SearchApplied")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("ExportId");
+
+                    b.HasIndex("AuditEventId")
+                        .IsUnique();
+
+                    b.HasIndex("JobId", "ExportId")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("RunId", "ExportId")
+                        .IsDescending(false, true);
+
+                    b.ToTable("ExportLogs", null, t =>
+                        {
+                            t.HasTrigger("TR_ExportLogs_NoChange");
+
+                            t.HasCheckConstraint("CK_ExportLogs_Fit", "[Fit] COLLATE Latin1_General_100_BIN2 IN ('all','pass','notpass','unscored','excellent','good','potential','poor','issue')");
+
+                            t.HasCheckConstraint("CK_ExportLogs_Format", "[Format] COLLATE Latin1_General_100_BIN2 = 'xlsx'");
+
+                            t.HasCheckConstraint("CK_ExportLogs_Rows", "[RowCount] > 0 AND [RowCount] <= 5000");
+
+                            t.HasCheckConstraint("CK_ExportLogs_Stage", "[Stage] COLLATE Latin1_General_100_BIN2 IN ('all','New','Reviewing','Shortlisted','Interview','Rejected','OnHold')");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.HrLabel", b =>
                 {
                     b.Property<int>("EvaluationSetId")
@@ -1859,6 +1936,29 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Navigation("Evaluation");
 
                     b.Navigation("JobSkill");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.ExportLog", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.AuditEvent", "AuditEvent")
+                        .WithOne()
+                        .HasForeignKey("SmartCv.Core.Entities.ExportLog", "AuditEventId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SmartCv.Core.Entities.Job", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SmartCv.Core.Entities.EvaluationRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("AuditEvent");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.HrLabel", b =>

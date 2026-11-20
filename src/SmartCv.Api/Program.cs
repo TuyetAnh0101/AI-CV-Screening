@@ -21,6 +21,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSmartCvAuth(builder.Configuration);
+builder.Services.AddOptions<ExportOptions>().Bind(builder.Configuration.GetSection(ExportOptions.SectionName))
+    .Validate(o => o.MaxRows is >= 1 and <= 5000, "Export:MaxRows phải từ 1 đến 5000.").ValidateOnStart();
 
 // A7: tiến trình chạy nền đọc chữ CV (PdfPig / OCR Tesseract) từ hàng đợi; đăng ký các service trong AddInfrastructure.
 builder.Services.AddHostedService<CvExtractionWorker>();

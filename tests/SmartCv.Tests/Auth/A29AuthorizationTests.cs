@@ -29,6 +29,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         "POST /api/cvs/{id:guid}/anonymize", "POST /api/retention/run",
         "GET /api/health/database", "GET /api/health/gemini",
         "GET /api/admin/audit-events", "GET /api/admin/audit-events/{id:long}",
+        "GET /api/exports",
         "GET /api/users", "POST /api/users", "PUT /api/users/{id:int}",
         "POST /api/users/{id:int}/lock", "POST /api/users/{id:int}/unlock", "POST /api/users/{id:int}/reset-password"
     ];
@@ -100,7 +101,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         var auth = factory.Services.GetRequiredService<IAuthorizationService>();
         var options = factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
         Assert.NotNull(options.FallbackPolicy);
-        Assert.Equal(91, endpoints.Count);
+        Assert.Equal(95, endpoints.Count);
         var observedAdmin = new HashSet<string>();
         foreach (var endpoint in endpoints)
         {
