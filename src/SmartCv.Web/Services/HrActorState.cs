@@ -1,48 +1,27 @@
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-using Microsoft.JSInterop;
-using System.Security.Cryptography;
-using SmartCv.Core.Applications;
+using SmartCv.Core.Auth;
 
 namespace SmartCv.Web.Services;
 
-/// <summary>HR name per browser tab, until account authentication is available.</summary>
-public sealed class HrActorState(ProtectedSessionStorage? storage = null)
+/// <summary>Compatibility facade for B34/B35/B41. Identity comes only from the verified AuthSession.</summary>
+public sealed class HrActorState(AuthSession? session = null)
 {
-    private const string Key = "scapp.hr-actor";
-    private bool loaded;
-    public string? Actor { get; private set; }
-    public bool HasActor => !string.IsNullOrWhiteSpace(Actor);
-    public string? StorageWarning { get; private set; }
-
-    // Called after interactive render, never during prerender.
-    public async Task EnsureLoadedAsync()
+    public bool HasActor => session is { IsSignedIn: true, IsVerified: true, MustChangePassword: false }
+        && UserRoles.IsValid(session.User?.Role) && !string.IsNullOrWhiteSpace(session.User?.FullName);
+    public int? UserId => HasActor ? session!.User!.UserId : null;
+    public string? DisplayName => HasActor ? session!.User!.FullName : null;
+    // Existing decision/label contracts limit names to 100; backend applies the same truncation to its trusted claim.
+    public string? Actor
     {
-        if (loaded) return;
-        loaded = true;
-        if (storage is null) return;
-        try
+        get
         {
-            var result = await storage.GetAsync<string>(Key);
-            var actor = result.Value?.Trim();
-            if (result.Success && actor is { Length: > 0 and <= StageChangeRules.MaxActorLength }) Actor = actor;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or JSException or CryptographicException)
-        {
-            StorageWarning = "Không đọc được tên đã nhớ. Hãy nhập lại tên HR khi lưu quyết định.";
+            if (DisplayName is not { } name) return null;
+            name = new string(name.Where(c => !char.IsControl(c)).ToArray()).Trim();
+            if (name.Length <= 100) return name;
+            return name[..(char.IsHighSurrogate(name[99]) ? 99 : 100)];
         }
     }
-
-    public async Task SetAsync(string actor)
-    {
-        actor = actor.Trim();
-        if (actor.Length is 0 or > StageChangeRules.MaxActorLength) throw new ArgumentException("Tên HR không hợp lệ.", nameof(actor));
-        Actor = actor;
-        loaded = true;
-        if (storage is null) return;
-        try { await storage.SetAsync(Key, actor); StorageWarning = null; }
-        catch (Exception ex) when (ex is InvalidOperationException or JSException or CryptographicException)
-        {
-            StorageWarning = "Tên HR chỉ được nhớ trong phiên đang mở. Trình duyệt chưa lưu được tên cho lần tải lại.";
-        }
-    }
+    public string? StorageWarning => null;
+    public Task EnsureLoadedAsync() => session?.EnsureRestoredAsync() ?? Task.CompletedTask;
+    // Kept for older consumers. A manual name can never replace the authenticated identity or reach storage.
+    public Task SetAsync(string actor) => Task.CompletedTask;
 }

@@ -19,6 +19,7 @@ public class SmartCvDbContext : DbContext
     public DbSet<Application> Applications => Set<Application>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();
     public DbSet<EvaluationSet> EvaluationSets => Set<EvaluationSet>();
     public DbSet<HrLabel> HrLabels => Set<HrLabel>();
@@ -44,6 +45,8 @@ public class SmartCvDbContext : DbContext
     private void PrepareStageChanges()
     {
         ChangeTracker.DetectChanges();
+        if (ChangeTracker.Entries<AuditEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Nhật ký hoạt động chỉ được thêm, không được sửa hoặc xóa.");
         if (ChangeTracker.Entries<ApplicationEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Lịch sử quyết định chỉ được thêm, không được sửa hoặc xóa.");
 

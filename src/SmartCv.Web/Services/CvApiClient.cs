@@ -62,5 +62,6 @@ public sealed class CvApiClient(HttpClient http, IOptions<CvUploadOptions> optio
     public Task<ApiResult<AttachCandidateResponse>> AttachCandidateAsync(Guid id, AttachCandidateRequest request, CancellationToken ct = default) =>
         PutPrivateJsonAsync<AttachCandidateResponse>($"api/cvs/{id}/candidate", request, ct);
 
-    public string FileUrl(Guid id) => new Uri(Http.BaseAddress!, $"api/cvs/{id}/file").AbsoluteUri;
+    public Task<ApiResult<DownloadedFile>> GetFileAsync(Guid id, CancellationToken ct = default) =>
+        GetFileAsync($"api/cvs/{id}/file?download=true", ct);
 }

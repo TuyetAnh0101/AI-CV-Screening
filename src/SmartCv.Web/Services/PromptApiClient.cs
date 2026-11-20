@@ -27,7 +27,6 @@ public sealed class PromptApiClient(HttpClient http, ILogger<PromptApiClient> lo
     /// <summary>B41 (A36): đề xuất nhãn từ quyết định HR. Chỉ đọc; nhãn chỉ được ghi qua SaveLabelsAsync khi HR bấm Lưu.</summary>
     public Task<ApiResult<LabelSuggestionResponse>> GetLabelSuggestionsAsync(int id, int? jobId = null, CancellationToken ct = default) =>
         GetAsync<LabelSuggestionResponse>(jobId is > 0 ? $"api/evaluation-sets/{id}/label-suggestions?jobId={jobId}" : $"api/evaluation-sets/{id}/label-suggestions", ct);
-    public string EvaluationCvUrl(Guid cvId) => new Uri(Http.BaseAddress!, $"api/cvs/{cvId}/file").AbsoluteUri;
 
     // ----- SCApp v2: thành viên bộ CV (tách khỏi nhãn HR) -----
 

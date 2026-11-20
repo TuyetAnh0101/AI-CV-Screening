@@ -36,16 +36,10 @@
             <div class="cv-actions">
                 @if (Anonymity.Enabled)
                 { <button type="button" class="btn sc-btn-secondary" disabled>Xem CV gốc</button><small>Tắt Ẩn danh để xem CV gốc</small> }
-                else if (cvUrl is null)
-                {
-                    <button type="button" class="btn sc-btn-primary" disabled="@(checkingCv || detail.CvId == Guid.Empty)" @onclick="CheckCvAsync">@(checkingCv ? "Đang kiểm tra CV..." : "Xem CV gốc")</button>
-                }
                 else
                 {
-                    <a class="btn sc-btn-primary" href="@cvUrl" target="_blank" rel="noopener noreferrer">Mở CV gốc ↗</a>
-                    <small>File đã sẵn sàng · mở ở tab mới</small>
+                    <CvFileButton CvId="detail.CvId" Text="Xem CV gốc" CssClass="btn sc-btn-primary" />
                 }
-                @if (cvError is not null) { <p class="error-text" role="alert">@cvError</p> }
                 <button type="button" class="btn sc-btn-secondary" @onclick="LoadAsync">Làm mới kết quả</button>
             </div>
         </header>
@@ -154,15 +148,15 @@
     [SupplyParameterFromQuery(Name = "runId")] public string? RunId { get; set; }
     [SupplyParameterFromQuery(Name = "jobId")] public string? JobId { get; set; }
     private EvaluationDetailDto? detail;
-    private bool loading = true, checkingCv, disposed;
-    private string? error, cvError, cvUrl;
+    private bool loading = true, disposed;
+    private string? error;
     private int? loadedId;
     private int version;
     private CancellationTokenSource? cts;
     private List<EvaluationSkillDto> Skills => detail?.Skills ?? [];
     private string BackUrl => Display.BackUrl(RunId, JobId);
     protected override void OnInitialized() => Anonymity.Changed += PrivacyChanged;
-    private void PrivacyChanged() => _ = InvokeAsync(() => { if (Anonymity.Enabled) cvUrl = null; StateHasChanged(); });
+    private void PrivacyChanged() => _ = InvokeAsync(StateHasChanged);
 
     protected override Task OnParametersSetAsync() => loadedId == Id ? Task.CompletedTask : LoadAsync();
     private async Task LoadAsync()
@@ -176,8 +170,7 @@
         var requestedId = Id;
         loading = true;
         detail = null;
-        error = cvError = cvUrl = null;
-        checkingCv = false;
+        error = null;
         try
         {
             var result = await EvaluationApi.GetAsync(requestedId, token);
@@ -196,29 +189,5 @@
         null => "Không tải được dữ liệu: API mất kết nối, phản hồi quá lâu hoặc trả về dữ liệu không hợp lệ. Vui lòng thử lại.",
         _ => "Máy chủ không thể tải kết quả đánh giá. Vui lòng thử lại sau."
     };
-    private async Task CheckCvAsync()
-    {
-        if (Anonymity.Enabled || detail is null || checkingCv || cts is null) return;
-        var current = version;
-        var cvId = detail.CvId;
-        var token = cts.Token;
-        checkingCv = true;
-        cvError = null;
-        try
-        {
-            var result = await EvaluationApi.CheckCvAsync(cvId, token);
-            if (disposed || current != version || Anonymity.Enabled) return;
-            if (result.IsSuccess) cvUrl = EvaluationApi.CvUrl(cvId);
-            else cvError = result.StatusCode switch
-            {
-                401 => "Phiên truy cập CV không hợp lệ. Vui lòng đăng nhập lại.",
-                403 => "Bạn không có quyền xem CV này.",
-                404 => "Không tìm thấy file CV gốc trên máy chủ.",
-                _ => "Không mở được CV. Kiểm tra kết nối và thử lại."
-            };
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        finally { if (!disposed && current == version) checkingCv = false; }
-    }
     public void Dispose() { disposed = true; Anonymity.Changed -= PrivacyChanged; ++version; cts?.Cancel(); cts?.Dispose(); }
 }

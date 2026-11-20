@@ -17,9 +17,9 @@ public partial class RankingTable
     private List<RankingItemDto>? lastItems;
     private PendingDecision? pending;
     private string? stageFilter, message;
-    private bool messageIsError, busy, actorReady, needsSync, editingActor, disposed, showDecisionDialog;
+    private bool messageIsError, busy, actorReady, needsSync, disposed, showDecisionDialog;
     private int selectVersion;
-    private bool TableLocked => Loading || busy || !actorReady || needsSync || pending is not null || editingActor;
+    private bool TableLocked => Loading || busy || !actorReady || needsSync || pending is not null;
     private string StageOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.Stage ?? row.Stage;
     private string? ReasonOf(RankingItemDto row) => overrides.TryGetValue(row.ApplicationId, out var value) ? value.RejectReason : row.RejectReason;
     private Guid VersionOf(RankingItemDto row) => overrides.GetValueOrDefault(row.ApplicationId)?.StageVersion ?? row.StageVersion;
@@ -110,12 +110,6 @@ public partial class RankingTable
         await OnInteractionChanged.InvokeAsync(true);
         if (target != ApplicationStages.Rejected && ActorState.HasActor)
             await ConfirmDecisionAsync(new(target, null, null, ActorState.Actor!));
-    }
-
-    private async Task SaveActorAsync(StageDialog.Decision decision)
-    {
-        await ActorState.SetAsync(decision.Actor);
-        editingActor = false;
     }
 
     private async Task CancelPendingAsync()

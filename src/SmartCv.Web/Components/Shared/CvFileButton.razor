@@ -1,0 +1,46 @@
+@implements IDisposable
+@inject CvApiClient CvApi
+@inject FileDownloadService Files
+@inject AnonymityState Privacy
+
+<span class="secure-file-actions" aria-busy="@busy.ToString().ToLowerInvariant()">
+    <button type="button" class="@CssClass" disabled="@(busy || Privacy.Enabled || Disabled)" title="@(Privacy.Enabled ? "Tắt Ẩn danh để xem file gốc" : null)" @onclick="() => TransferAsync(true)">@(busy ? "Đang tải…" : Text)</button>
+    @if (ShowDownload)
+    {
+        <button type="button" class="@CssClass" disabled="@(busy || Privacy.Enabled || Disabled)" aria-label="Tải file CV về máy" @onclick="() => TransferAsync(false)">Tải về</button>
+    }
+    @if (error is not null) { <span class="secure-file-error" role="alert">@error</span> }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public Guid CvId { get; set; }
+    [Parameter] public string Text { get; set; } = "Xem file";
+    [Parameter] public string CssClass { get; set; } = "btn sc-btn-ghost btn-sm";
+    [Parameter] public bool ShowDownload { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback OnOpened { get; set; }
+    private readonly CancellationTokenSource lifetime = new();
+    private bool busy;
+    private string? error;
+    private async Task TransferAsync(bool preview)
+    {
+        if (busy || Privacy.Enabled || Disabled || CvId == Guid.Empty) return;
+        busy = true; error = null;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        try
+        {
+            var result = await CvApi.GetFileAsync(CvId, timeout.Token);
+            if (!result.IsSuccess) { error = result.ErrorMessage; return; }
+            await using var file = result.Data!;
+            if (Privacy.Enabled) return;
+            await Files.OpenAsync(file, preview, timeout.Token);
+            await OnOpened.InvokeAsync();
+        }
+        catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) error = "Tải file quá lâu. Hãy thử lại."; }
+        catch (Exception ex) when (ex is Microsoft.JSInterop.JSException or IOException or InvalidOperationException)
+        { error = "Chưa mở được file. Kiểm tra phiên, kết nối và chế độ Ẩn danh rồi thử lại."; }
+        finally { busy = false; }
+    }
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

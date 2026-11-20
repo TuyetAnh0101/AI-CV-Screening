@@ -1,0 +1,2 @@
+.secure-file-actions { display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:100%; }
+.secure-file-error { flex-basis:100%;font-size:12px;color:var(--sc-error,#b42318);white-space:normal; }

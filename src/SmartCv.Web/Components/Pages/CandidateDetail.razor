@@ -17,6 +17,7 @@
 @inject AnonymityState Anonymity
 @inject HrActorState Actor
 @inject CandidateHubState Hub
+@inject FileDownloadService Files
 
 <PageTitle>@PageTitleText · SCApp</PageTitle>
 
@@ -89,7 +90,7 @@
                                     <strong>@(cv.IsAnonymized ? "Hồ sơ đã ẩn danh" : anon ? "CV đã ẩn tên" : Display.Text(cv.FileName))</strong>
                                     <span>CV @CvLibraryText.ShortId(cv.CvId) · tải @CandidateText.Date(cv.UploadedAt) · @CvLibraryText.Source(cv.SourceChannel)</span>
                                 </div>
-                                @if (!cv.IsAnonymized && !anon) { <a class="file-link" href="@CvApi.FileUrl(cv.CvId)" target="_blank" rel="noopener noreferrer">Xem file <span aria-hidden="true">↗</span><span class="visually-hidden"> (mở tab mới)</span></a> }
+                                @if (!cv.IsAnonymized && !anon) { <CvFileButton CvId="cv.CvId" CssClass="btn sc-btn-ghost btn-sm" /> }
                             </header>
                             <dl class="cv-facts">
                                 <div><dt>Đọc chữ</dt><dd>@(cv.IsAnonymized ? "Đã ẩn danh" : CvLibraryText.Statuses.FirstOrDefault(s => s.Code == cv.ExtractionStatus).Name ?? "—")</dd></div>
@@ -155,14 +156,12 @@
                         <p class="muted">Ứng viên có quyền xem và yêu cầu xóa dữ liệu cá nhân. Mỗi lần xử lý đều được ghi nhật ký.</p>
                         @if (!anon)
                         {
-                            <label class="c-label" for="rights-actor">Người xử lý</label>
-                            <input id="rights-actor" class="c-input" value="@actorName" @oninput="e => actorName = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" placeholder="HR - Họ tên" />
+                            <p class="c-label">Người thực hiện: <strong>@Actor.DisplayName</strong></p>
                             <div class="rights-actions">
-                                @if (ActorValid) { <a id="rights-export" class="btn sc-btn-secondary" href="@Api.ExportUrl(c.CandidateId, actorName)" download @onclick="ExportStartedAsync">Xuất dữ liệu (JSON)</a> }
-                                else { <button type="button" class="btn sc-btn-secondary" disabled>Xuất dữ liệu (JSON)</button> }
+                                <button id="rights-export" type="button" class="btn sc-btn-secondary" disabled="@(!ActorValid || exporting)" @onclick="ExportStartedAsync">@(exporting ? "Đang xuất…" : "Xuất dữ liệu (JSON)")</button>
                                 <button id="rights-erase" type="button" class="btn c-btn-danger-outline" disabled="@busy" @onclick="() => erasing = true">Xóa dữ liệu…</button>
                             </div>
-                            @if (!ActorValid) { <span class="c-hint">Nhập người xử lý để xuất dữ liệu.</span> }
+                            @if (!ActorValid) { <span class="c-hint">Cần phiên đăng nhập hợp lệ để xử lý yêu cầu.</span> }
                         }
                         <h3>Nhật ký yêu cầu</h3>
                         <RequestHistory Requests="workspace.Requests" Anonymous="anon" />
@@ -199,7 +198,8 @@
     /// <summary>Đang tải lại sau thao tác ghi: khóa các thao tác khác để không gửi dựa trên dữ liệu cũ.</summary>
     private bool busy => workspace.Refreshing;
     private string? notice;
-    private string actorName = "";
+    private string actorName => Actor.Actor ?? "";
+    private bool exporting;
     private int loadedId;
     private DateTime now = DateTime.UtcNow;
 
@@ -213,7 +213,7 @@
     {
         workspace = new(Api);
         Anonymity.Changed += PrivacyChanged;
-        try { await Actor.EnsureLoadedAsync(); actorName = Actor.Actor ?? ""; } catch (InvalidOperationException) { }
+        await Actor.EnsureLoadedAsync();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -268,13 +268,27 @@
         await ReloadAsync();
     }
 
-    /// <summary>Trình duyệt tự tải file; API ghi nhật ký → cập nhật bảng nhật ký sau 1,5 giây.</summary>
+    /// <summary>Stream JSON có Bearer; làm mới lịch sử sau khi API đã chuẩn bị dữ liệu, không đoán bằng timer.</summary>
     private async Task ExportStartedAsync()
     {
-        try { await Actor.SetAsync(actorName.Trim()); } catch (InvalidOperationException) { }
-        Show("Đang tải file dữ liệu. Nhật ký yêu cầu sẽ cập nhật sau vài giây.", false);
-        try { await Task.Delay(1500, lifetime.Token); } catch (OperationCanceledException) { return; }
-        if (!disposed) { await ReloadAsync(); StateHasChanged(); }
+        if (exporting || Anonymity.Enabled || !ActorValid) return;
+        exporting = true;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        try
+        {
+            var result = await Api.ExportAsync(Id, timeout.Token);
+            if (!result.IsSuccess) { Show(result.ErrorMessage ?? "Chưa xuất được dữ liệu.", true); return; }
+            await using var file = result.Data!;
+            if (Anonymity.Enabled) return;
+            await Files.OpenAsync(file, preferPreview: false, timeout.Token);
+            Show("Đã chuyển dữ liệu cho trình duyệt. Kiểm tra mục tải xuống để nhận file JSON.", false);
+            if (!disposed) await ReloadAsync();
+        }
+        catch (OperationCanceledException) { if (!disposed) Show("Xuất dữ liệu quá lâu. Hãy kiểm tra lịch sử trước khi thử lại.", true); }
+        catch (Exception ex) when (ex is Microsoft.JSInterop.JSException or IOException or InvalidOperationException)
+        { if (!disposed) Show("Chưa chuyển được file cho trình duyệt. Kiểm tra phiên và lịch sử yêu cầu.", true); }
+        finally { exporting = false; }
     }
 
     private void Show(string text, bool error) { notice = text; noticeError = error; }

@@ -41,8 +41,12 @@ public static class AppNavigation
             new("Vị trí tuyển dụng", "jobs", "M3 7h18v14H3zm5-4h8v4h-2V5h-4v2H8zm-5 9h18v2H3z"),
             // B26: lịch sử lượt chấm (/runs và /runs/{id} cùng sáng mục này)
             new("Lịch sử lượt chấm", "runs", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM11 7h2v4.6l3.4 3.4-1.4 1.4L11 12.4z"),
+        ]),
+        new("Quản trị",
+        [
             // B29: quản lý tài khoản (A30 /api/users chỉ Admin)
             new("Tài khoản", "users", "M9 11a4 4 0 1 1 0-8a4 4 0 0 1 0 8zm-7 9a7 7 0 0 1 11.2-5.6A6 6 0 0 0 13 16v4H2zm16.5-7 3.5 1.3v2.6c0 2.4-1.5 4.5-3.5 5.1-2-.6-3.5-2.7-3.5-5.1v-2.6z", AdminOnly: true),
+            new("Nhật ký hoạt động", "admin/activity-logs", "M6 3h12v18H6zM9 7h6M9 11h6M9 15h4", AdminOnly: true),
         ]),
     ];
 

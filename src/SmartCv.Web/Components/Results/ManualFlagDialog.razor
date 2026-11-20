@@ -32,7 +32,7 @@
         <label class="field">@(Mode == FlagMode.Resolve ? "Cách đã xử lý (không bắt buộc)" : Mode == FlagMode.Reopen ? "Lý do mở lại (không bắt buộc)" : selected == ManualFlagReasons.Other ? "Ghi chú (bắt buộc với lý do Khác)" : "Ghi chú (không bắt buộc)")
             <textarea id="flag-note" maxlength="500" rows="3" disabled="@Busy" @bind="note" @bind:event="oninput" placeholder="Ví dụ: Cần đối chiếu số năm kinh nghiệm với CV gốc"></textarea>
         </label>
-        <label class="field">Người thao tác<input id="flag-actor" maxlength="100" disabled="@Busy" @bind="actor" @bind:event="oninput" placeholder="HR - Họ tên" /></label>
+        <p class="field">Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></p>
         @if (error is not null) { <p class="flag-error" role="alert">@error</p> }
         @if (Error is not null) { <p class="flag-error" role="alert">@Error</p> }
         <p class="flag-hint">Cờ chỉ đánh dấu để kiểm tra lại, không đổi giai đoạn tuyển dụng. Người thao tác và thời điểm được ghi vào lịch sử.</p>
@@ -56,12 +56,13 @@
     [Parameter] public string? Error { get; set; }
     [Parameter] public EventCallback<FlagDecision> OnConfirm { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
-    private string? selected, note, actor, error;
+    private string? selected, note, error;
+    [Inject] public HrActorState ActorState { get; set; } = default!;
+    private string? actor => ActorState.Actor;
     private ElementReference title;
     private bool focused;
     private string Title => Mode switch { FlagMode.Resolve => "Đánh dấu đã xử lý", FlagMode.Reopen => "Mở lại cờ kiểm tra", _ => "Đánh dấu cần kiểm tra" };
 
-    protected override void OnInitialized() => actor = Actor;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (focused || !RendererInfo.IsInteractive) return;

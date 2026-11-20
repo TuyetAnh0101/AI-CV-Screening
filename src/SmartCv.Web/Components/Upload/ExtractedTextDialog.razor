@@ -144,9 +144,9 @@
 
         <footer class="xt-foot">
             <span class="xt-copy-status" role="status">@copyStatus</span>
-            @if (!string.IsNullOrEmpty(FileUrl) && !Anonymity.Enabled && !gone)
+            @if (CvId != Guid.Empty && !Anonymity.Enabled && !gone)
             {
-                <a class="btn sc-btn-secondary xt-file-link" href="@FileUrl" target="_blank" rel="noopener">Mở file gốc</a>
+                <CvFileButton CvId="CvId" Text="Mở file gốc" CssClass="btn sc-btn-secondary xt-file-link" />
             }
             @if (CanCopy)
             {
@@ -161,8 +161,6 @@
     [Parameter, EditorRequired] public Guid CvId { get; set; }
     /// <summary>Tên file HR đã chọn trên máy (dòng trong bảng).</summary>
     [Parameter] public string? FileName { get; set; }
-    /// <summary>{ApiBaseUrl}api/cvs/{id}/file; null thì không có nút "Mở file gốc".</summary>
-    [Parameter] public string? FileUrl { get; set; }
     /// <summary>Id của nút đã mở hộp, rồi id dự phòng: đóng hộp thì focus trở lại phần tử đầu tiên còn trên trang.</summary>
     [Parameter] public IReadOnlyList<string> ReturnFocusIds { get; set; } = [];
     [Parameter] public EventCallback OnClose { get; set; }

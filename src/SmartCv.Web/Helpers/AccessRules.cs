@@ -31,7 +31,8 @@ public enum AppPermission
     /// <summary>POST /api/evaluation-sets (tạo bộ CV đánh giá). Thêm/bỏ hồ sơ, gán nhãn: HR cũng được.</summary>
     CreateEvaluationSet,
     /// <summary>B29: cả nhóm /api/users (xem, tạo, sửa, khóa / mở khóa, đặt lại mật khẩu HR).</summary>
-    ManageUsers
+    ManageUsers,
+    ViewAudit
 }
 
 /// <summary>
@@ -79,6 +80,7 @@ public static class AccessRules
         AppPermission.PreviewAssembledPrompt => IsAdmin(user),
         AppPermission.CreateEvaluationSet => IsAdmin(user),
         AppPermission.ManageUsers => IsAdmin(user),
+        AppPermission.ViewAudit => IsAdmin(user),
         _ => false
     };
 

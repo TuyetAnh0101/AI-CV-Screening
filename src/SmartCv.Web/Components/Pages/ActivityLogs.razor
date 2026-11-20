@@ -1,0 +1,126 @@
+@page "/admin/activity-logs"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Auditing
+@using SmartCv.Core.Common
+@implements IDisposable
+@inject AuditApiClient AuditApi
+
+<PageTitle>Nhật ký hoạt động · SCApp</PageTitle>
+<div class="activity-page">
+    <header class="activity-head">
+        <div><p class="eyebrow">QUẢN TRỊ · TRUY VẾT HỆ THỐNG</p><h1 id="activity-title" tabindex="-1">Nhật ký hoạt động</h1><p>Theo dõi hoạt động truy cập và các thay đổi quan trọng trong hệ thống.</p></div>
+        <button type="button" class="btn sc-btn-secondary" disabled="@loading" @onclick="LoadAsync">Làm mới</button>
+    </header>
+    <form class="audit-filters" aria-label="Bộ lọc nhật ký" @onsubmit="ApplyAsync" @onsubmit:preventDefault>
+        <div class="filter-main">
+            <label class="search">Tìm kiếm<input type="search" class="sc-input" @bind="search" maxlength="100" placeholder="Hoạt động, mã đối tượng, mã truy vết…" /></label>
+            <label>Loại hoạt động<select class="sc-select" @bind="category"><option value="">Tất cả loại</option>@foreach (var item in AuditQuery.Categories) { <option value="@item">@CategoryName(item)</option> }</select></label>
+            <label>Người thực hiện<input class="sc-input" inputmode="numeric" @bind="actor" maxlength="10" placeholder="UserId" /></label>
+            <label>Kết quả<select class="sc-select" @bind="outcome"><option value="">Tất cả kết quả</option>@foreach (var item in AuditQuery.Outcomes) { <option value="@item">@OutcomeName(item)</option> }</select></label>
+            <label>Từ ngày<input type="date" class="sc-input" @bind="from" /></label><label>Đến ngày<input type="date" class="sc-input" @bind="to" /></label>
+        </div>
+        <details class="advanced"><summary>Bộ lọc chi tiết</summary><div class="filter-detail">
+            <label>Mã hành động<input class="sc-input" @bind="action" maxlength="80" placeholder="Ví dụ: auth.login" /></label>
+            <label>Loại đối tượng<input class="sc-input" @bind="resourceType" maxlength="40" placeholder="Ví dụ: User, Cv, Job" /></label>
+            <label>Mã đối tượng<input class="sc-input" @bind="resourceId" maxlength="80" /></label>
+            <label>Mã truy vết<input class="sc-input" @bind="requestId" maxlength="64" /></label>
+        </div></details>
+        <div class="filter-actions"><span>Ngày Việt Nam · tối đa 90 ngày mỗi truy vấn</span><button type="button" class="btn sc-btn-ghost" disabled="@loading" @onclick="ClearAsync">Xóa bộ lọc</button><button type="submit" class="btn sc-btn-primary" disabled="@loading">Áp dụng</button></div>
+    </form>
+    @if (loading)
+    {
+        <div class="audit-state" role="status"><LoadingIndicator Text="Đang tải nhật ký hoạt động…" /></div>
+    }
+    else if (error is not null)
+    {
+        <section class="audit-state error" role="alert"><h2>@(status is 401 ? "Phiên đăng nhập đã kết thúc" : status is 403 ? "403 · Không có quyền truy cập" : "Chưa tải được nhật ký")</h2><p>@error</p>@if (status is 401) { <a href="/login" class="btn sc-btn-primary">Đăng nhập lại</a> } else if (status is not 403) { <button type="button" class="btn sc-btn-secondary" @onclick="LoadAsync">Thử lại</button> }</section>
+    }
+    else if (data is { } result)
+    {
+        <dl class="audit-stats"><div><dt>Sự kiện trong khoảng lọc</dt><dd>@result.TotalCount.ToString("N0")</dd></div><div><dt>Yêu cầu đăng nhập</dt><dd>@result.LoginCount.ToString("N0")</dd></div><div><dt>Thao tác tài khoản</dt><dd>@result.AccountActionCount.ToString("N0")</dd></div><div><dt title="Gồm kết quả thất bại, bị từ chối hoặc một phần">Lỗi / từ chối</dt><dd>@result.FailureCount.ToString("N0")</dd></div></dl>
+        <section class="audit-list" aria-labelledby="events-heading">
+            <div class="list-head"><h2 id="events-heading">Dòng hoạt động</h2><span>Mới nhất trước · thời gian Việt Nam</span></div>
+            @if (result.Items.Count == 0)
+            {
+                <div class="audit-state" role="status"><span class="empty-icon" aria-hidden="true">≡</span><h3>@(HasFilter ? "Không có sự kiện phù hợp" : "Chưa có hoạt động trong khoảng ngày này")</h3><p>Thử khoảng ngày khác hoặc bỏ bớt bộ lọc. Nhật ký chỉ hiển thị hoạt động backend đã ghi nhận.</p>@if (page > 1) { <button type="button" class="btn sc-btn-secondary" @onclick="() => GoAsync(1)">Về trang đầu</button> }</div>
+            }
+            else
+            {
+                <div class="audit-scroll" tabindex="0" role="region" aria-label="Bảng nhật ký hoạt động">
+                    <table><caption class="visually-hidden">Nhật ký theo thời gian, người thực hiện, hoạt động, đối tượng và kết quả.</caption><thead><tr><th scope="col">Thời gian</th><th scope="col">Người thực hiện</th><th scope="col">Hoạt động</th><th scope="col">Đối tượng</th><th scope="col">Kết quả</th><th scope="col"><span class="visually-hidden">Chi tiết</span></th></tr></thead><tbody>
+                    @foreach (var item in result.Items)
+                    {
+                        <tr @key="item.AuditEventId"><td data-label="Thời gian"><time datetime="@item.OccurredAtUtc.ToString("O")">@RunText.VnDate(item.OccurredAtUtc)<small>@RunText.VnClock(item.OccurredAtUtc)</small></time></td>
+                            <td data-label="Người thực hiện"><strong>@(item.ActorNameSnapshot ?? "Chưa xác thực")</strong><small>@(item.ActorUserId is { } uid ? $"{item.ActorRoleSnapshot} · User #{uid}" : "Không lưu danh tính nhập thử")</small></td>
+                            <td data-label="Hoạt động"><strong>@item.SafeSummary</strong><small>@item.ActionCode</small></td><td data-label="Đối tượng"><span>@item.ResourceType</span><small class="resource-id">@(item.ResourceId is null ? "Cấp yêu cầu" : "#" + item.ResourceId)</small></td>
+                            <td data-label="Kết quả"><span class="outcome @OutcomeClass(item.Outcome)">@OutcomeName(item.Outcome)</span></td><td class="detail-cell"><button type="button" class="detail-button" aria-label="@($"Xem chi tiết sự kiện {item.AuditEventId}")" @onclick="() => DetailAsync(item.AuditEventId)">Chi tiết <span aria-hidden="true">↗</span></button></td></tr>
+                    }
+                    </tbody></table>
+                </div>
+            }
+            <footer class="audit-pager"><span>@result.TotalCount.ToString("N0") sự kiện · Trang @(page)/@TotalPages</span><label>Mỗi trang<select class="sc-select" value="@pageSize" @onchange="SizeChangedAsync"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label><nav aria-label="Phân trang nhật ký"><button type="button" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">← Trước</button><button type="button" disabled="@(page >= TotalPages)" @onclick="() => GoAsync(page + 1)">Sau →</button></nav></footer>
+        </section>
+    }
+    <p class="audit-note">Quyền truy cập file được ghi khi stream đã mở; nhật ký không xác nhận trình duyệt đã tải xong toàn bộ file.</p>
+</div>
+@if (showDetail)
+{
+    <ModalShell Id="audit-detail" Title="Chi tiết hoạt động" Eyebrow="NHẬT KÝ CHỈ ĐỌC" OnClose="CloseDetail" FallbackFocusId="activity-title">
+        <ChildContent>
+            @if (detailLoading) { <p role="status">Đang tải sự kiện…</p> }
+            else if (detailError is not null) { <p role="alert">@detailError</p> }
+            else if (detail is { } item)
+            {
+                <dl class="event-detail"><div><dt>Sự kiện</dt><dd>#@item.AuditEventId</dd></div><div><dt>Người thực hiện</dt><dd>@(item.ActorNameSnapshot ?? "Chưa xác thực")</dd></div><div><dt>UserId / vai trò tại thời điểm thao tác</dt><dd>@(item.ActorUserId?.ToString() ?? "—") / @(item.ActorRoleSnapshot ?? "—")</dd></div><div><dt>Thời điểm</dt><dd>@RunText.VnDate(item.OccurredAtUtc) @RunText.VnClock(item.OccurredAtUtc) · UTC+7<small>UTC: @item.OccurredAtUtc.ToString("O")</small></dd></div><div><dt>Hành động</dt><dd>@item.ActionCode</dd></div><div><dt>Đối tượng</dt><dd>@item.ResourceType @(item.ResourceId ?? "—")</dd></div><div><dt>Kết quả</dt><dd>@OutcomeName(item.Outcome) @(item.FailureCode is null ? "" : $"({item.FailureCode})")</dd></div><div><dt>Mã truy vết</dt><dd class="request-id">@item.RequestId</dd></div><div><dt>Mô tả</dt><dd>@item.SafeSummary</dd></div></dl>
+            }
+        </ChildContent><Footer><button type="button" class="btn sc-btn-secondary" @onclick="CloseDetail">Đóng</button></Footer>
+    </ModalShell>
+}
+
+@code {
+    private DateOnly from = VietnamTime.Today().AddDays(-6), to = VietnamTime.Today();
+    private string search = "", category = "", action = "", actor = "", outcome = "", resourceType = "", resourceId = "", requestId = "";
+    private int page = 1, pageSize = 25, version;
+    private bool loading, showDetail, detailLoading, disposed;
+    private int? status;
+    private string? error, detailError;
+    private AuditPageDto? data;
+    private AuditEventDto? detail;
+    private readonly CancellationTokenSource lifetime = new();
+    private bool HasFilter => search.Length + category.Length + action.Length + actor.Length + outcome.Length + resourceType.Length + resourceId.Length + requestId.Length > 0;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling((data?.TotalCount ?? 0) / (double)pageSize));
+    private static void Probe(string m) { lock (probeLock) System.IO.File.AppendAllText(@"C:\Users\Lenovo\AppData\Local\Temp\claude\a0a74bc8088824cf\40b930e4-18ee-47f4-9548-c2550cc1d3af\scratchpad\probe.log", DateTime.Now.ToString("HH:mm:ss.fff") + " " + m + "\n"); }
+    private static readonly object probeLock = new(); private static int probeSeq; private readonly int probeId = System.Threading.Interlocked.Increment(ref probeSeq);
+    protected override Task OnInitializedAsync() { Probe($"#{probeId} init interactive={RendererInfo.IsInteractive}"); return LoadAsync(); }
+    private async Task LoadAsync()
+    {
+        Probe($"#{probeId} load search=[{search}] page={page}");
+        var current = ++version; loading = true; error = null; data = null;
+        try
+        {
+            var result = await AuditApi.ListAsync(from, to, search, category, action, actor, outcome, resourceType, resourceId, requestId, page, pageSize, lifetime.Token);
+            if (disposed || current != version) return;
+            status = result.StatusCode;
+            if (result.IsSuccess) data = result.Data;
+            else error = result.ValidationErrors.Count > 0 ? string.Join(" ", result.ValidationErrors.Values.SelectMany(v => v)) : result.ErrorMessage;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed && current == version) loading = false; }
+    }
+    private Task ApplyAsync() { page = 1; return LoadAsync(); }
+    private Task ClearAsync() { Probe($"#{probeId} CLEAR"); search = category = action = actor = outcome = resourceType = resourceId = requestId = ""; from = VietnamTime.Today().AddDays(-6); to = VietnamTime.Today(); return ApplyAsync(); }
+    private Task GoAsync(int next) { if (loading || next < 1 || next > TotalPages) return Task.CompletedTask; page = next; return LoadAsync(); }
+    private Task SizeChangedAsync(ChangeEventArgs args) { if (int.TryParse(args.Value?.ToString(), out var size) && size is 25 or 50 or 100) pageSize = size; return ApplyAsync(); }
+    private async Task DetailAsync(long id)
+    {
+        showDetail = detailLoading = true; detail = null; detailError = null;
+        try { var result = await AuditApi.GetAsync(id, lifetime.Token); if (disposed) return; if (result.IsSuccess) detail = result.Data; else detailError = result.ErrorMessage; }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { detailLoading = false; }
+    }
+    private void CloseDetail() { showDetail = false; detail = null; }
+    private static string CategoryName(string value) => value switch { "Authentication" => "Xác thực", "Accounts" => "Tài khoản", "Cvs" => "File CV", "Candidates" => "Ứng viên", "Recruitment" => "Tuyển dụng", "Ai" => "AI & Prompt", "EvaluationSets" => "Bộ dữ liệu đánh giá", "Privacy" => "Bảo vệ dữ liệu", _ => value };
+    private static string OutcomeName(string value) => value switch { "Succeeded" => "Thành công", "Denied" => "Bị từ chối", "Failed" => "Thất bại", "Partial" => "Một phần", "NoChange" => "Không thay đổi", "AccessGranted" => "Đã cấp quyền", _ => value };
+    private static string OutcomeClass(string value) => value switch { "Succeeded" or "AccessGranted" => "success", "Denied" or "Failed" => "failure", _ => "neutral" };
+    public void Dispose() { Probe($"#{probeId} dispose"); disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

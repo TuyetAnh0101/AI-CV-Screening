@@ -18,6 +18,7 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/auth").WithTags("Auth");
+        group.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
         group.MapPost("/login", LoginAsync).AllowAnonymous().RequireRateLimiting(AuthSetup.LoginRateLimit)
             // Login parses and validates content type itself. Accepts metadata would select a synthetic
             // 415 endpoint without AllowAnonymous, causing the A29 fallback to turn this client error into 401.
@@ -68,6 +69,7 @@ public static class AuthEndpoints
             var expectedStamp = user.SecurityStamp;
             var newHash = verified == PasswordVerificationResult.SuccessRehashNeeded ? hasher.HashPassword(user, request.Password!) : expectedHash;
             var loggedInAt = time.GetUtcNow().UtcDateTime;
+            await using var transaction = db.Database.IsSqlServer() ? await db.Database.BeginTransactionAsync(ct) : null;
             if (db.Database.IsSqlServer())
             {
                 // Không ghi đè mật khẩu vừa bị thay đổi/khóa bởi tiến trình khác trong lúc VerifyHash chạy.
@@ -79,14 +81,27 @@ public static class AuthEndpoints
             }
             user.PasswordHash = newHash;
             user.LastLoginAt = loggedInAt;
-            if (!db.Database.IsSqlServer()) await db.SaveChangesAsync(ct);
+            // The conditional SQL update above already holds its write lock. Do not repeat it as a tracked update.
+            if (db.Database.IsSqlServer()) db.Entry(user).State = EntityState.Unchanged;
+            var audit = http.HttpContext.RequestServices.GetRequiredService<SmartCv.Api.Auditing.AuditTrail>();
+            audit.Stage(db, "auth.login", user.UserId.ToString(), credentialVerifiedUser: user);
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null) await transaction.CommitAsync(ct);
+            audit.ConfirmCommitted();
             var (token, expires) = tokens.Create(user);
             logger.LogInformation("Tài khoản #{UserId} đăng nhập.", user.UserId);
             return TypedResults.Ok(new LoginResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user) });
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
         {
-            logger.LogWarning("Dịch vụ đăng nhập tạm thời không khả dụng.");
+            // The client still gets the generic 503; the server log separates "schema not migrated" from "SQL unreachable".
+            var sqlNumber = AuthProblems.SqlErrorNumber(error);
+            if (AuthProblems.IsSchemaMismatch(sqlNumber))
+                logger.LogError("Đăng nhập trả 503: database thiếu bảng/cột mà code yêu cầu (SQL {SqlNumber}, {Type}). " +
+                    "Kiểm tra /api/health/database hoặc __EFMigrationsHistory và áp dụng migration còn thiếu.", sqlNumber, error.GetType().Name);
+            else
+                logger.LogWarning("Dịch vụ đăng nhập tạm thời không khả dụng ({Type}, SQL {SqlNumber}).", error.GetType().Name,
+                    sqlNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none");
             return AuthProblems.Unavailable();
         }
     }

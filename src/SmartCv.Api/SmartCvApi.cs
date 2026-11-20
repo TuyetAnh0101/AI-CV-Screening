@@ -10,6 +10,7 @@ public static class SmartCvApi
         app.MapAuthEndpoints();
         app.MapControllers().RequireAuthorization();
         var api = app.MapGroup("").RequireAuthorization();
+        api.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
         api.MapEvaluationEndpoints();
         api.MapRunEndpoints();
         api.MapCvEndpoints();
@@ -27,6 +28,7 @@ public static class SmartCvApi
         api.MapEvaluationSetEndpoints();
         api.MapPromptTestEndpoints();
         api.MapUserEndpoints();
+        api.MapAuditEndpoints();
         return app;
     }
 }

@@ -84,7 +84,7 @@ public class B28AccessRulesTests
     // ---------- Trang: AuthorizeRouteView ----------
 
     private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error)];
-    private static readonly Type[] AdminPages = [typeof(JobEdit), typeof(Users)];   // B29: /users
+    private static readonly Type[] AdminPages = [typeof(JobEdit), typeof(Users), typeof(ActivityLogs)];
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
         .Where(t => typeof(IComponent).IsAssignableFrom(t) && t.GetCustomAttributes<RouteAttribute>().Any());
@@ -166,7 +166,7 @@ public class B28AccessRulesTests
     [Theory]
     [InlineData("HR")]
     [InlineData("Admin")]
-    public void Menu_shows_only_reachable_pages_and_never_an_empty_group(string role)
+    public async Task Menu_shows_only_reachable_pages_and_never_an_empty_group(string role)
     {
         var user = B28Auth.Principal(role);
         var groups = AppNavigation.For(user);
@@ -179,7 +179,7 @@ public class B28AccessRulesTests
         {
             var target = pages.FirstOrDefault(p => p.Path.Equals(item.Href, StringComparison.OrdinalIgnoreCase));
             Assert.True(target.Page is not null, $"Mục menu {item.Text} trỏ tới đường dẫn chết /{item.Href}");
-            Assert.True(CanOpen(target.Page, user).GetAwaiter().GetResult(), $"{role} thấy {item.Text} nhưng không mở được");
+            Assert.True(await CanOpen(target.Page, user), $"{role} thấy {item.Text} nhưng không mở được");
         }
     }
 

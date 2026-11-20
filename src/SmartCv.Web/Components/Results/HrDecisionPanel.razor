@@ -31,8 +31,7 @@
         <label for="hr-note">Ghi chú <small>(tùy chọn)</small></label>
         <textarea id="hr-note" class="sc-input" rows="3" maxlength="500" @bind="note" @bind:event="oninput" aria-describedby="hr-note-count"></textarea>
         <small id="hr-note-count">@note.Length/500 ký tự</small>
-        <label for="hr-actor">Tên HR <span aria-hidden="true">*</span></label>
-        <input id="hr-actor" class="sc-input" autocomplete="name" maxlength="100" @bind="actor" @bind:event="oninput" aria-required="true" />
+        <p>Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></p>
         @if (ActorState.StorageWarning is not null) { <p class="hint">@ActorState.StorageWarning</p> }
         @if (validation is not null) { <p class="validation" role="status">@validation</p> }
         <div class="actions"><button type="button" class="btn sc-btn-primary" disabled="@(!CanSave)" @onclick="SaveAsync">@(busy ? "Đang lưu..." : "Lưu quyết định")</button><button type="button" class="btn sc-btn-secondary" @onclick="Reset">Hủy thay đổi</button></div>
@@ -56,7 +55,8 @@
     private readonly CancellationTokenSource lifetime = new();
     private bool busy, synced, failed, disposed;
     private int loaded;
-    private string stage = "New", reason = "", note = "", actor = "";
+    private string stage = "New", reason = "", note = "";
+    private string actor => ActorState.Actor ?? "";
     private string? message, eventsError;
     private string? validation => StageChangeRules.Validate(stage, stage == "Rejected" ? reason : null, note, actor).Error;
     private bool CanSave => !busy && synced && current.StageVersion != Guid.Empty && validation is null
@@ -74,7 +74,7 @@
     {
         if (!firstRender || !RendererInfo.IsInteractive) return;
         await ActorState.EnsureLoadedAsync();
-        if (!disposed && string.IsNullOrWhiteSpace(actor)) { actor = ActorState.Actor ?? ""; StateHasChanged(); }
+        if (!disposed) StateHasChanged();
     }
     private void ChangeStage(ChangeEventArgs e) { stage = e.Value?.ToString() ?? ""; if (stage != "Rejected") reason = ""; }
     private void Reset() { stage = current.Stage; reason = current.RejectReason ?? ""; note = ""; message = null; failed = false; }

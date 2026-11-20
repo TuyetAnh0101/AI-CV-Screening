@@ -5,10 +5,11 @@
 *@
 @implements IDisposable
 @inject CandidateApiClient Api
+@inject HrActorState ActorState
 
 <ModalShell Id="erase" Title="@(step == 1 ? "Xóa dữ liệu theo yêu cầu ứng viên" : "Xác nhận xóa vĩnh viễn")" Eyebrow="Quyền của ứng viên với dữ liệu" Danger="true"
             Description="@(step == 1 ? "Bước 1/2 — Kiểm tra hậu quả trước khi xóa." : "Bước 2/2 — Thao tác không hoàn tác được.")"
-            Busy="busy" FocusId="@(step == 1 ? "erase-handled-by" : "erase-keyword")" ReturnFocusId="@ReturnFocusId" FallbackFocusId="candidate-name" OnClose="OnClose">
+            Busy="busy" FocusId="@(step == 1 ? "erase-note" : "erase-keyword")" ReturnFocusId="@ReturnFocusId" FallbackFocusId="candidate-name" OnClose="OnClose">
     <ChildContent>
         @if (step == 1)
         {
@@ -20,9 +21,7 @@
                 <li><b>Giữ lại</b> điểm, mức phù hợp, kỹ năng đạt/thiếu, giai đoạn, lịch sử quyết định và nhãn HR — không còn gắn với người nào — để thống kê và đánh giá prompt vẫn đúng.</li>
                 <li><b>Ghi nhật ký yêu cầu</b> (không chứa tên / email) làm bằng chứng đã xử lý.</li>
             </ul>
-            <label class="c-label" for="erase-handled-by">Người xử lý <span class="req" aria-hidden="true">*</span></label>
-            <input id="erase-handled-by" class="c-input" value="@handledBy" @oninput="e => handledBy = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" placeholder="HR - Họ tên" aria-describedby="erase-handled-hint" />
-            <span id="erase-handled-hint" class="c-hint">Bắt buộc, tối đa 100 ký tự.</span>
+            <p class="c-label">Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></p>
             <label class="c-label" for="erase-note">Ghi chú (kênh nhận yêu cầu, ngày…)</label>
             <textarea id="erase-note" class="c-input" rows="2" maxlength="500" @bind="note" @bind:event="oninput" placeholder="Ví dụ: Email ứng viên gửi ngày 08/12/2026" aria-describedby="erase-note-hint"></textarea>
             <span id="erase-note-hint" class="c-hint">Không ghi thông tin cá nhân vào đây: nhật ký được giữ lại sau khi xóa.</span>
@@ -60,11 +59,11 @@
     [Parameter] public EventCallback<string> OnUncertain { get; set; }
     private readonly CancellationTokenSource lifetime = new();
     private int step = 1;
-    private string handledBy = "", typed = "";
+    private string typed = "";
+    private string handledBy => ActorState.Actor ?? "";
     private string? note, error;
     private bool busy, uncertain;
 
-    protected override void OnInitialized() => handledBy = Actor ?? "";
 
     private async Task EraseAsync()
     {

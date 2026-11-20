@@ -2,12 +2,13 @@
 @using SmartCv.Core.Applications
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject HrActorState ActorState
 
 <dialog class="stage-dialog" @ref="dialog" aria-labelledby="stage-dialog-title" aria-describedby="stage-dialog-description" aria-busy="@Busy.ToString().ToLowerInvariant()">
     <div class="dialog-heading">
         <span class="decision-kicker">QUYẾT ĐỊNH CỦA HR</span>
         <h2 id="stage-dialog-title">@Title</h2>
-        <p id="stage-dialog-description">@(IsReject ? "Chọn lý do để ghi nhận quyết định. Bạn có thể mở lại hồ sơ sau này." : "Tên của bạn được ghi cùng quyết định và nhớ trong tab này.")</p>
+        <p id="stage-dialog-description">@(IsReject ? "Chọn lý do để ghi nhận quyết định. Bạn có thể mở lại hồ sơ sau này." : "Quyết định được ghi bằng tài khoản đang đăng nhập.")</p>
     </div>
     <fieldset disabled="@(Busy || submitting)">
         @if (IsReject)
@@ -31,10 +32,7 @@
             <small>@(note?.Length ?? 0)/500 ký tự</small>
         </label>
         }
-        <label class="dialog-field">
-            <span>Người thao tác <span aria-hidden="true">*</span></span>
-            <input class="sc-input" aria-label="Tên HR thực hiện quyết định" autocomplete="name" maxlength="100" required @bind="actor" @bind:event="oninput" placeholder="Ví dụ: HR - Trần Thu Hà" />
-        </label>
+        <p class="dialog-field">Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></p>
     </fieldset>
     @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
     <div class="dialog-actions">
@@ -60,7 +58,7 @@
     private string? reason, actor, note, error;
     private bool submitting, disposed;
     private bool IsReject => ToStage == ApplicationStages.Rejected;
-    protected override void OnInitialized() { actor = Actor; reason = InitialReason; }
+    protected override void OnInitialized() { actor = ActorState.Actor; reason = InitialReason; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -79,6 +77,7 @@
     private async Task ConfirmAsync()
     {
         if (Busy || submitting) return;
+        actor = ActorState.Actor;
         if (IsReject && reason is null) { error = "Hãy chọn lý do loại."; return; }
         var (change, validation) = StageChangeRules.Validate(ToStage, IsReject ? reason : null, note, actor);
         if (change is null) { error = validation; return; }

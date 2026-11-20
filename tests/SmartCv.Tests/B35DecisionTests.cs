@@ -57,7 +57,7 @@ public class B35DecisionTests
         public Task Start(EvaluationDetailDto d) => Dispatcher.InvokeAsync(async () => { panel = (HrDecisionPanel)InstantiateComponent(typeof(HrDecisionPanel)); root = AssignRootComponentId(panel); await RenderRootComponentAsync(root, ParameterView.FromDictionary(new Dictionary<string,object?> { ["Detail"] = d })); });
         public Task Edit(string stage, string reason = "", string note = "") => Dispatcher.InvokeAsync(() =>
         {
-            foreach (var (key,value) in new[] { ("stage",stage),("reason",reason),("note",note),("actor","HR – Tuyết Ánh") })
+            foreach (var (key,value) in new[] { ("stage",stage),("reason",reason),("note",note) })
                 typeof(HrDecisionPanel).GetField(key,BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(panel,value);
         });
         public bool CanSave => Dispatcher.InvokeAsync(() => (bool)typeof(HrDecisionPanel).GetProperty("CanSave",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(panel)!).Result;
@@ -70,7 +70,7 @@ public class B35DecisionTests
     private static ServiceProvider Services(Api api)
     {
         var http = new HttpClient(api) { BaseAddress = new Uri("https://api.test/") };
-        return new ServiceCollection().AddLogging().AddSingleton(new HrActorState())
+        return new ServiceCollection().AddLogging().AddSingleton(B43UiTestSupport.Actor("HR – Tuyết Ánh"))
             .AddSingleton(new ApplicationApiClient(http,NullLogger<ApplicationApiClient>.Instance))
             .AddSingleton(new EvaluationApiClient(http,NullLogger<EvaluationApiClient>.Instance)).BuildServiceProvider();
     }

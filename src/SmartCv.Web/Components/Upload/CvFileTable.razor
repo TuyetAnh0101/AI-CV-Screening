@@ -125,10 +125,9 @@
                                             @* B36: chế độ Ẩn danh không mở file gốc (giống trang Chi tiết) *@
                                             <span class="menu-item is-disabled" role="menuitem" aria-disabled="true">Xem file gốc <small>Tắt Ẩn danh để mở</small></span>
                                         }
-                                        else if (!string.IsNullOrEmpty(ApiBaseUrl) && item.TextCheck is not (TextCheck.Anonymized or TextCheck.NotFound))
+                                        else if (item.TextCheck is not (TextCheck.Anonymized or TextCheck.NotFound))
                                         {
-                                            <a class="menu-item" role="menuitem" href="@($"{ApiBaseUrl}api/cvs/{item.CvId}/file")"
-                                               target="_blank" rel="noopener" @onclick="() => openMenu = null">Xem file gốc</a>
+                                            <CvFileButton CvId="item.CvId.Value" Text="Xem file gốc" CssClass="menu-item" OnOpened="() => openMenu = null" />
                                         }
                                     }
                                     <button type="button" class="menu-item danger" role="menuitem"

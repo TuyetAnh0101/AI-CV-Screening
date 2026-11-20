@@ -30,6 +30,9 @@ public static class AuthSetup
         services.AddSingleton<LoginDummyHash>();
         services.AddSingleton<AccountWriteCoordinator>();
         services.AddScoped<UserAccountService>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<SmartCv.Api.Auditing.AuditTrail>();
+        services.AddScoped<SmartCv.Api.Auditing.AuditEndpointFilter>();
         services.AddScoped<ISessionStateStore, DbSessionStateStore>();
         services.AddScoped<UserSessionValidator>();
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -83,6 +86,7 @@ public static class AuthSetup
             if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
             await next(context);
         });
+        app.UseMiddleware<SmartCv.Api.Auditing.AuditRejectionMiddleware>();
         app.UseAuthentication(); app.UseAuthorization(); app.UseRateLimiter();
         return app;
     }

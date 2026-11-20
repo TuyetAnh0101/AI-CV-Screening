@@ -308,7 +308,6 @@
 @if (textItem is { CvId: { } textCvId })
 {
     <ExtractedTextDialog @key="textItem.LocalId" CvId="textCvId" FileName="@textItem.FileName"
-                         FileUrl="@(apiBaseUrl is null ? null : $"{apiBaseUrl}api/cvs/{textCvId}/file")"
                          ReturnFocusIds="textReturnFocus" OnClose="CloseText" OnLoaded="TextLoaded" />
 }
 
