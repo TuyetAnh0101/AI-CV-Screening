@@ -2,7 +2,7 @@
     B28: nội dung khi AuthorizeRouteView không cho mở trang. Bốn tình huống KHÁC NHAU, không gộp thành một lỗi:
       1. Chưa đăng nhập / phiên đã kết thúc → RedirectToLogin (/login?returnUrl=..., ?expired=1 nếu phiên hết hạn).
       2. Có phiên nhưng API chưa xác nhận được (mất kết nối lúc khôi phục) → "Thử lại"; không trao quyền, không về /login.
-      3. Tài khoản phải đổi mật khẩu (A30) → hướng dẫn, chỉ có Đăng xuất. B29 thay khối này bằng trang đổi mật khẩu.
+      3. Tài khoản phải đổi mật khẩu (A30) → B29: chuyển tới /change-password (giữ returnUrl).
       4. Đã đăng nhập nhưng thiếu quyền (HR mở trang của Admin) hoặc vai trò không hợp lệ → trang 403 (AccessDenied).
     Không hiện tên chính sách, claim hay đường dẫn API.
 *@
@@ -37,17 +37,9 @@
         break;
 
     case AccessLevel.PasswordChangeRequired:
-        <section class="gate-card" aria-labelledby="gate-title">
-            <span class="gate-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm-1 9v4h2v-4z" /></svg>
-            </span>
-            <h1 id="gate-title" tabindex="-1">Cần đổi mật khẩu trước khi tiếp tục</h1>
-            <p>Tài khoản <strong>@User.FindFirst(SmartCv.Core.Auth.SmartCvClaims.Email)?.Value</strong> đang dùng mật khẩu tạm do quản trị viên cấp, nên chưa thể xem hoặc thao tác dữ liệu tuyển dụng.</p>
-            <p class="gate-muted">Giao diện web chưa có chức năng đổi mật khẩu. Vui lòng liên hệ quản trị viên (Admin) để được hỗ trợ, sau đó đăng nhập lại.</p>
-            <div class="gate-actions">
-                <button type="button" class="btn sc-btn-primary gate-wide" @onclick="Navigator.SignOutAsync">Đăng xuất</button>
-            </div>
-        </section>
+        @* B29: mọi trang nghiệp vụ → /change-password?returnUrl=<trang đó>. Trang đổi mật khẩu dùng chính sách SignedIn nên
+           không rơi vào nhánh này → không có vòng lặp. Trang nghiệp vụ không được tạo nên không có API nghiệp vụ nào được gọi. *@
+        <RedirectToChangePassword />
         break;
 
     default:

@@ -163,13 +163,13 @@ public class B28RoleUiTests
     }
 
     [Fact]
-    public async Task Password_change_required_shows_guidance_not_403_and_no_menu()
+    public async Task Password_change_required_goes_to_change_password_not_403_and_no_menu()
     {
+        // B29: thay hướng dẫn của B28 bằng chuyển tới /change-password (giữ trang muốn mở).
         var (html, nav, api) = await Open("mcp", "jobs");
-        Assert.Contains("Cần đổi mật khẩu trước khi tiếp tục", html);
         Assert.DoesNotContain("Bạn không có quyền truy cập", html);
         Assert.DoesNotContain("main-navigation", html);
-        Assert.Empty(nav.Navigations);
+        Assert.Equal(("change-password?returnUrl=%2Fjobs", false, true), Assert.Single(nav.Navigations));
         Assert.Empty(api.Calls);
     }
 

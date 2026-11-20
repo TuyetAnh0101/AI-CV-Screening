@@ -37,6 +37,26 @@ public static class AuthText
         return LoginPath + (q.Count == 0 ? "" : "?" + string.Join("&", q));
     }
 
+    public const string ChangePasswordPath = "change-password";
+
+    /// <summary>
+    /// B29: "change-password?returnUrl=%2Fcvs" — trang đổi mật khẩu nhớ trang đang mở (chỉ đường dẫn trong ứng dụng).
+    /// Không quay về chính trang đổi mật khẩu hay /login.
+    /// </summary>
+    public static string ChangePasswordUrl(string? currentRelativeUrl)
+    {
+        var ret = AfterPasswordChange(currentRelativeUrl);
+        return ChangePasswordPath + (ret == "/" ? "" : "?returnUrl=" + Uri.EscapeDataString(ret));
+    }
+
+    /// <summary>B29: trang quay về sau khi đổi mật khẩu xong — an toàn, không phải /change-password.</summary>
+    public static string AfterPasswordChange(string? returnUrl)
+    {
+        var ret = SafeReturnUrl(returnUrl);
+        var path = ret.Split('?', '#')[0].TrimEnd('/');
+        return path.Equals("/" + ChangePasswordPath, StringComparison.OrdinalIgnoreCase) ? "/" : ret;
+    }
+
     /// <summary>Tên vai trò hiển thị.</summary>
     public static string RoleName(string? role) => role switch
     {

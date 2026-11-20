@@ -84,7 +84,7 @@ public class B28AccessRulesTests
     // ---------- Trang: AuthorizeRouteView ----------
 
     private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error)];
-    private static readonly Type[] AdminPages = [typeof(JobEdit)];
+    private static readonly Type[] AdminPages = [typeof(JobEdit), typeof(Users)];   // B29: /users
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
         .Where(t => typeof(IComponent).IsAssignableFrom(t) && t.GetCustomAttributes<RouteAttribute>().Any());
@@ -120,7 +120,9 @@ public class B28AccessRulesTests
         var business = state is "HR" or "Admin";
         foreach (var page in RoutablePages())
         {
-            var expected = PublicPages.Contains(page) || (AdminPages.Contains(page) ? state == "Admin" : business);
+            var expected = PublicPages.Contains(page)
+                || (page == typeof(web::SmartCv.Web.Components.Account.ChangePassword) ? state is "HR" or "Admin" or "mcp"   // B29: SignedIn
+                : AdminPages.Contains(page) ? state == "Admin" : business);
             Assert.True(expected == await CanOpen(page, user), $"{page.Name} / {state}: mong đợi {(expected ? "MỞ" : "CHẶN")}");
         }
     }

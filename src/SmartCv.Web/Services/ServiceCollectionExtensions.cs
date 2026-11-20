@@ -41,7 +41,8 @@ public static class ServiceCollectionExtensions
             // Log của HttpClientFactory (mức Trace) không bao giờ in giá trị header, kể cả Authorization.
             clientBuilder.RedactLoggedHeaders(_ => true);
             // HttpClient's default logger includes the entire URI, including private search queries.
-            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient))
+            // B29: tìm tài khoản theo email cũng là dữ liệu riêng tư.
+            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient))
                 clientBuilder.RemoveAllLoggers();
             if (authenticated)
             {
@@ -64,6 +65,7 @@ public static class ServiceCollectionExtensions
 
         // Mọi client nghiệp vụ dưới đây đều gửi kèm Bearer của tab đang dùng (A29 bắt buộc).
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
+        Add<UserApiClient>(TimeSpan.FromSeconds(20)); // B29: quản lý tài khoản (A30, chỉ Admin)
         Add<DashboardApiClient>(TimeSpan.FromSeconds(30)); // B19: A19 summary, read-only.
         Add<ApplicationApiClient>(TimeSpan.FromSeconds(30));
         Add<RunApiClient>(TimeSpan.FromSeconds(30));   // B6: tạo lượt phân tích, hỏi tiến độ

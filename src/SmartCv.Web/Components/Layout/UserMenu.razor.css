@@ -66,3 +66,28 @@
     .logout { padding: 0 9px; }
     .logout span { display: none; }   /* còn biểu tượng; tên nút lấy từ aria-label */
 }
+
+/* B29: nút Đổi mật khẩu (chỉ biểu tượng chìa khóa, cùng chiều cao với Đăng xuất). */
+.pw-change {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--sc-line-300);
+    border-radius: var(--sc-radius-md);
+    background: var(--sc-surface-0);
+    color: var(--sc-ink-700);
+    cursor: pointer;
+}
+.pw-change svg { width: 17px; height: 17px; fill: currentColor; }
+.pw-change:hover:not(:disabled) { background: var(--sc-brand-50); border-color: #a9c7c3; color: var(--sc-brand-800); }
+.pw-change:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
+@media (max-width: 767.98px) { .pw-change { display: none; } }   /* màn hình hẹp: có trong khối tài khoản của menu */
+/* B29: thêm nút Đổi mật khẩu → ở 768–991px (có menu trái, thanh trên hẹp) Đăng xuất chỉ còn biểu tượng (tên lấy từ aria-label). */
+@media (min-width: 768px) and (max-width: 991.98px) {
+    .logout { padding: 0 9px; }
+    .logout span { display: none; }
+    .name { max-width: 140px; }
+}

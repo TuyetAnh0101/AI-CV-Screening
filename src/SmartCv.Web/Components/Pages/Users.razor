@@ -1,0 +1,266 @@
+@page "/users"
+@*
+    B29: quản lý tài khoản (A30 /api/users — chỉ Admin). HR không thấy mục menu (AppNavigation AdminOnly) và gõ thẳng địa chỉ
+    thì AuthorizeRouteView trả trang 403 trước khi trang này được tạo (không có request nào).
+    Lọc / tìm / phân trang ở máy chủ; thao tác ghi gửi If-Match; mật khẩu tạm hiện một lần. Logic ở Helpers/UsersWorkspace.cs.
+*@
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Auth
+@implements IDisposable
+@inject UserApiClient UserApi
+
+<PageTitle>Quản lý tài khoản · SCApp</PageTitle>
+
+<div class="users-page">
+    <header class="users-head">
+        <div>
+            <p class="users-eyebrow">Quản trị hệ thống</p>
+            <h1 id="users-title" tabindex="-1">Quản lý tài khoản</h1>
+            <p>Cấp tài khoản cho nhân sự và quản trị viên, khóa khi không còn sử dụng, đặt lại mật khẩu tạm cho HR.</p>
+        </div>
+        <button id="user-create-open" type="button" class="btn sc-btn-primary users-create" @onclick="OpenCreate" disabled="@Model.Busy">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" /></svg>Tạo tài khoản
+        </button>
+    </header>
+
+    <section class="users-panel" aria-labelledby="users-title" aria-busy="@(Model.Loading ? "true" : "false")">
+        <div class="users-toolbar" role="search" aria-label="Lọc tài khoản">
+            <label class="users-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
+                <span class="visually-hidden">Tìm theo họ tên hoặc email</span>
+                <input id="users-search" type="search" maxlength="254" placeholder="Tìm theo họ tên hoặc email…" autocomplete="off" spellcheck="false"
+                       value="@Model.SearchText" @oninput="e => Model.SearchAsync(e.Value?.ToString() ?? string.Empty)" />
+            </label>
+            <label class="users-select">
+                <span class="visually-hidden">Lọc theo vai trò</span>
+                <select id="users-role" value="@(Model.Role ?? "")" @onchange="e => Model.FilterRoleAsync(e.Value?.ToString())">
+                    <option value="">Mọi vai trò</option>
+                    <option value="@UserRoles.Admin">Quản trị viên</option>
+                    <option value="@UserRoles.Hr">Nhân sự (HR)</option>
+                </select>
+            </label>
+            <div class="users-status" role="group" aria-label="Lọc theo trạng thái">
+                @foreach (var (value, label) in StatusFilters)
+                {
+                    var on = Model.Active == value;
+                    <button type="button" class="@(on ? "on" : null)" aria-pressed="@(on ? "true" : "false")" @onclick="() => Model.FilterActiveAsync(value)">@label</button>
+                }
+            </div>
+            <button type="button" class="users-refresh" @onclick="Model.LoadAsync" disabled="@Model.Loading" aria-label="Tải lại danh sách" title="Tải lại danh sách">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+            </button>
+        </div>
+
+        @if (Model.Message is { } message)
+        {
+            <div class="users-message @(Model.MessageIsError ? "is-error" : "is-success")" role="@(Model.MessageIsError ? "alert" : "status")">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="@(Model.MessageIsError ? AlertIcon : CheckIcon)" /></svg>
+                <span>@message</span>
+                <button type="button" class="users-message-close" @onclick="Model.DismissMessage" aria-label="Ẩn thông báo">×</button>
+            </div>
+        }
+
+        @if (!Model.Loaded && Model.Loading)
+        {
+            <div class="users-skeleton" role="status"><span class="visually-hidden">Đang tải danh sách tài khoản…</span>
+                @for (var i = 0; i < 5; i++) { <div aria-hidden="true"><span></span><span></span><span></span></div> }
+            </div>
+        }
+        else if (Model.LoadError is { } error && !Model.Loaded)
+        {
+            <div class="users-state is-error" role="alert">
+                <h2>Chưa tải được danh sách tài khoản</h2>
+                <p>@error</p>
+                <button type="button" class="btn sc-btn-primary" @onclick="Model.LoadAsync">Thử lại</button>
+            </div>
+        }
+        else if (Model.Items.Count == 0)
+        {
+            <div class="users-state" role="status">
+                @if (Model.HasFilters)
+                {
+                    <h2>Không có tài khoản phù hợp</h2>
+                    <p>Thử từ khóa khác hoặc xem tất cả vai trò và trạng thái.</p>
+                    <button type="button" class="btn sc-btn-secondary" @onclick="Model.ClearFiltersAsync">Xóa bộ lọc</button>
+                }
+                else
+                {
+                    <h2>Chưa có tài khoản nào</h2>
+                    <p>Tạo tài khoản đầu tiên cho nhân sự tuyển dụng.</p>
+                }
+            </div>
+        }
+        else
+        {
+            @if (Model.LoadError is { } refreshError)
+            {
+                <p class="users-inline-error" role="alert">@refreshError <button type="button" class="link-like" @onclick="Model.LoadAsync">Thử lại</button></p>
+            }
+            <div class="cv-table-wrap users-table-wrap @(Model.Loading ? "is-refreshing" : null)">
+                <table class="users-table">
+                    <caption class="visually-hidden">Danh sách tài khoản: họ tên, vai trò, trạng thái, mật khẩu, đăng nhập gần nhất</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Tài khoản</th>
+                            <th scope="col">Vai trò</th>
+                            <th scope="col">Trạng thái</th>
+                            <th scope="col">Mật khẩu</th>
+                            <th scope="col">Đăng nhập gần nhất</th>
+                            <th scope="col"><span class="visually-hidden">Thao tác</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var u in Model.Items)
+                        {
+                            var self = Model.IsSelf(u, me);
+                            var lockReason = UserText.LockBlockedReason(u, me, Model.ActiveAdmins);
+                            <tr @key="u.UserId" class="@(u.IsActive ? null : "is-locked")">
+                                <td class="cell-user">
+                                    <div class="user-cell">
+                                        <span class="avatar @(u.IsActive ? null : "is-muted")" aria-hidden="true">@AuthText.Initials(u.FullName)</span>
+                                        <span class="who">
+                                            <span class="name"><span class="name-text" title="@u.FullName">@u.FullName</span>@if (self) { <span class="you">Bạn</span> }</span>
+                                            <span class="email" title="@u.Email">@u.Email</span>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td data-label="Vai trò"><span class="role-badge @UserText.RoleCss(u.Role)">@UserText.Role(u.Role)</span></td>
+                                <td data-label="Trạng thái"><span class="status @UserText.StatusCss(u)"><i aria-hidden="true"></i>@UserText.Status(u)</span></td>
+                                <td data-label="Mật khẩu">
+                                    @if (u.MustChangePassword) { <span class="pw-badge">Chờ đổi mật khẩu</span> }
+                                    else { <span class="muted">Đã đặt</span> }
+                                </td>
+                                <td data-label="Đăng nhập gần nhất" class="cell-login">@UserText.LastLogin(u.LastLoginAt)</td>
+                                <td class="cell-actions">
+                                    <div class="row-actions">
+                                        <button id="user-edit-@u.UserId" type="button" class="btn-ghost" @onclick="() => EditRow(u)"
+                                                disabled="@Model.Busy" aria-label="@($"Sửa {u.FullName}")">Sửa</button>
+                                        <div class="row-menu">
+                                            <button id="user-menu-@u.UserId" type="button" class="menu-btn" aria-haspopup="true" aria-expanded="@(openMenu == u.UserId ? "true" : "false")"
+                                                    aria-label="@($"Thao tác khác cho {u.FullName}")" disabled="@Model.Busy" @onclick="() => ToggleMenu(u.UserId)">⋯</button>
+                                            @if (openMenu == u.UserId)
+                                            {
+                                                <div class="menu-pop" role="menu" aria-label="@($"Thao tác cho {u.FullName}")">
+                                                    @if (u.IsActive)
+                                                    {
+                                                        <button type="button" role="menuitem" class="is-danger" disabled="@(lockReason is not null)" title="@lockReason"
+                                                                @onclick="() => LockRow(u)">
+                                                            <span>Khóa tài khoản</span>
+                                                            @if (lockReason is not null) { <small>@lockReason</small> }
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="button" role="menuitem" @onclick="() => UnlockRow(u)"><span>Mở khóa</span></button>
+                                                    }
+                                                    @if (UserText.ResetBlockedReason(u) is null)
+                                                    {
+                                                        <button type="button" role="menuitem" @onclick="() => ResetRow(u)">
+                                                            <span>Đặt lại mật khẩu</span><small>Tạo mật khẩu tạm mới</small>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (openMenu is not null)
+            {
+                <div class="menu-scrim" @onclick="CloseMenu" aria-hidden="true"></div>
+            }
+            <footer class="users-foot">
+                <span class="users-count">
+                    @if (Model.Total is { } total)
+                    {
+                        <text>Hiển thị <strong>@First–@(First + Model.Items.Count - 1)</strong> / @total.ToString("N0") tài khoản</text>
+                    }
+                    else
+                    {
+                        <text>Trang @Model.Page</text>
+                    }
+                </span>
+                <div class="users-pager">
+                    <label class="users-size">
+                        <span>Mỗi trang</span>
+                        <select value="@Model.PageSize" @onchange="e => Model.PageSizeAsync(int.TryParse(e.Value?.ToString(), out var n) ? n : 20)">
+                            @foreach (var size in UsersWorkspace.PageSizes) { <option value="@size">@size</option> }
+                        </select>
+                    </label>
+                    <button type="button" class="pager-btn" @onclick="() => Model.GoToPageAsync(Model.Page - 1)" disabled="@(Model.Loading || Model.Page <= 1)" aria-label="Trang trước">‹</button>
+                    <span class="pager-text" aria-live="polite">Trang @Model.Page@(Model.PageCount is { } pc ? $" / {pc}" : "")</span>
+                    <button type="button" class="pager-btn" @onclick="() => Model.GoToPageAsync(Model.Page + 1)" disabled="@(Model.Loading || !HasNext)" aria-label="Trang sau">›</button>
+                </div>
+            </footer>
+        }
+    </section>
+</div>
+
+@switch (Model.Dialog)
+{
+    case UserDialogKind.Create:
+    case UserDialogKind.Edit:
+        <UserFormDialog Model="Model" Me="me" ReturnFocusId="@returnFocus" OnClose="CloseDialog" OnChanged="Refresh" />
+        break;
+    case UserDialogKind.Lock:
+    case UserDialogKind.Unlock:
+    case UserDialogKind.Reset:
+        <UserActionDialog Model="Model" ReturnFocusId="@returnFocus" OnClose="CloseDialog" OnChanged="Refresh" />
+        break;
+    case UserDialogKind.Credential:
+        <TemporaryPasswordDialog Model="Model" ReturnFocusId="@returnFocus" OnClose="CloseDialog" />
+        break;
+}
+
+@code {
+    private const string AlertIcon = "M12 2 1 21h22zm-1 7v6h2V9zm0 8v2h2v-2z";
+    private const string CheckIcon = "M12 2a10 10 0 1 1 0 20a10 10 0 0 1 0-20zm-1.2 13.6 6.3-6.3-1.4-1.4-4.9 4.9-2.3-2.3-1.4 1.4z";
+    private static readonly (bool? Value, string Label)[] StatusFilters = [(null, "Tất cả"), (true, "Đang hoạt động"), (false, "Đã khóa")];
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private UsersWorkspace Model = default!;
+    private int? me;
+    private int? openMenu;
+    private string? returnFocus;
+
+    private int First => (Model.Page - 1) * Model.PageSize + 1;
+    private bool HasNext => Model.PageCount is { } count ? Model.Page < count : Model.Items.Count == Model.PageSize;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model = new UsersWorkspace(UserApi) { Changed = () => InvokeAsync(StateHasChanged) };
+        me = AccessRules.UserId(AccessRules.Current(AuthState));
+        await Model.LoadAsync();
+    }
+
+    protected override void OnParametersSet() => me = AccessRules.UserId(AccessRules.Current(AuthState));
+
+    private void ToggleMenu(int id) => openMenu = openMenu == id ? null : id;
+    private void CloseMenu() => openMenu = null;
+
+    private void EditRow(UserDto u) => Open(u, () => Model.OpenEdit(u), "user-edit-" + u.UserId);
+    private void LockRow(UserDto u) => Open(u, () => Model.OpenLock(u, me), "user-menu-" + u.UserId);
+    private void UnlockRow(UserDto u) => Open(u, () => Model.OpenUnlock(u), "user-menu-" + u.UserId);
+    private void ResetRow(UserDto u) => Open(u, () => Model.OpenReset(u), "user-menu-" + u.UserId);
+
+    private void Open(UserDto u, Action open, string focusBack)
+    {
+        openMenu = null;
+        returnFocus = focusBack;
+        open();
+    }
+
+    private void OpenCreate() { openMenu = null; returnFocus = "user-create-open"; Model.OpenCreate(); }
+
+    private void CloseDialog() => Model.CloseDialog();
+
+    /// <summary>Hộp thoại con gọi sau mỗi thao tác: EventCallback của trang này làm trang vẽ lại (đổi hộp thoại, bảng, thông báo).</summary>
+    private void Refresh() { }
+
+    public void Dispose() => Model?.Dispose();
+}
