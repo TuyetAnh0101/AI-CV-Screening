@@ -311,11 +311,18 @@ public static partial class RunEndpoints
     private static async Task<Results<Ok<RankingResponse>, NotFound<ProblemDetailsLite>>> RankingAsync(
         int id, SmartCvDbContext db, IOptions<ReviewFlagOptions> flagOptions, CancellationToken ct, int? jobId = null)
     {
+        var (ranking, error) = await BuildRankingAsync(id, db, flagOptions.Value, ct, jobId);
+        return ranking is null ? TypedResults.NotFound(error!) : TypedResults.Ok(ranking);
+    }
+
+    internal static async Task<(RankingResponse? Ranking, ProblemDetailsLite? Error)> BuildRankingAsync(
+        int id, SmartCvDbContext db, ReviewFlagOptions flagOptions, CancellationToken ct, int? jobId = null)
+    {
         var run = await db.EvaluationRuns.AsNoTracking()
             .Where(r => r.RunId == id)
             .Select(r => new { r.RunId, r.Status, r.PassThreshold, PromptVersionName = r.PromptVersion.VersionName })
             .FirstOrDefaultAsync(ct);
-        if (run is null) return TypedResults.NotFound(new ProblemDetailsLite("Không tìm thấy lượt chấm", 404));
+        if (run is null) return (null, new ProblemDetailsLite("Không tìm thấy lượt chấm", 404));
 
         var jobs = await db.Evaluations.AsNoTracking()
             .Where(e => e.RunId == id)
@@ -323,11 +330,11 @@ public static partial class RunEndpoints
             .Select(g => new JobCountDto { JobId = g.Key.JobId, Title = g.Key.Title, Count = g.Count() })
             .OrderBy(j => j.JobId)
             .ToListAsync(ct);
-        if (jobs.Count == 0) return TypedResults.NotFound(new ProblemDetailsLite("Lượt chấm không có hồ sơ", 404));
+        if (jobs.Count == 0) return (null, new ProblemDetailsLite("Lượt chấm không có hồ sơ", 404));
 
         // Không truyền jobId: lấy job đầu tiên trong lượt chấm
         var job = jobId is null ? jobs[0] : jobs.FirstOrDefault(j => j.JobId == jobId);
-        if (job is null) return TypedResults.NotFound(new ProblemDetailsLite("Job này không có trong lượt chấm", 404));
+        if (job is null) return (null, new ProblemDetailsLite("Vị trí tuyển dụng không có trong lượt chấm", 404));
 
         var rows = await db.Evaluations.AsNoTracking()
             .Where(e => e.RunId == id && e.Application.JobId == job.JobId)
@@ -344,7 +351,7 @@ public static partial class RunEndpoints
             })
             .ToListAsync(ct);
 
-        var reviews = await EvaluationReviewReader.ReadAsync(db.Evaluations.Where(e => e.RunId == id && e.Application.JobId == job.JobId), flagOptions.Value, ct);
+        var reviews = await EvaluationReviewReader.ReadAsync(db.Evaluations.Where(e => e.RunId == id && e.Application.JobId == job.JobId), flagOptions, ct);
         // SCApp v2: cờ thủ công đang mở (theo hồ sơ, không theo lượt chấm) + ghi chú bị ẩn với CV đã ẩn danh.
         var applicationIds = rows.Select(r => r.ApplicationId).Distinct().ToList();
         var manualFlags = (await db.ApplicationFlags.AsNoTracking()
@@ -391,7 +398,7 @@ public static partial class RunEndpoints
         var levelCounts = new[] { FitLevels.Excellent, FitLevels.Good, FitLevels.Potential, FitLevels.Poor }
             .ToDictionary(l => l, l => items.Count(i => i.Rank != null && i.FitLabel == l));
 
-        return TypedResults.Ok(new RankingResponse
+        return (new RankingResponse
         {
             RunId = run.RunId,
             RunStatus = run.Status,
@@ -407,7 +414,7 @@ public static partial class RunEndpoints
             ManualFlagCount = items.Count(i => i.ManualFlag is not null),
             NeedsReviewCount = items.Count(i => i.NeedsReview),
             Items = items
-        });
+        }, null);
     }
 
 }

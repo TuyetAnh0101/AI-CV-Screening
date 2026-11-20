@@ -45,6 +45,7 @@ public static class AuditCatalog
         Add("DELETE /api/jobs/{id:int}/skills/{code}", "jobs.skill_removed", "Recruitment", "Job", "Bỏ kỹ năng vị trí");
         Add("PUT /api/jobs/{id:int}/skills/{code}/aliases", "jobs.aliases_updated", "Recruitment", "Job", "Cập nhật từ khóa kỹ năng");
         Add("POST /api/runs", "runs.started", "Ai", "EvaluationRun", "Khởi tạo lượt chấm CV", null);
+        Add("GET /api/runs/{id:int}/ranking/export", "runs.ranking_exported", "Recruitment", "EvaluationRun", "Chuẩn bị và cấp quyền xuất bảng xếp hạng", required: true);
         Add("POST /api/prompts", "prompts.created", "Ai", "PromptVersion", "Tạo phiên bản System Prompt", null);
         Add("POST /api/prompts/{id:int}/activate", "prompts.activated", "Ai", "PromptVersion", "Kích hoạt phiên bản System Prompt");
         Add("POST /api/prompts/assembled-preview", "prompts.previewed", "Ai", "PromptVersion", "Xem trước nội dung ghép prompt", null);
