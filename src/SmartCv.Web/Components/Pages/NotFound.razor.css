@@ -1,0 +1,19 @@
+/* B28 — trang 404, cùng ngôn ngữ thiết kế với trang 403 (thẻ gọn, chữ vừa, không dùng màu báo lỗi). */
+.missing {
+    width: 100%;
+    max-width: 480px;
+    margin: 48px auto;
+    padding: 32px;
+    border-radius: var(--sc-radius-card);
+    border: 1px solid var(--sc-line-200);
+    background: var(--sc-surface-0);
+    box-shadow: var(--sc-shadow-card);
+    text-align: center;
+    color: var(--sc-ink-700);
+}
+.missing-code { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; letter-spacing: .08em; color: var(--sc-ink-400); }
+.missing h1 { margin: 0 0 10px; font-size: clamp(22px, 2.2vw, 26px); font-weight: 650; letter-spacing: -.02em; color: var(--sc-ink-900); }
+.missing h1:focus { outline: none; }
+.missing p { margin: 0 0 20px; font-size: 15px; line-height: 1.6; }
+.missing .btn { min-height: 44px; padding-left: 20px; padding-right: 20px; }
+@media (max-width: 575.98px) { .missing { margin: 16px auto; padding: 24px 20px; } .missing .btn { width: 100%; } }

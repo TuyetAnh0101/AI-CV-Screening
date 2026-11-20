@@ -1,0 +1,57 @@
+@*
+    B28: trang 403 — đã đăng nhập nhưng tài khoản không có quyền mở trang này (vd. HR gõ thẳng /jobs/new).
+    Nằm trong vùng nội dung chính (menu vẫn còn) nên người dùng đi tiếp được ngay. Không hiện chính sách, claim hay API.
+    Vai trò không hợp lệ (không dùng được ứng dụng): không có menu → hiện thêm nút Đăng xuất.
+*@
+@inject NavigationManager Nav
+@inject AuthNavigator Navigator
+
+<PageTitle>Không có quyền truy cập · SCApp</PageTitle>
+
+<section class="denied" aria-labelledby="denied-title">
+    <div class="denied-card">
+        <span class="denied-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.1 3.4 9.7 8 11 4.6-1.3 8-5.9 8-11V5zm0 2.2 6 2.2V11c0 4-2.5 7.6-6 8.9-3.5-1.3-6-4.9-6-8.9V6.4zM12 7a3 3 0 0 0-3 3v1H8v6h8v-6h-1v-1a3 3 0 0 0-3-3zm0 1.8c.7 0 1.2.5 1.2 1.2v1h-2.4v-1c0-.7.5-1.2 1.2-1.2z" /></svg>
+        </span>
+        <p class="denied-code">Mã 403 · Không đủ quyền</p>
+        <h1 id="denied-title" tabindex="-1">Bạn không có quyền truy cập trang này</h1>
+        <p class="denied-text">Tài khoản hiện tại chưa được cấp quyền sử dụng chức năng này. Nếu cần quyền truy cập, vui lòng liên hệ quản trị viên.</p>
+
+        @if (AccessRules.FullName(User) is { Length: > 0 } name)
+        {
+            <p class="denied-who">
+                <span class="denied-who-label">Đang đăng nhập</span>
+                <span class="denied-who-name">@name</span>
+                <span class="denied-role">@AccessRules.RoleName(User)</span>
+            </p>
+        }
+
+        <div class="denied-actions">
+            @if (canUseApp)
+            {
+                <a class="btn sc-btn-primary" href="">Về Tổng quan</a>
+                @if (parent is not null)
+                {
+                    <a class="btn sc-btn-secondary" href="@parent.Href">Mở @parent.Text</a>
+                }
+            }
+            else
+            {
+                <button type="button" class="btn sc-btn-primary" @onclick="Navigator.SignOutAsync">Đăng xuất</button>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter] public System.Security.Claims.ClaimsPrincipal? User { get; set; }
+
+    private bool canUseApp;
+    private NavItem? parent;
+
+    protected override void OnParametersSet()
+    {
+        canUseApp = AccessRules.CanUseApp(User);
+        parent = canUseApp ? AppNavigation.ParentFor(Nav.ToBaseRelativePath(Nav.Uri), User) : null;
+    }
+}

@@ -5,7 +5,7 @@
         <h2>Lịch sử phiên bản</h2>
         <span class="version-count">@Versions.Count phiên bản</span>
     </div>
-    <p class="history-intro">Chọn một phiên bản để xem nội dung và soạn bản mới.</p>
+    <p class="history-intro">@(CanActivate ? "Chọn một phiên bản để xem nội dung và soạn bản mới." : "Chọn một phiên bản để xem nội dung và thử với hồ sơ.")</p>
 
     @if (Versions.Count == 0)
     {
@@ -51,7 +51,7 @@
                             <strong>@Accuracy(version.LatestAccuracyPercent)</strong>
                         </span>
                     </button>
-                    @if (!version.IsActive)
+                    @if (!version.IsActive && CanActivate)
                     {
                         <div class="activation-row">
                             <button type="button" class="history-activate" aria-label="@($"Kích hoạt {version.VersionName}")"
@@ -84,13 +84,17 @@
     [Parameter] public EventCallback<int> OnSelect { get; set; }
     [Parameter] public EventCallback<int> OnActivate { get; set; }
 
+    // B28: kích hoạt (POST /api/prompts/{id}/activate) chỉ Admin (A29) → HR không thấy nút.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool CanActivate => AccessRules.Can(AuthState, AppPermission.ManagePromptVersions);
+
     private static string Accuracy(decimal? percent) => percent is null
         ? "—"
         : percent.Value.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) + "%";
 
     private Task SelectAsync(int id) => Disabled ? Task.CompletedTask : OnSelect.InvokeAsync(id);
 
-    private Task ActivateAsync(int id) => Disabled || ActivationBlocked || ActivatingId is not null
+    private Task ActivateAsync(int id) => !CanActivate || Disabled || ActivationBlocked || ActivatingId is not null
         || !Versions.Any(v => v.PromptVersionId == id && !v.IsActive)
             ? Task.CompletedTask : OnActivate.InvokeAsync(id);
 }

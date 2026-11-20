@@ -1,0 +1,11 @@
+@page "/forbidden"
+@*
+    B28: trang 403 có địa chỉ riêng (để chỗ khác chuyển tới khi cần). Cần đăng nhập như mọi trang (Pages/_Imports.razor):
+    chưa đăng nhập mở /forbidden → về /login, không hiện 403.
+*@
+
+<AccessDenied User="AccessRules.Current(AuthState)" />
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+}

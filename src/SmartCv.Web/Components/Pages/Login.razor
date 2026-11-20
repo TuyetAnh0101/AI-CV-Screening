@@ -5,7 +5,9 @@
     - Lỗi hiện theo mã trạng thái / mã lỗi của API (AuthText.LoginError); sai email hay sai mật khẩu cùng một câu.
     - Không gửi trùng; 429 khóa nút theo Retry-After; mật khẩu không được giữ lại sau khi gửi.
     Logic nằm ở Helpers/LoginForm.cs (có test).
+    B28: trang công khai — [AllowAnonymous] thay cho [Authorize] mặc định của Pages/_Imports.razor.
 *@
+@attribute [AllowAnonymous]
 @layout AuthLayout
 @implements IDisposable
 @inject AuthSession Session

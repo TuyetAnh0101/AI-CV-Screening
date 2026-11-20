@@ -412,3 +412,10 @@ textarea.c-input { min-height:64px; resize:vertical; }
 .merge-pick { font-size:12px; font-weight:600; color:var(--sc-brand-700); }
 .merge-effects, .erase-effects { margin:0 0 12px; padding-left:18px; display:grid; gap:6px; font-size:13px; line-height:1.6; }
 @media (max-width: 600px) { .merge-choice { grid-template-columns:minmax(0, 1fr); } .c-match-list li { flex-direction:column; align-items:stretch; } .modal-foot .btn { flex:1 1 auto; } }
+
+/* B28 — vòng quay "Đang kiểm tra phiên đăng nhập…" / "Đang chuyển tới trang đăng nhập…" (Routes.razor, RedirectToLogin):
+   nằm giữa khung trống của AuthGate, không có menu. */
+.auth-wait { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--sc-ink-500); }
+.auth-wait-spinner { width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--sc-brand-100); border-top-color: var(--sc-brand-700); animation: auth-wait-spin .8s linear infinite; }
+@keyframes auth-wait-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .auth-wait-spinner { animation-duration: 2.4s; } }

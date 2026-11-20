@@ -44,6 +44,7 @@ public class B27LoginUiTests
             .AddSingleton(TimeProvider.System).AddSingleton<IJSRuntime>(new Js())
             .AddSingleton(new HealthApiClient(new HttpClient(api) { BaseAddress = new Uri("https://api.test/") }, NullLogger<HealthApiClient>.Instance));
         services.AddSupplyValueFromQueryProvider();
+        services.AddSmartCvWebAuth();   // B28: trạng thái đăng nhập cascade đọc từ đúng AuthSession ở trên
         return services.BuildServiceProvider();
     }
 
@@ -120,13 +121,22 @@ public class B27LoginUiTests
         Assert.DoesNotContain("login-form", html);
     }
 
+    // B28: trang nào được mở do AuthorizeRouteView quyết định; khi bị chặn, Body của layout là NotAuthorizedContent
+    // (không phải trang). Các test chốt của B27 dưới đây giữ nguyên tiêu chí nhưng dựng đúng như Routes.razor làm.
+    private static async Task<RenderFragment> DeniedBody(ServiceProvider sp)
+    {
+        var state = await sp.GetRequiredService<ApiAuthenticationStateProvider>().GetAuthenticationStateAsync();
+        return b => { b.OpenComponent<web::SmartCv.Web.Components.Shared.NotAuthorizedContent>(0); b.AddComponentParameter(1, "User", state.User); b.CloseComponent(); };
+    }
+
     [Fact]
     public async Task Gate_sends_a_signed_out_visitor_to_login_with_the_current_page_and_shows_nothing()
     {
         var nav = new Nav("https://app.test/cvs?search=java");
         using var sp = Services(B27.Session(), nav);
-        var html = await Html<AuthGate>(sp, new() { ["ChildContent"] = Text("SECRET-PAGE") });
-        Assert.DoesNotContain("SECRET-PAGE", html);
+        var html = await Html<MainLayout>(sp, new() { ["Body"] = await DeniedBody(sp) });
+        Assert.DoesNotContain("main-navigation", html);
+        Assert.Contains("Đang chuyển tới trang đăng nhập", html);
         Assert.Equal(("login?returnUrl=%2Fcvs%3Fsearch%3Djava", false, true), Assert.Single(nav.Navigations));
     }
 
@@ -137,7 +147,7 @@ public class B27LoginUiTests
         var api = new B27FakeAuthApi { Me = _ => web::SmartCv.Web.Services.ApiResult<SmartCv.Core.Contracts.MeDto>.Failure("x", 401) };
         var nav = new Nav("https://app.test/runs");
         using var sp = Services(B27.Session(store, api), nav);
-        await Html<AuthGate>(sp, new() { ["ChildContent"] = Text("SECRET-PAGE") });
+        await Html<MainLayout>(sp, new() { ["Body"] = await DeniedBody(sp) });
         Assert.Equal(("login?returnUrl=%2Fruns&expired=1", false, true), Assert.Single(nav.Navigations));
     }
 
@@ -147,7 +157,7 @@ public class B27LoginUiTests
         var api = new B27CaptureHandler();
         var nav = new Nav("https://app.test/");
         using var sp = Services(B27.Session(), nav, api);
-        var html = await Html<MainLayout>(sp, new() { ["Body"] = Text("DASHBOARD-DATA") });
+        var html = await Html<MainLayout>(sp, new() { ["Body"] = await DeniedBody(sp) });
         Assert.DoesNotContain("DASHBOARD-DATA", html);
         Assert.DoesNotContain("main-navigation", html);
         Assert.DoesNotContain("Đăng xuất", html);
@@ -175,7 +185,7 @@ public class B27LoginUiTests
     {
         var nav = new Nav("https://app.test/");
         using var sp = Services(await SignedIn("HR", mustChange: true), nav);
-        var html = await Html<MainLayout>(sp, new() { ["Body"] = Text("DASHBOARD-DATA") });
+        var html = await Html<MainLayout>(sp, new() { ["Body"] = await DeniedBody(sp) });
         Assert.Contains("Cần đổi mật khẩu trước khi tiếp tục", html);
         Assert.Contains("Đăng xuất", html);
         Assert.DoesNotContain("DASHBOARD-DATA", html);

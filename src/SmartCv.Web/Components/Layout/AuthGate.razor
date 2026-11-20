@@ -1,80 +1,42 @@
 @*
-    B27: chốt đăng nhập của khung ứng dụng (MainLayout bọc TOÀN BỘ menu + nội dung trong đây).
-    1. Khôi phục và xác minh phiên của tab (AuthSession.EnsureRestoredAsync → /api/auth/me). Trong lúc chờ: chỉ hiện vòng quay,
-       không có menu, không component nào được tạo nên không có lời gọi API nghiệp vụ nào.
-    2. Chưa đăng nhập → /login?returnUrl=<trang đang mở> (thay địa chỉ hiện tại, Back không quay lại trang trống).
-    3. API trả 401 giữa chừng (AuthSession.Expired) → tải lại thẳng /login?expired=1: circuit cũ bị bỏ, mọi dữ liệu
-       đã tải và trạng thái Scoped (ô tìm kiếm, tên người thao tác...) mất theo.
-    4. Tài khoản phải đổi mật khẩu (A29 chặn mọi API nghiệp vụ bằng 403) → hướng dẫn thay vì hiện trang toàn lỗi.
-    B28 thay bước 2 bằng AuthorizeRouteView; giữ AuthSession làm nguồn duy nhất, không thêm cơ chế song song.
+    B27 → B28: chốt của khung ứng dụng (MainLayout). Từ B28, việc "trang nào được mở" do AuthorizeRouteView (Routes.razor)
+    quyết định; AuthGate chỉ còn hai việc:
+    1. Chọn khung: menu + thanh trên cùng (Shell) CHỈ vẽ khi trạng thái đăng nhập đã xác định và tài khoản dùng được ứng dụng
+       (Admin/HR đã xác minh, không phải đổi mật khẩu). Mọi trường hợp khác (đang kiểm tra, chưa đăng nhập, chưa xác minh được,
+       phải đổi mật khẩu) → khung trống (Bare) căn giữa, không có menu → menu không "hiện rồi biến mất" khi vừa tải trang.
+    2. API trả 401 giữa chừng (AuthSession.Expired) → AuthNavigator tải lại /login?expired=1: circuit cũ bị bỏ cùng mọi dữ liệu
+       đã tải và trạng thái Scoped. AuthNavigator bảo đảm chỉ một lần chuyển trang dù RedirectToLogin cũng phản ứng.
+    Vẫn dùng AuthSession làm nguồn duy nhất (qua ApiAuthenticationStateProvider), không thêm cơ chế song song.
 *@
 @implements IDisposable
 @inject AuthSession Session
-@inject NavigationManager Nav
+@inject AuthNavigator Navigator
 
-@if (!ready)
+@if (AccessRules.CanUseApp(user))
 {
-    <div class="gate-screen" role="status">
-        <span class="gate-spinner" aria-hidden="true"></span>
-        <span>Đang kiểm tra đăng nhập…</span>
-    </div>
+    @Shell
 }
-else if (Session.MustChangePassword && Session.User is { } user)
+else
 {
-    <div class="gate-screen">
-        <section class="gate-card" aria-labelledby="gate-title">
-            <span class="gate-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm-1 9v4h2v-4z" /></svg>
-            </span>
-            <h1 id="gate-title">Cần đổi mật khẩu trước khi tiếp tục</h1>
-            <p>Tài khoản <strong>@user.Email</strong> đang dùng mật khẩu tạm do quản trị viên cấp, nên chưa thể xem hoặc thao tác dữ liệu tuyển dụng.</p>
-            <p class="gate-muted">Giao diện web chưa có chức năng đổi mật khẩu. Vui lòng liên hệ quản trị viên (Admin) để được hỗ trợ, sau đó đăng nhập lại.</p>
-            <button type="button" class="btn sc-btn-primary gate-action" @onclick="SignOutAsync">Đăng xuất</button>
-        </section>
-    </div>
-}
-else if (Session.IsSignedIn)
-{
-    @ChildContent
+    <div class="gate-screen">@Bare</div>
 }
 
 @code {
-    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private bool ready;
-    private bool leaving;
+    /// <summary>Khung đầy đủ (menu, thanh trên cùng, nội dung).</summary>
+    [Parameter] public RenderFragment? Shell { get; set; }
 
-    protected override async Task OnInitializedAsync()
-    {
-        Session.Expired += OnExpired;
-        Session.Changed += OnChanged;
-        await Session.EnsureRestoredAsync();
-        ready = true;
-        if (!Session.IsSignedIn) GoToLogin(expired: Session.EndReason == AuthEndReason.Expired, reload: false);
-    }
+    /// <summary>Nội dung khi chưa dùng được ứng dụng (vòng quay, thông báo) — không có menu.</summary>
+    [Parameter] public RenderFragment? Bare { get; set; }
 
-    private void OnExpired() => _ = InvokeAsync(() => GoToLogin(expired: true, reload: true));
+    private System.Security.Claims.ClaimsPrincipal user = AccessRules.Nobody;
 
-    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    protected override void OnInitialized() => Session.Expired += OnExpired;
 
-    private void GoToLogin(bool expired, bool reload)
-    {
-        if (leaving) return;
-        leaving = true;
-        var url = AuthText.LoginUrl("/" + Nav.ToBaseRelativePath(Nav.Uri), expired);
-        Nav.NavigateTo(url, forceLoad: reload, replace: true);
-    }
+    protected override async Task OnParametersSetAsync() => user = await AccessRules.ResolveAsync(AuthState);
 
-    private async Task SignOutAsync()
-    {
-        leaving = true;
-        await Session.SignOutAsync();
-        Nav.NavigateTo(AuthText.LoginPath + "?signedOut=1", forceLoad: true, replace: true);
-    }
+    private void OnExpired() => _ = InvokeAsync(Navigator.ToLogin);
 
-    public void Dispose()
-    {
-        Session.Expired -= OnExpired;
-        Session.Changed -= OnChanged;
-    }
+    public void Dispose() => Session.Expired -= OnExpired;
 }

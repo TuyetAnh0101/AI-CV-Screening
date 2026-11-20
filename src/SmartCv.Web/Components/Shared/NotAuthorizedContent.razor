@@ -1,0 +1,71 @@
+@*
+    B28: nội dung khi AuthorizeRouteView không cho mở trang. Bốn tình huống KHÁC NHAU, không gộp thành một lỗi:
+      1. Chưa đăng nhập / phiên đã kết thúc → RedirectToLogin (/login?returnUrl=..., ?expired=1 nếu phiên hết hạn).
+      2. Có phiên nhưng API chưa xác nhận được (mất kết nối lúc khôi phục) → "Thử lại"; không trao quyền, không về /login.
+      3. Tài khoản phải đổi mật khẩu (A30) → hướng dẫn, chỉ có Đăng xuất. B29 thay khối này bằng trang đổi mật khẩu.
+      4. Đã đăng nhập nhưng thiếu quyền (HR mở trang của Admin) hoặc vai trò không hợp lệ → trang 403 (AccessDenied).
+    Không hiện tên chính sách, claim hay đường dẫn API.
+*@
+@inject AuthSession Session
+@inject AuthNavigator Navigator
+
+@switch (AccessRules.Level(User))
+{
+    case AccessLevel.Anonymous:
+        <RedirectToLogin />
+        break;
+
+    case AccessLevel.Unverified:
+        <section class="gate-card" aria-labelledby="gate-title">
+            <span class="gate-icon is-info" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20a10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16a8 8 0 0 0 0-16zm-1 3h2v6h-2zm0 8h2v2h-2z" /></svg>
+            </span>
+            <h1 id="gate-title" tabindex="-1">Chưa xác minh được phiên đăng nhập</h1>
+            <p>SCApp chưa liên hệ được máy chủ để kiểm tra phiên của bạn, nên tạm thời chưa hiển thị dữ liệu. Phiên đăng nhập vẫn được giữ.</p>
+            <p class="gate-muted">Kiểm tra kết nối mạng hoặc đợi máy chủ hoạt động lại, rồi bấm <strong>Thử lại</strong>.</p>
+            @if (retryFailed)
+            {
+                <p class="gate-retry-note" role="status">Vẫn chưa kết nối được máy chủ. Vui lòng thử lại sau ít phút.</p>
+            }
+            <div class="gate-actions">
+                <button type="button" class="btn sc-btn-primary" @onclick="RetryAsync" disabled="@retrying" aria-busy="@(retrying ? "true" : "false")">
+                    @(retrying ? "Đang kiểm tra…" : "Thử lại")
+                </button>
+                <button type="button" class="btn sc-btn-secondary" @onclick="Navigator.SignOutAsync">Đăng xuất</button>
+            </div>
+        </section>
+        break;
+
+    case AccessLevel.PasswordChangeRequired:
+        <section class="gate-card" aria-labelledby="gate-title">
+            <span class="gate-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm-1 9v4h2v-4z" /></svg>
+            </span>
+            <h1 id="gate-title" tabindex="-1">Cần đổi mật khẩu trước khi tiếp tục</h1>
+            <p>Tài khoản <strong>@User.FindFirst(SmartCv.Core.Auth.SmartCvClaims.Email)?.Value</strong> đang dùng mật khẩu tạm do quản trị viên cấp, nên chưa thể xem hoặc thao tác dữ liệu tuyển dụng.</p>
+            <p class="gate-muted">Giao diện web chưa có chức năng đổi mật khẩu. Vui lòng liên hệ quản trị viên (Admin) để được hỗ trợ, sau đó đăng nhập lại.</p>
+            <div class="gate-actions">
+                <button type="button" class="btn sc-btn-primary gate-wide" @onclick="Navigator.SignOutAsync">Đăng xuất</button>
+            </div>
+        </section>
+        break;
+
+    default:
+        <AccessDenied User="User" />
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public System.Security.Claims.ClaimsPrincipal User { get; set; } = AccessRules.Nobody;
+
+    private bool retrying, retryFailed;
+
+    private async Task RetryAsync()
+    {
+        if (retrying) return;
+        retrying = true;
+        retryFailed = false;
+        try { retryFailed = !await Session.VerifyAsync(); }   // thành công → Changed → AuthorizeRouteView mở trang
+        finally { retrying = false; }
+    }
+}

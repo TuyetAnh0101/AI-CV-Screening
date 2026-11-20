@@ -1,0 +1,9 @@
+@*
+    B28: MỌI trang trong thư mục Pages mặc định cần đăng nhập — chính sách mặc định = chính sách nghiệp vụ của A29
+    (đã xác minh, Admin hoặc HR, không phải đổi mật khẩu). AuthorizeRouteView (Routes.razor) kiểm tra TRƯỚC khi tạo trang,
+    nên trang bị chặn không chạy OnInitialized và không gọi API nào.
+      - Trang công khai: @attribute [AllowAnonymous] (Login, NotFound, Error).
+      - Trang chỉ Admin: @attribute [Authorize(Policy = AccessRules.AdminPolicy)] (JobEdit; B29: Users).
+    Trang mới thêm vào đây tự động được bảo vệ (fail-closed).
+*@
+@attribute [Authorize]

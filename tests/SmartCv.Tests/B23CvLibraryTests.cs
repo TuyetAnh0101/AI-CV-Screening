@@ -313,7 +313,7 @@ public class B23CvLibraryTests
         .AddSingleton<NavigationManager>(nav).AddSingleton(anonymity ?? new AnonymityState()).AddSingleton(Client(handler))
         .AddSingleton(new JobApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<JobApiClient>.Instance))
         .AddSingleton(new CandidateApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<CandidateApiClient>.Instance))
-        .AddSingleton<IJSRuntime>(new Js()).BuildServiceProvider();
+        .AddSingleton<IJSRuntime>(new Js()).AddB28Auth().BuildServiceProvider(); // B28: menu cần người đã đăng nhập
     private static async Task<string> Html<T>(ServiceProvider services) where T : IComponent
         => await HtmlWithParameters<T>(services, []);
     private static async Task<string> HtmlWithParameters<T>(ServiceProvider services, Dictionary<string, object?> parameters) where T : IComponent

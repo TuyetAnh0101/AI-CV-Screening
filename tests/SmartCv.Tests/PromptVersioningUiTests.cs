@@ -177,6 +177,7 @@ public class PromptVersioningUiTests
         services.AddLogging();
         services.AddSingleton<NavigationManager>(new PromptNavigationManager());
         services.AddSingleton<IJSRuntime>(new NoopJsRuntime());
+        services.AddB28Auth(); // B28: Admin lưu / kích hoạt được như trước
         var http = new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
         var provider = services.BuildServiceProvider();

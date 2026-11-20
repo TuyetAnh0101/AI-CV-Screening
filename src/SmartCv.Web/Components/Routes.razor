@@ -1,6 +1,23 @@
 ﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        @*
+            B28: AuthorizeRouteView kiểm tra [Authorize] của trang (mặc định mọi trang, xem Pages/_Imports.razor) TRƯỚC khi tạo
+            trang: trang bị chặn không được khởi tạo nên không gọi API nào.
+              - Đang khôi phục / xác minh phiên → Authorizing (chỉ vòng quay, chưa có menu).
+              - Không đủ điều kiện → NotAuthorizedContent tách 5 trường hợp: chưa đăng nhập (→ /login), chưa xác minh được
+                (thử lại), phải đổi mật khẩu, vai trò không hợp lệ, thiếu quyền (403).
+        *@
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <Authorizing>
+                <div class="auth-wait" role="status">
+                    <span class="auth-wait-spinner" aria-hidden="true"></span>
+                    <span>Đang kiểm tra phiên đăng nhập…</span>
+                </div>
+            </Authorizing>
+            <NotAuthorized>
+                <NotAuthorizedContent User="context.User" />
+            </NotAuthorized>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

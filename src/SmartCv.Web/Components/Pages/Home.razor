@@ -55,7 +55,7 @@
         <p class="cohort-note">@(workspace.Filter!.JobId is null ? "Tổng CV theo ngày tải lên; hồ sơ và các phân tích theo ngày ứng tuyển. Một CV có thể ứng tuyển nhiều vị trí." : "Tổng CV là số CV khác nhau trong các hồ sơ của vị trí và khoảng ngày đã chọn.")</p>
         @if (data.IsEmpty && !workspace.Filter.HasAny)
         {
-            <section class="onboarding" aria-labelledby="onboarding-title"><span class="onboarding-symbol" aria-hidden="true">+</span><div><p class="eyebrow">Bắt đầu đợt tuyển dụng đầu tiên</p><h2 id="onboarding-title">Chưa có hồ sơ nào</h2><p>Tải CV lên và gán vào vị trí để bắt đầu theo dõi quá trình tuyển dụng.</p><div class="onboarding-actions"><a class="btn sc-btn-primary" href="/upload">Tải CV lên</a>@if (workspace.JobsLoaded && workspace.Jobs.Count == 0) { <a href="/jobs/new">Tạo vị trí tuyển dụng <span aria-hidden="true">↗</span></a> }</div></div></section>
+            <section class="onboarding" aria-labelledby="onboarding-title"><span class="onboarding-symbol" aria-hidden="true">+</span><div><p class="eyebrow">Bắt đầu đợt tuyển dụng đầu tiên</p><h2 id="onboarding-title">Chưa có hồ sơ nào</h2><p>Tải CV lên và gán vào vị trí để bắt đầu theo dõi quá trình tuyển dụng.</p><div class="onboarding-actions"><a class="btn sc-btn-primary" href="/upload">Tải CV lên</a>@if (workspace.JobsLoaded && workspace.Jobs.Count == 0) { @if (AccessRules.Can(AuthState, AppPermission.ManageJobs)) { <a href="/jobs/new">Tạo vị trí tuyển dụng <span aria-hidden="true">↗</span></a> } else { <span class="onboarding-hint">Chưa có vị trí tuyển dụng — nhờ quản trị viên (Admin) tạo vị trí trước.</span> } }</div></div></section>
         }
         else
         {
@@ -88,6 +88,7 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }   // B28: link tạo vị trí chỉ cho Admin
     private DashboardWorkspace workspace = default!;
     private string jobInput = "", fromInput = "", toInput = "";
     private string? lastUri, validationError;

@@ -646,7 +646,7 @@ public class B26RunHistoryTests
     {
         var services = new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav)
             .AddSingleton(new RunApiClient(new HttpClient(handler) { BaseAddress = handler is Recorder ? new Uri("http://localhost/") : new Uri("https://api.test/") }, NullLogger<RunApiClient>.Instance))
-            .AddSingleton(anonymity ?? new AnonymityState()).AddSingleton<IJSRuntime>(new Js());
+            .AddSingleton(anonymity ?? new AnonymityState()).AddSingleton<IJSRuntime>(new Js()).AddB28Auth(); // B28: menu cần người đã đăng nhập
         services.AddSupplyValueFromQueryProvider();
         return services.BuildServiceProvider();
     }

@@ -211,6 +211,7 @@ public class PromptActivationUiTests
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<NavigationManager>(new PromptNavigationManager());
         services.AddSingleton<IJSRuntime>(new NoopJsRuntime());
+        services.AddB28Auth(); // B28: Admin lưu / kích hoạt được như trước
         services.AddSingleton(new PromptApiClient(new HttpClient(api, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") },
             NullLogger<PromptApiClient>.Instance));
         var provider = services.BuildServiceProvider();
