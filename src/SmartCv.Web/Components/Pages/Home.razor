@@ -1,4 +1,5 @@
 @page "/"
+@page "/recruitment"
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.WebUtilities
 @using SmartCv.Web.Components.Dashboard
@@ -9,6 +10,9 @@
 
 <PageTitle>Tổng quan tuyển dụng · SCApp</PageTitle>
 
+@if (redirecting) { <LoadingIndicator Text="Đang mở Dashboard quản trị…" /> }
+else
+{
 <div class="dashboard" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()" aria-busy="@(workspace.Loading ? "true" : "false")">
     <header class="dashboard-heading">
         <div><p class="eyebrow">Không gian tuyển dụng</p><h1>Tổng quan tuyển dụng</h1><p>Theo dõi hồ sơ, tiến độ và những quyết định cần ưu tiên.</p></div>
@@ -86,13 +90,16 @@
     }
     <nav class="dashboard-shortcuts" aria-label="Lối tắt tuyển dụng"><span>Đi tới</span><a href="/upload">Tải hồ sơ lên <span aria-hidden="true">↗</span></a><a href="/results">Kết quả sàng lọc <span aria-hidden="true">↗</span></a><a href="/prompts">System Prompt <span aria-hidden="true">↗</span></a></nav>
 </div>
+}
 
 @code {
-    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }   // B28: link tạo vị trí chỉ cho Admin
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private DashboardWorkspace workspace = default!;
     private string jobInput = "", fromInput = "", toInput = "";
     private string? lastUri, validationError;
     private bool disposed;
+    private bool redirecting;
+    private bool recruitmentRoute;
     private static bool NeedsWideKpis(SmartCv.Core.Contracts.DashboardSummaryDto data) =>
         data.TotalCvs >= 100_000_000 || data.FailedCvs >= 100_000_000 || data.ActiveJobs >= 100_000_000
         || data.RunningRuns >= 100_000_000 || data.FlaggedUnresolved >= 100_000_000;
@@ -101,6 +108,15 @@
     protected override async Task OnInitializedAsync()
     {
         workspace = new(DashboardApi, JobApi);
+        var admin = AccessRules.IsAdmin(await AccessRules.ResolveAsync(AuthState));
+        recruitmentRoute = admin || Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/') == "recruitment";
+        if (admin
+            && Nav.ToBaseRelativePath(Nav.Uri).Trim('/') is "")
+        {
+            redirecting = true;
+            Nav.NavigateTo(AppNavigation.AdminHome, replace: true);
+            return;
+        }
         Nav.LocationChanged += LocationChanged;
         await Task.WhenAll(ReloadJobsAsync(), SynchronizeAsync());
     }
@@ -108,12 +124,14 @@
 
     private void LocationChanged(object? sender, LocationChangedEventArgs args)
     {
-        if (new Uri(args.Location).AbsolutePath.TrimEnd('/') != new Uri(Nav.BaseUri).AbsolutePath.TrimEnd('/')) return;
+        var path = new Uri(args.Location).AbsolutePath.TrimEnd('/');
+        var root = new Uri(Nav.BaseUri).AbsolutePath.TrimEnd('/');
+        if (path != root && path != root + "/recruitment") return;
         _ = InvokeAsync(() => SynchronizeAsync());
     }
     private async Task SynchronizeAsync(bool force = false)
     {
-        if (disposed || (!force && lastUri == Nav.Uri)) return;
+        if (disposed || redirecting || (!force && lastUri == Nav.Uri)) return;
         lastUri = Nav.Uri;
         var raw = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
         jobInput = raw.GetValueOrDefault("jobId").ToString(); fromInput = raw.GetValueOrDefault("from").ToString(); toInput = raw.GetValueOrDefault("to").ToString();
@@ -138,8 +156,9 @@
     }
     private async Task NavigateAsync(DashboardFilter filter)
     {
-        if (Nav.ToAbsoluteUri(filter.Url).AbsoluteUri == Nav.Uri) await SynchronizeAsync(force: true);
-        else Nav.NavigateTo(filter.Url);
+        var url = recruitmentRoute ? AppNavigation.RecruitmentHome + filter.Query : filter.Url;
+        if (Nav.ToAbsoluteUri(url).AbsoluteUri == Nav.Uri) await SynchronizeAsync(force: true);
+        else Nav.NavigateTo(url);
     }
     private Task ClearAsync() => NavigateAsync(new());
     private async Task QuickAsync(int? days)

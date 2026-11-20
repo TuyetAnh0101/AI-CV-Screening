@@ -89,12 +89,9 @@
     private readonly CancellationTokenSource lifetime = new();
     private bool HasFilter => search.Length + category.Length + action.Length + actor.Length + outcome.Length + resourceType.Length + resourceId.Length + requestId.Length > 0;
     private int TotalPages => Math.Max(1, (int)Math.Ceiling((data?.TotalCount ?? 0) / (double)pageSize));
-    private static void Probe(string m) { lock (probeLock) System.IO.File.AppendAllText(@"C:\Users\Lenovo\AppData\Local\Temp\claude\a0a74bc8088824cf\40b930e4-18ee-47f4-9548-c2550cc1d3af\scratchpad\probe.log", DateTime.Now.ToString("HH:mm:ss.fff") + " " + m + "\n"); }
-    private static readonly object probeLock = new(); private static int probeSeq; private readonly int probeId = System.Threading.Interlocked.Increment(ref probeSeq);
-    protected override Task OnInitializedAsync() { Probe($"#{probeId} init interactive={RendererInfo.IsInteractive}"); return LoadAsync(); }
+    protected override Task OnInitializedAsync() => LoadAsync();
     private async Task LoadAsync()
     {
-        Probe($"#{probeId} load search=[{search}] page={page}");
         var current = ++version; loading = true; error = null; data = null;
         try
         {
@@ -108,7 +105,7 @@
         finally { if (!disposed && current == version) loading = false; }
     }
     private Task ApplyAsync() { page = 1; return LoadAsync(); }
-    private Task ClearAsync() { Probe($"#{probeId} CLEAR"); search = category = action = actor = outcome = resourceType = resourceId = requestId = ""; from = VietnamTime.Today().AddDays(-6); to = VietnamTime.Today(); return ApplyAsync(); }
+    private Task ClearAsync() { search = category = action = actor = outcome = resourceType = resourceId = requestId = ""; from = VietnamTime.Today().AddDays(-6); to = VietnamTime.Today(); return ApplyAsync(); }
     private Task GoAsync(int next) { if (loading || next < 1 || next > TotalPages) return Task.CompletedTask; page = next; return LoadAsync(); }
     private Task SizeChangedAsync(ChangeEventArgs args) { if (int.TryParse(args.Value?.ToString(), out var size) && size is 25 or 50 or 100) pageSize = size; return ApplyAsync(); }
     private async Task DetailAsync(long id)
@@ -122,5 +119,5 @@
     private static string CategoryName(string value) => value switch { "Authentication" => "Xác thực", "Accounts" => "Tài khoản", "Cvs" => "File CV", "Candidates" => "Ứng viên", "Recruitment" => "Tuyển dụng", "Ai" => "AI & Prompt", "EvaluationSets" => "Bộ dữ liệu đánh giá", "Privacy" => "Bảo vệ dữ liệu", _ => value };
     private static string OutcomeName(string value) => value switch { "Succeeded" => "Thành công", "Denied" => "Bị từ chối", "Failed" => "Thất bại", "Partial" => "Một phần", "NoChange" => "Không thay đổi", "AccessGranted" => "Đã cấp quyền", _ => value };
     private static string OutcomeClass(string value) => value switch { "Succeeded" or "AccessGranted" => "success", "Denied" or "Failed" => "failure", _ => "neutral" };
-    public void Dispose() { Probe($"#{probeId} dispose"); disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
 }

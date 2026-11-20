@@ -17,7 +17,9 @@
             <h2 id="ranking-title" tabindex="-1">Bảng xếp hạng ứng viên</h2>
             <p>Mặc định sắp theo điểm cuối giảm dần · CV chưa có điểm nằm cuối · Ngưỡng Đạt @RankingView.Score(PassThreshold) · AI gợi ý, HR quyết định giai đoạn</p>
         </div>
-        <AnonymousToggle />
+        <div class="ranking-actions"><AnonymousToggle />
+            @if (OffersExport) { <div class="export-action"><button id="ranking-export-open" type="button" class="btn sc-btn-secondary" disabled="@ExportLocked" title="@ExportHelp" aria-describedby="export-availability" @onclick="OpenExportAsync"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" /></svg>Xuất kết quả</button><span id="export-availability" class="@(RunStatus == RunStatuses.Completed && Items.Count > 0 ? "visually-hidden" : "export-availability")">@ExportHelp</span></div> }
+        </div>
     </div>
 
     @if (IssueCount > 0)
@@ -222,6 +224,8 @@
         @if (ActorState.StorageWarning is { } storageWarning) { <p class="actor-warning" role="status">@storageWarning</p> }
     }
 </section>
+
+@if (exportContext is { } export) { <RankingExportDialog Context="export" OnClose="CloseExportAsync" /> }
 
 @if (drawerRow is { } d && Items.FirstOrDefault(i => i.ApplicationId == d.ApplicationId) is { } current)
 {

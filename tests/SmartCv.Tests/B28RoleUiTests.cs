@@ -297,13 +297,13 @@ public class B28RoleUiTests
     {
         var (raw, _, _) = await Open("HR", "forbidden");   // trang không cần API nào: chỉ kiểm tra khung + menu
         var html = System.Text.RegularExpressions.Regex.Replace(raw, @" b-[a-z0-9]{10}", "");
-        foreach (var item in new[] { "Bảng điều khiển", "Tải hồ sơ lên", "Ứng viên", "Kết quả", "System prompt", "Bộ dữ liệu đánh giá", "Vị trí tuyển dụng", "Lịch sử lượt chấm" })
+        foreach (var item in new[] { "Dashboard tuyển dụng", "Tải hồ sơ lên", "Ứng viên", "Kết quả", "System prompt", "Bộ dữ liệu đánh giá", "Vị trí tuyển dụng", "Lịch sử lượt chấm" })
             Assert.Contains($"<span>{item}</span>", html);
         Assert.Contains("nav-account", html);
         Assert.Contains("nav-account-role", html);
         Assert.Contains("aria-label=\"Mở menu\"", html);
         Assert.Contains("aria-expanded=\"false\"", html);
-        Assert.Equal(4, System.Text.RegularExpressions.Regex.Matches(html, "class=\"nav-group\"").Count);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(html, "class=\"nav-group\"").Count);
     }
 
     [Fact]

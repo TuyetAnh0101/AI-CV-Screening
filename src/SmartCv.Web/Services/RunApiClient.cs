@@ -55,6 +55,10 @@ public sealed class RunApiClient(HttpClient http, ILogger<RunApiClient> logger) 
     public Task<ApiResult<RunPageDto>> ListPageAsync(Helpers.RunHistoryFilter filter, CancellationToken ct = default) =>
         GetAsync<RunPageDto>("api/runs?" + filter.ApiQuery, ct);
 
+    /// <summary>Admin overview uses server totals, fetching one Screening row rather than downloading the run history.</summary>
+    public Task<ApiResult<RunPageDto>> GetScreeningTotalsAsync(bool failedOnly = false, CancellationToken ct = default) =>
+        GetAsync<RunPageDto>("api/runs?type=Screening&page=1&pageSize=1" + (failedOnly ? "&status=Failed" : ""), ct);
+
     /// <summary>B26 (A25): GET /api/runs/{id}/failures — hồ sơ Failed và KeywordOnly kèm lý do đã được API làm sạch.</summary>
     public Task<ApiResult<RunFailuresDto>> GetFailuresAsync(int runId, CancellationToken ct = default) =>
         GetAsync<RunFailuresDto>($"api/runs/{runId.ToString(System.Globalization.CultureInfo.InvariantCulture)}/failures", ct);

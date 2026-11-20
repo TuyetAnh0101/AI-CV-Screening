@@ -1,0 +1,113 @@
+@page "/admin/dashboard"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@implements IDisposable
+@using SmartCv.Core.Contracts
+@using SmartCv.Core.Constants
+@inject DashboardApiClient DashboardApi
+@inject UserApiClient UsersApi
+@inject RunApiClient RunsApi
+@inject HealthApiClient HealthApi
+@inject AuditApiClient AuditApi
+@inject ExportApiClient ExportApi
+@inject TimeProvider Time
+
+<PageTitle>Quản trị &amp; vận hành · SCApp</PageTitle>
+
+@if (allowed && workspace is { } model)
+{
+    var summary = model.Recruitment.Data;
+    <div class="admin-dashboard" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()" aria-busy="@model.Loading.ToString().ToLowerInvariant()">
+        <header class="overview-heading">
+            <div><p class="eyebrow">Không gian quản trị</p><h1>Quản trị &amp; vận hành</h1><p>Theo dõi hệ thống, kiểm soát hoạt động và tiếp nối tuyển dụng.</p></div>
+            <div class="heading-actions"><button class="btn sc-btn-secondary" type="button" disabled="@(model.Loading || model.Exports.Loading)" @onclick="model.LoadAsync">@(model.Loading ? "Đang cập nhật…" : "Làm mới")</button><a class="btn sc-btn-primary" href="/upload">Tải CV &amp; phân tích</a></div>
+        </header>
+        <div class="overview-scope"><span>Số liệu toàn hệ thống · tất cả thời gian</span><span role="status">@(model.CheckedAt is { } at ? "Lần kiểm tra: " + RankingView.VnTime(at) : "Đang tải dữ liệu…")</span></div>
+        <section class="overview-kpis" aria-label="Tổng quan hệ thống">
+            <a class="overview-kpi" href="/users" data-kpi="accounts"><span class="kpi-icon" aria-hidden="true">@((MarkupString)PeopleIcon)</span><h2>Tài khoản</h2><strong>@Count(model.Accounts.Data?.Total)</strong><p>@(model.Accounts.Data is { } accounts ? $"{Count(accounts.Admins)} Admin · {Count(accounts.Hr)} HR · gồm tài khoản đã khóa" : model.Accounts.Loading ? "Đang tải thống kê tài khoản…" : "Chưa có số liệu tài khoản")</p>@if (model.Accounts.Error is { } accountError) { <small class="section-error" role="status">@accountError</small> }</a>
+            <a class="overview-kpi" href="/jobs" data-kpi="jobs"><span class="kpi-icon" aria-hidden="true">@((MarkupString)JobIcon)</span><h2>Vị trí đang tuyển</h2><strong>@Count(summary?.ActiveJobs)</strong><p>Vị trí có trạng thái đang hoạt động</p></a>
+            <a class="overview-kpi" href="/candidates?view=cvs" data-kpi="cvs"><span class="kpi-icon" aria-hidden="true">@((MarkupString)CvIcon)</span><h2>CV đã lưu</h2><strong>@Count(summary?.TotalCvs)</strong><p>Số CV khác nhau, không phải số lần ứng tuyển</p></a>
+            <a class="overview-kpi" href="/runs?type=Screening" data-kpi="screening"><span class="kpi-icon" aria-hidden="true">@((MarkupString)RunsIcon)</span><h2>Lượt sàng lọc</h2><strong>@Count(model.Screening.Data?.TotalCount)</strong><p>Chỉ Screening · không gồm đánh giá prompt</p>@if (model.Screening.Error is { } runError) { <small class="section-error" role="status">@runError</small> }</a>
+            <a class="overview-kpi" href="/runs?status=Running" data-kpi="running"><span class="kpi-icon ai" aria-hidden="true">@((MarkupString)RunsIcon)</span><h2>Đang chờ / đang chấm</h2><strong>@Count(summary?.RunningRuns)</strong><p>Tất cả loại lượt chạy · xem lượt đang chấm</p></a>
+            <a class="overview-kpi" href="/runs?type=Screening&amp;status=Failed" data-kpi="failed"><span class="kpi-icon warning" aria-hidden="true">!</span><h2>Lượt sàng lọc lỗi</h2><strong>@Count(model.FailedScreening.Data?.TotalCount)</strong><p>Lượt Screening có trạng thái Thất bại</p>@if (model.FailedScreening.Error is { } failError) { <small class="section-error" role="status">@failError</small> }</a>
+        </section>
+        @if (model.Recruitment.Error is { } summaryError) { <div class="overview-error" role="alert"><strong>Chưa tải được tổng hợp tuyển dụng.</strong><span>@summaryError Các nguồn khác vẫn được hiển thị riêng.</span><button type="button" class="text-button" disabled="@model.Loading" @onclick="model.LoadAsync">Thử lại</button></div> }
+        <div class="operations-grid">
+            <section class="overview-panel health-panel" aria-labelledby="system-health-title">
+                <header><div><p class="eyebrow">Khả năng phục vụ</p><h2 id="system-health-title">Trạng thái hệ thống</h2></div><span class="live-label">Kiểm tra trực tiếp</span></header>
+                @if (model.Health.Loading) { <p class="section-state" role="status">Đang kiểm tra các dịch vụ…</p> }
+                else if (model.Health.Data is { } health)
+                {
+                    <p class="health-summary @(health.Status == "ok" ? "healthy" : "degraded")">@(health.Status == "ok" ? "API và các phụ thuộc sẵn sàng" : "API đã phản hồi · có phụ thuộc chưa sẵn sàng")</p>
+                    <ul class="dependency-list">@foreach (var check in health.Checks) { <li><span>@HealthName(check.Name)</span><span class="state-pill @(check.Ok ? "success" : "danger")">@(check.Ok ? "Sẵn sàng" : "Cần kiểm tra")</span><p>@check.Message</p></li> }</ul>
+                }
+                else { <p class="section-error" role="alert">@model.Health.Error</p> }
+                <div class="ai-status"><span>Khả năng AI</span><span class="state-pill neutral">Chưa xác minh</span><p>Chưa có phép đo AI trực tiếp. Theo dõi lỗi và kết quả trong lịch sử lượt chấm.</p></div>
+            </section>
+            <section class="overview-panel recruitment-panel" aria-labelledby="recruitment-summary-title">
+                <header><div><p class="eyebrow">Tiến độ tuyển dụng</p><h2 id="recruitment-summary-title">Hồ sơ cần theo dõi</h2></div></header>
+                @if (model.Recruitment.Loading) { <p class="section-state" role="status">Đang tải tổng hợp hồ sơ…</p> }
+                else if (summary is not null)
+                {
+                    <div class="application-total"><strong>@Count(summary.TotalApplications)</strong><span>hồ sơ ứng tuyển · một CV có thể vào nhiều vị trí</span></div>
+                    <dl class="stage-summary"><div><dt>Qua vòng CV</dt><dd>@Count(summary.Funnel.FirstOrDefault(s => s.Stage == ApplicationStages.Shortlisted)?.Current)</dd></div><div><dt>Phỏng vấn</dt><dd>@Count(summary.Funnel.FirstOrDefault(s => s.Stage == ApplicationStages.Interview)?.Current)</dd></div><div><dt>Đã loại</dt><dd>@Count(summary.RejectedCount)</dd></div></dl>
+                    <a class="attention-row" href="@DashboardText.FlaggedLink(summary)"><span>Cần xem kỹ<small>Hồ sơ Mới / Đang xem có cảnh báo hoặc cờ HR</small></span><strong>@Count(summary.FlaggedUnresolved)</strong></a>
+                    <a class="attention-row" href="/candidates?view=cvs&amp;status=Failed"><span>CV đọc lỗi<small>Lỗi trích xuất · khác với lỗi lượt chấm</small></span><strong>@Count(summary.FailedCvs)</strong></a>
+                    @if (summary.IsEmpty) { <p class="empty-note">Chưa có hồ sơ. Bạn có thể tạo vị trí và tải CV để bắt đầu.</p> }
+                }
+                else { <p class="section-error">@model.Recruitment.Error</p> }
+                <footer class="recruitment-actions">@if (AccessRules.Can(AuthState, AppPermission.ManageJobs)) { <a href="/jobs/new">Tạo vị trí</a> }<a href="/results">Xem kết quả</a><a href="/recruitment">Tổng quan tuyển dụng</a></footer>
+            </section>
+        </div>
+        <div class="journals-grid">
+            <section class="overview-panel" aria-labelledby="recent-activity-title">
+                <header><div><p class="eyebrow">Bảo mật &amp; quản trị</p><h2 id="recent-activity-title">Hoạt động gần đây</h2></div><a class="panel-link" href="/admin/activity-logs">Mở Audit Log</a></header>
+                <p class="period-note">7 ngày gần đây · giờ Việt Nam · tối đa 5 sự kiện mới nhất</p>
+                @if (model.Activity.Loading) { <p class="section-state" role="status">Đang tải hoạt động…</p> }
+                else if (model.Activity.Error is { } auditError) { <p class="section-error" role="alert">@auditError</p> }
+                else if (model.Activity.Data is { } activity)
+                {
+                    <p class="journal-summary">@Count(activity.TotalCount) sự kiện trong kỳ · @Count(activity.FailureCount) thất bại / bị từ chối / một phần</p>
+                    @if (activity.Items.Count == 0) { <p class="section-state">Chưa có hoạt động trong khoảng này.</p> }
+                    else { <ol class="activity-list">@foreach (var entry in activity.Items.Take(5)) { <li><span class="event-mark @(entry.Outcome is "Failed" or "Denied" ? "event-warning" : "")" aria-hidden="true">@((MarkupString)EventIcon)</span><div><strong>@entry.SafeSummary</strong><p>@(entry.ActorNameSnapshot ?? "Không xác định người thực hiện") · @RankingView.VnTime(entry.OccurredAtUtc)</p></div><span class="state-pill @(entry.Outcome is "Failed" or "Denied" ? "danger" : "neutral")">@Outcome(entry.Outcome)</span></li> }</ol> }
+                }
+            </section>
+            <section class="overview-panel" aria-labelledby="export-journal-title">
+                <header><div><p class="eyebrow">Truy vết dữ liệu</p><h2 id="export-journal-title">Nhật ký xuất dữ liệu</h2></div><span class="section-label">Chỉ Admin</span></header>
+                <p class="period-note">7 ngày gần đây · ghi nhận cấp quyền tải, không xác nhận đã nhận đủ file</p>
+                @if (model.Exports.Loading) { <p class="section-state" role="status">Đang tải nhật ký xuất…</p> }
+                else if (model.Exports.Error is { } exportError) { <p class="section-error" role="alert">@exportError</p> }
+                else if (model.Exports.Data is { } journal)
+                {
+                    @if (journal.Items.Count == 0) { <p class="section-state">Chưa có lần xuất trong khoảng này.</p> }
+                    else { <ol class="export-list">@foreach (var item in journal.Items) { <li><span class="file-mark" aria-hidden="true">XLSX</span><div><a href="@($"/results?runId={item.RunId}&jobId={item.JobId}")">@item.JobTitle</a><p>Lượt #@item.RunId · @Count(item.RowCount) hồ sơ · @(item.Anonymized ? "Ẩn danh" : "Có tên ứng viên")</p><small>@item.ExportedBy · @RankingView.VnTime(item.CreatedAt)</small></div></li> }</ol> }
+                    <footer class="journal-pager"><span>@Count(journal.TotalCount) lần xuất · Trang @journal.Page/@Math.Max(1, journal.TotalPages)</span><nav aria-label="Phân trang nhật ký xuất"><button type="button" aria-label="Trang xuất trước" disabled="@(journal.Page <= 1 || model.Loading)" @onclick="() => model.ExportPageAsync(journal.Page - 1)">Trước</button><button type="button" aria-label="Trang xuất sau" disabled="@(journal.Page >= journal.TotalPages || model.Loading)" @onclick="() => model.ExportPageAsync(journal.Page + 1)">Sau</button></nav></footer>
+                }
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private AdminDashboardWorkspace? workspace;
+    private bool allowed;
+    protected override async Task OnParametersSetAsync()
+    {
+        allowed = AccessRules.IsAdmin(await AccessRules.ResolveAsync(AuthState));
+        if (!allowed) { workspace?.Dispose(); workspace = null; return; }
+        if (workspace is not null) return;
+        workspace = new(DashboardApi, UsersApi, RunsApi, HealthApi, AuditApi, ExportApi, Time);
+        workspace.Changed += Changed;
+        await workspace.LoadAsync();
+    }
+    private void Changed() => _ = InvokeAsync(StateHasChanged);
+    private static string Count(int? value) => value is { } n ? DashboardText.Number(n) : "—";
+    private static string HealthName(string name) => name switch { "database" => "Database & schema", "uploads" => "Kho CV", "ocr" => "Dữ liệu OCR", _ => "Dịch vụ" };
+    private static string Outcome(string value) => value switch { "Succeeded" => "Thành công", "AccessGranted" => "Đã cấp quyền", "Denied" => "Bị từ chối", "Failed" => "Thất bại", "Partial" => "Một phần", "NoChange" => "Không thay đổi", _ => "Chưa xác định" };
+    private const string PeopleIcon = "<svg viewBox='0 0 24 24'><circle cx='9' cy='8' r='3'/><path d='M3 20v-2a6 6 0 0 1 12 0v2m2-15a3 3 0 0 1 0 6m2 9v-2a6 6 0 0 0-2-4'/></svg>";
+    private const string JobIcon = "<svg viewBox='0 0 24 24'><rect x='3' y='7' width='18' height='14' rx='2'/><path d='M8 7V3h8v4M3 12h18m-10 0v3h2v-3'/></svg>";
+    private const string CvIcon = "<svg viewBox='0 0 24 24'><path d='M5 3h9l5 5v13H5zM14 3v6h5M8 13h8m-8 4h5'/></svg>";
+    private const string RunsIcon = "<svg viewBox='0 0 24 24'><path d='M20 8a8 8 0 1 0 0 8M20 3v5h-5m-3-1v5l3 2'/></svg>";
+    private const string EventIcon = "<svg viewBox='0 0 24 24'><path d='M7 3h10v18H7zM10 8h4m-4 4h4m-4 4h3'/></svg>";
+    public void Dispose() { if (workspace is { } current) { current.Changed -= Changed; current.Dispose(); } }
+}

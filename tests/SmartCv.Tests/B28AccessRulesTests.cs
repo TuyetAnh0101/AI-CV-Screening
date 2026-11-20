@@ -88,7 +88,7 @@ public class B28AccessRulesTests
     // ---------- Trang: AuthorizeRouteView ----------
 
     private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error)];
-    private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs)];
+    private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs), typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)];
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
         .Where(t => typeof(IComponent).IsAssignableFrom(t) && t.GetCustomAttributes<RouteAttribute>().Any());
@@ -196,10 +196,24 @@ public class B28AccessRulesTests
     public void Menu_is_empty_for_anyone_who_cannot_use_the_app(string state) => Assert.Empty(AppNavigation.For(State(state)));
 
     [Fact]
-    public void Menu_keeps_the_existing_eight_destinations_in_order()
+    public void Menu_groups_all_existing_business_destinations_under_recruitment_and_AI()
     {
         var hrefs = AppNavigation.For(B28Auth.Principal("HR")).SelectMany(g => g.Items).Select(i => i.Href);
-        Assert.Equal(["", "upload", "candidates", "results", "prompts", "evaluation-sets", "jobs", "runs"], hrefs);
+        Assert.Equal(["", "upload", "candidates", "results", "jobs", "runs", "prompts", "evaluation-sets"], hrefs);
+    }
+
+    [Fact]
+    public void Admin_has_a_distinct_home_and_shares_the_same_business_routes_with_HR()
+    {
+        var admin = AppNavigation.For(B28Auth.Principal("Admin"));
+        var hr = AppNavigation.For(B28Auth.Principal("HR"));
+        Assert.Equal("admin/dashboard", admin[0].Items[0].Href);
+        Assert.Equal("Dashboard quản trị", admin[0].Items[0].Text);
+        Assert.Equal("Dashboard tuyển dụng", hr[0].Items[0].Text);
+        Assert.Equal(hr.Skip(1).SelectMany(g => g.Items).Select(i => i.Href),
+            admin.Skip(1).SelectMany(g => g.Items).Where(i => !i.AdminOnly).Select(i => i.Href));
+        Assert.Equal("/admin/dashboard", AppNavigation.HomeFor(B28Auth.Principal("Admin")));
+        Assert.Equal("/", AppNavigation.HomeFor(B28Auth.Principal("HR")));
     }
 
     [Theory]
