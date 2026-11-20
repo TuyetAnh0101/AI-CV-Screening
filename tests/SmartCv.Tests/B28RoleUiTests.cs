@@ -52,6 +52,7 @@ public class B28RoleUiTests
         {
             "/api/health" => B27CaptureHandler.Json(HttpStatusCode.OK, new { status = "ok", time = DateTime.UtcNow }),
             "/api/jobs" => B27CaptureHandler.Json(HttpStatusCode.OK, new[] { Job }),
+            "/api/jobs/3" => B27CaptureHandler.Json(HttpStatusCode.OK, Job),
             "/api/evaluation-sets" => B27CaptureHandler.Json(HttpStatusCode.OK, Array.Empty<object>()),
             _ => B27CaptureHandler.Json(HttpStatusCode.OK, new { })
         })
@@ -108,20 +109,17 @@ public class B28RoleUiTests
     // ---------- Chặn trang ----------
 
     [Fact]
-    public async Task Hr_opening_the_job_form_by_url_sees_403_inside_the_app_and_the_form_never_loads()
+    public async Task Hr_opening_either_job_editor_route_loads_the_business_form()
     {
         foreach (var path in new[] { "jobs/new", "jobs/3" })
         {
             var (html, nav, api) = await Open("HR", path);
-            Assert.Contains("Bạn không có quyền truy cập trang này", html);
-            Assert.Contains("Tài khoản hiện tại chưa được cấp quyền sử dụng chức năng này", html);
-            Assert.Contains("Nhân sự (HR)", html);
-            Assert.Contains("Về Tổng quan", html);
-            Assert.Contains("Mở Vị trí tuyển dụng", html);           // quay lại an toàn trong ứng dụng
-            Assert.Contains("main-navigation", html);                 // vẫn ở trong ứng dụng, có menu
-            Assert.DoesNotContain("Tạo vị trí tuyển dụng", html);     // tiêu đề form không có
-            Assert.DoesNotContain("Policy", html); Assert.DoesNotContain("SmartCv.Admin", html); Assert.DoesNotContain("/api/", html);
-            Assert.Empty(BusinessCalls(api));                          // JobEdit không được tạo → không GET /api/jobs/3
+            Assert.DoesNotContain("Bạn không có quyền truy cập trang này", html);
+            Assert.Contains("main-navigation", html);
+            Assert.Contains("id=\"job-title\"", html);
+            Assert.Contains(path.EndsWith("new") ? "Tạo vị trí tuyển dụng" : "Chỉnh sửa vị trí", html);
+            if (path == "jobs/3") Assert.Contains("GET /api/jobs/3", BusinessCalls(api));
+            else Assert.Empty(BusinessCalls(api));
             Assert.Empty(nav.Navigations);
         }
     }
@@ -198,15 +196,15 @@ public class B28RoleUiTests
     // ---------- Thao tác theo vai trò ----------
 
     [Fact]
-    public async Task Hr_sees_the_job_list_but_no_admin_actions()
+    public async Task Hr_sees_the_job_list_and_business_actions()
     {
         var (html, _, api) = await Open("HR", "jobs");
         Assert.Contains("Backend .NET Intern", html);
-        Assert.Contains("Bạn có quyền xem danh sách", html);
-        Assert.DoesNotContain("Tạo vị trí", html);
-        Assert.DoesNotContain("Sửa vị trí", html);
-        Assert.DoesNotContain("Ngừng tuyển Backend", html);
-        Assert.DoesNotContain("href=\"jobs/3\"", html);              // tên vị trí không dẫn tới form Admin
+        Assert.DoesNotContain("id=\"jobs-readonly-note\"", html);
+        Assert.Contains("Tạo vị trí", html);
+        Assert.Contains("Sửa vị trí", html);
+        Assert.Contains("Ngừng tuyển Backend", html);
+        Assert.Contains("href=\"jobs/3\"", html);
         Assert.All(BusinessCalls(api), c => Assert.StartsWith("GET ", c));
     }
 
@@ -238,9 +236,9 @@ public class B28RoleUiTests
     }
 
     [Theory]
-    [InlineData("HR", false)]
+    [InlineData("HR", true)]
     [InlineData("Admin", true)]
-    public async Task Prompt_history_shows_activate_only_to_admin(string role, bool visible)
+    public async Task Prompt_history_shows_activate_to_both_business_roles(string role, bool visible)
     {
         using var sp = ComponentServices(role);
         var html = await Html<PromptHistory>(sp, new() { ["Versions"] = Versions, ["SelectedId"] = 2 });
@@ -249,9 +247,9 @@ public class B28RoleUiTests
     }
 
     [Theory]
-    [InlineData("HR", false)]
+    [InlineData("HR", true)]
     [InlineData("Admin", true)]
-    public async Task Prompt_editor_is_read_only_for_hr_and_keeps_try_with_application(string role, bool canSave)
+    public async Task Both_business_roles_can_edit_save_and_try_a_prompt(string role, bool canSave)
     {
         using var sp = ComponentServices(role);
         var draft = new PromptDraft();
@@ -268,15 +266,27 @@ public class B28RoleUiTests
     [Theory]
     [InlineData("HR")]
     [InlineData("Admin")]
-    public async Task Evaluation_set_creation_is_admin_only_but_hr_is_told_what_to_do(string role)
+    public async Task Both_business_roles_see_the_masked_payload_tab_in_the_playground(string role)
+    {
+        using var sp = ComponentServices(role);
+        var draft = new PromptDraft(); draft.Load(Versions[0]);
+        var html = await Html<PromptPlayground>(sp, new() { ["Draft"] = draft });
+        Assert.Contains("Nội dung gửi Gemini", html);
+        Assert.Contains("aria-controls=\"pg-panel-payload\"", html);
+    }
+
+    [Theory]
+    [InlineData("HR")]
+    [InlineData("Admin")]
+    public async Task Both_business_roles_can_create_an_evaluation_set(string role)
     {
         var api = Api();
         using var sp = ComponentServices(role, api);
         var html = await Html<EvaluationSetManager>(sp);
-        Assert.Equal(role == "Admin", html.Contains("Tên bộ CV mới"));
-        Assert.Equal(role == "Admin", html.Contains("id=\"create-set-open\""));
-        Assert.Equal(role == "Admin", html.Contains("id=\"create-set-submit\""));
-        Assert.Equal(role == "HR", html.Contains("Quản trị viên (Admin) tạo bộ"));
+        Assert.Contains("Tên bộ CV mới", html);
+        Assert.Contains("id=\"create-set-open\"", html);
+        Assert.Contains("id=\"create-set-submit\"", html);
+        Assert.DoesNotContain("Quản trị viên (Admin) tạo bộ", html);
         Assert.All(BusinessCalls(api), c => Assert.StartsWith("GET ", c));
     }
 

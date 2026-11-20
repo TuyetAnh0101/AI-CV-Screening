@@ -1,7 +1,6 @@
 @page "/jobs/new"
 @page "/jobs/{Id:int}"
-@* B28: A29 chỉ cho Admin tạo / sửa job và kỹ năng → HR gõ thẳng địa chỉ thấy trang 403, trang này không được tạo, không gọi API. *@
-@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@* Kế thừa [Authorize] nghiệp vụ từ Pages/_Imports: Admin/HR đã xác minh và không phải đổi mật khẩu. *@
 @using SmartCv.Core.Constants
 @using SmartCv.Core.Jobs
 @using SmartCv.Web.Components.Jobs

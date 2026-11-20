@@ -65,10 +65,14 @@ public class B28AccessRulesTests
 
     [Theory]
     [MemberData(nameof(States))]
-    public void Every_admin_only_action_is_admin_only(string state)
+    public void Business_and_admin_actions_follow_the_approved_role_matrix(string state)
     {
         var user = State(state);
-        Assert.All(Enum.GetValues<AppPermission>(), p => Assert.Equal(state == "Admin", AccessRules.Can(user, p)));
+        foreach (var permission in Enum.GetValues<AppPermission>())
+        {
+            var adminOnly = permission is AppPermission.ManageUsers or AppPermission.ViewAudit;
+            Assert.Equal(adminOnly ? state == "Admin" : state is "Admin" or "HR", AccessRules.Can(user, permission));
+        }
     }
 
     [Fact]
@@ -84,7 +88,7 @@ public class B28AccessRulesTests
     // ---------- Trang: AuthorizeRouteView ----------
 
     private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error)];
-    private static readonly Type[] AdminPages = [typeof(JobEdit), typeof(Users), typeof(ActivityLogs)];
+    private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs)];
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
         .Where(t => typeof(IComponent).IsAssignableFrom(t) && t.GetCustomAttributes<RouteAttribute>().Any());
@@ -128,11 +132,12 @@ public class B28AccessRulesTests
     }
 
     [Fact]
-    public void Job_editor_routes_are_admin_only_but_the_job_list_is_not()
+    public void Job_editor_and_list_use_the_protected_business_policy()
     {
         var routes = typeof(JobEdit).GetCustomAttributes<RouteAttribute>().Select(r => r.Template).ToList();
         Assert.Equal(["/jobs/new", "/jobs/{Id:int}"], routes);
-        Assert.Equal(AccessRules.AdminPolicy, Assert.Single(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy is not null).Policy);
+        Assert.NotEmpty(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>());
+        Assert.DoesNotContain(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy is not null || a.Roles is not null);
         Assert.DoesNotContain(typeof(JobsPage).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy is not null || a.Roles is not null);
     }
 

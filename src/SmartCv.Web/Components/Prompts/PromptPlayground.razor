@@ -448,8 +448,7 @@
     /// <summary>Tô màu cảnh báo chỉ khi có trở ngại thật (hồ sơ không dùng được, prompt không hợp lệ, hết lượt), không khi chỉ chưa chọn.</summary>
     private bool RunBlockedIsProblem => !running && RunBlocked is not null && SelectedCandidate is not null;
 
-    // B28: "Nội dung gửi Gemini" dùng POST /api/prompts/assembled-preview — API chỉ Admin (A29). HR chỉ có thẻ Kết quả
-    // (chấm thử /api/applications/{id}/ai-preview: HR được dùng).
+    // Admin/HR được xem payload đã che dữ liệu cá nhân; các kiểm tra privacy của API vẫn bắt buộc.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanViewPayload => AccessRules.Can(AuthState, AppPermission.PreviewAssembledPrompt);
 

@@ -1,4 +1,3 @@
-using SmartCv.Api.Auth;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Data;
@@ -23,7 +22,7 @@ public static class JobSkillEndpoints
     {
         if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
             return app;
-        var group = app.MapGroup("/api/jobs/{id:int}/skills").WithTags("Jobs").RequireAuthorization(AuthPolicies.Admin).AddEndpointFilter(async (context, next) =>
+        var group = app.MapGroup("/api/jobs/{id:int}/skills").WithTags("Jobs").RequireAuthorization().AddEndpointFilter(async (context, next) =>
         {
             context.HttpContext.Response.Headers.CacheControl = "no-store";
             return await next(context);

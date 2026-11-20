@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCv.Core.Contracts;
 using SmartCv.Core.Entities;
 using SmartCv.Tests.Auth;
 using web::SmartCv.Web.Components.Pages;
@@ -59,8 +60,10 @@ public class B28EndToEndTests
             var u = (await State(first)).User;
             Assert.Equal(level, AccessRules.Level(u));
             Assert.True(await CanOpen(first.ServiceProvider, typeof(JobsPage), u));
-            Assert.Equal(admin, await CanOpen(first.ServiceProvider, typeof(JobEdit), u));
-            Assert.Equal(admin, AccessRules.Can(u, AppPermission.ManageJobs));
+            Assert.True(await CanOpen(first.ServiceProvider, typeof(JobEdit), u));
+            Assert.True(AccessRules.Can(u, AppPermission.ManageJobs));
+            Assert.Equal(admin, AccessRules.Can(u, AppPermission.ManageUsers));
+            Assert.Equal(admin, AccessRules.Can(u, AppPermission.ViewAudit));
         }
 
         // F5 cùng tab: phiên đã lưu được xác minh lại bằng /api/auth/me thật trước khi có vai trò.
@@ -81,13 +84,40 @@ public class B28EndToEndTests
         await using var _ = scope;
         var changed = 0; scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>().AuthenticationStateChanged += _ => changed++;
 
-        // Giao diện đã ẩn nút; nếu vẫn gọi (vd. trang cũ), A29 vẫn chặn và phiên KHÔNG bị đăng xuất.
-        var result = await scope.ServiceProvider.GetRequiredService<JobApiClient>().DeactivateAsync(1);
+        // Quản lý tài khoản vẫn chỉ Admin; HR gọi trực tiếp bị chặn nhưng phiên KHÔNG bị đăng xuất.
+        var result = await scope.ServiceProvider.GetRequiredService<UserApiClient>().ListAsync(new());
         Assert.Equal(403, result.StatusCode);
         Assert.Equal("access_denied", result.ErrorCode);
         Assert.True(session.IsSignedIn);
         Assert.Equal(0, changed);
         Assert.Equal(AccessLevel.Hr, AccessRules.Level((await State(scope)).User));
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("HR")]
+    public async Task Real_Web_clients_can_write_the_business_resources_shown_by_the_UI(string role)
+    {
+        using var api = B43AuditTests.Factory();
+        var password = A28TestSupport.Password();
+        var user = await A28TestSupport.Seed(api, password, role);
+        await using var web = B27.WebServices(api.Server.CreateHandler());
+        var (scope, session) = await Login(web, user, password);
+        await using var lifetime = scope;
+        var jobs = scope.ServiceProvider.GetRequiredService<JobApiClient>();
+        var job = await jobs.CreateAsync(new JobUpsertRequest { Title = "Synthetic Web permissions " + Guid.NewGuid().ToString("N") });
+        Assert.True(job.IsSuccess, job.ErrorMessage);
+        var stopped = await jobs.DeactivateAsync(job.Data!.JobId);
+        Assert.True(stopped.IsSuccess, stopped.ErrorMessage);
+        Assert.False(stopped.Data!.IsActive);
+        var prompts = scope.ServiceProvider.GetRequiredService<PromptApiClient>();
+        var version = await prompts.CreateVersionAsync(new CreatePromptVersionRequest
+            { VersionName = Guid.NewGuid().ToString("N"), SystemPrompt = "Synthetic Web assessment rules." });
+        Assert.True(version.IsSuccess, version.ErrorMessage);
+        var set = await prompts.CreateEvaluationSetAsync(new CreateEvaluationSetRequest { Name = "Synthetic Web set " + Guid.NewGuid().ToString("N") });
+        Assert.True(set.IsSuccess, set.ErrorMessage);
+        Assert.True(session.IsVerified);
+        Assert.True(AccessRules.CanUseApp((await State(scope)).User));
     }
 
     [Fact]

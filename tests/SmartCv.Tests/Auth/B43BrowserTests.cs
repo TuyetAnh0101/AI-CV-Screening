@@ -93,7 +93,12 @@ public class B43BrowserTests
             await page.GetByText("Trang 2/", new() { Exact = false }).WaitForAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "← Trước", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "Xem chi tiết sự kiện", Exact = false }).First.ClickAsync();
-            await page.Locator("#audit-detail-title").WaitForAsync(); await page.GetByRole(AriaRole.Button, new() { Name = "Đóng", Exact = true }).ClickAsync();
+            await page.Locator("#audit-detail-title").WaitForAsync();
+            // Interactive Server can still render the detail response after the heading appears.
+            // Finish that request and the close render before editing a field bound on change.
+            await page.Locator(".event-detail").WaitForAsync();
+            await page.GetByRole(AriaRole.Button, new() { Name = "Đóng", Exact = true }).ClickAsync();
+            await page.Locator("#audit-detail-title").WaitForAsync(new() { State = WaitForSelectorState.Detached });
             checks.Add("pagination/detail");
             stage = "empty filter"; await page.Locator("input[type=search]").FillAsync("no-synthetic-event-has-this-text"); await page.GetByRole(AriaRole.Button, new() { Name = "Áp dụng", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Heading, new() { Name = "Không có sự kiện phù hợp" }).WaitForAsync(); checks.Add("empty filter");

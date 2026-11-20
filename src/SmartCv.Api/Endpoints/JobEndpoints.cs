@@ -1,4 +1,3 @@
-using SmartCv.Api.Auth;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Data.SqlClient;
@@ -45,12 +44,12 @@ public static class JobEndpoints
 
         if (internalAccess)
         {
-            group.MapPost("/", CreateAsync).WithName("CreateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>(201).ProducesProblem(400).ProducesProblem(409);
-            group.MapPut("/{id:int}", UpdateAsync).WithName("UpdateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
+            group.MapPost("/", CreateAsync).WithName("CreateJob").RequireAuthorization().Produces<JobDto>(201).ProducesProblem(400).ProducesProblem(409);
+            group.MapPut("/{id:int}", UpdateAsync).WithName("UpdateJob").RequireAuthorization().Produces<JobDto>().ProducesProblem(400).ProducesProblem(404).ProducesProblem(409);
             group.MapPost("/{id:int}/deactivate", (int id, SmartCvDbContext db, TimeProvider clock, CancellationToken ct) =>
-                SetActiveAsync(id, false, db, clock, ct)).WithName("DeactivateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(404);
+                SetActiveAsync(id, false, db, clock, ct)).WithName("DeactivateJob").RequireAuthorization().Produces<JobDto>().ProducesProblem(404);
             group.MapPost("/{id:int}/activate", (int id, SmartCvDbContext db, TimeProvider clock, CancellationToken ct) =>
-                SetActiveAsync(id, true, db, clock, ct)).WithName("ActivateJob").RequireAuthorization(AuthPolicies.Admin).Produces<JobDto>().ProducesProblem(404);
+                SetActiveAsync(id, true, db, clock, ct)).WithName("ActivateJob").RequireAuthorization().Produces<JobDto>().ProducesProblem(404);
         }
 
         return app;

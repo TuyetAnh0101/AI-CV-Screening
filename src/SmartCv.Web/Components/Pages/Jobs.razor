@@ -13,7 +13,7 @@
             <p>Theo dõi từng vị trí, kết nối với ứng viên phù hợp.</p>
             @if (!CanManage)
             {
-                <p id="jobs-readonly-note" class="readonly-note">Bạn có quyền xem danh sách. Thêm, sửa hoặc ngừng tuyển vị trí do quản trị viên (Admin) thực hiện.</p>
+                <p id="jobs-readonly-note" class="readonly-note">Phiên hiện tại chưa đủ điều kiện quản lý vị trí. Hãy xác minh lại phiên đăng nhập.</p>
             }
         </div>
         <div class="heading-actions">
@@ -72,7 +72,7 @@
             }
             else
             {
-                <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Chưa có vị trí tuyển dụng</h2><p>Quản trị viên (Admin) tạo vị trí tuyển dụng; sau đó bạn có thể tải CV lên và sàng lọc cho từng vị trí.</p></div>
+                <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Chưa có vị trí tuyển dụng</h2><p>Hãy xác minh lại phiên đăng nhập để tạo vị trí tuyển dụng.</p></div>
             }
         }
         else if (Model.Visible.Count == 0)
@@ -136,7 +136,7 @@
 }
 
 @code {
-    // B28: HR xem được danh sách (GET /api/jobs); tạo / sửa / ngừng tuyển / mở lại là API chỉ Admin (A29) → ẩn với HR.
+    // Tạo, sửa, ngừng tuyển và mở lại dùng cùng quyền nghiệp vụ Admin/HR như API.
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private bool CanManage => AccessRules.Can(AuthState, AppPermission.ManageJobs);
     private void AskToggle(JobDto job) { if (CanManage) Model.Ask(job); }
