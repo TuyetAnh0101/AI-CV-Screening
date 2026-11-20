@@ -58,6 +58,6 @@ public class TestHostLifecycleTests
 
         using var response = await client.GetAsync("/api/health");
 
-        Assert.True(response.IsSuccessStatusCode);
+        await TestSupport.AssertHealthResponseAsync(response);
     }
 }

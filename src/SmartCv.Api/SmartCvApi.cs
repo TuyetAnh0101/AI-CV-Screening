@@ -1,4 +1,5 @@
 using SmartCv.Api.Endpoints;
+using SmartCv.Api.Ops;
 
 namespace SmartCv.Api;
 
@@ -7,6 +8,7 @@ public static class SmartCvApi
 {
     public static IEndpointRouteBuilder MapSmartCvApi(this IEndpointRouteBuilder app)
     {
+        app.MapReadinessEndpoint();
         app.MapAuthEndpoints();
         app.MapControllers().RequireAuthorization();
         var api = app.MapGroup("").RequireAuthorization();

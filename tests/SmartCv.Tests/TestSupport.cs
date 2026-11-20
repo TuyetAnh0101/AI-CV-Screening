@@ -1,4 +1,6 @@
 using System.Text;
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -18,6 +20,18 @@ namespace SmartCv.Tests;
 /// <summary>Dữ liệu và môi trường dùng chung cho các test tải CV (không cần SQL Server, không gọi Gemini).</summary>
 internal static class TestSupport
 {
+    // A44 changed /api/health from unconditional liveness to dependency readiness.
+    // Non-health regression tests assert the full public contract without depending on installed OCR files.
+    internal static async Task AssertHealthResponseAsync(HttpResponseMessage response)
+    {
+        var report = await response.Content.ReadFromJsonAsync<SmartCv.Core.Ops.HealthReportDto>();
+        Assert.NotNull(report);
+        Assert.Equal(new[] { "database", "uploads", "ocr" }, report.Checks.Select(c => c.Name));
+        var ready = report.Checks.All(c => c.Ok);
+        Assert.Equal(ready ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(ready ? "ok" : "error", report.Status);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+    }
     /// <summary>A28: fixture nghiệp vụ cho các filter privacy A39/A43 vốn đòi HR khi auth được cấu hình.</summary>
     internal static async Task<HttpClient> ClientWithSyntheticHrAsync(WebApplicationFactory<Program> factory, string role = "HR")
     {
@@ -78,6 +92,10 @@ internal static class TestSupport
             // Đọc sớm trong AddInfrastructure nên phải dùng UseSetting. Giá trị giả, không dùng thật.
             builder.UseSetting("ConnectionStrings:SmartCvDb", "Server=(local);Database=SmartCv_Test_NotUsed;Trusted_Connection=True");
             builder.UseSetting("Gemini:ApiKey", "test-not-a-real-key");
+            // A44 enables the real worker in Production. Test hosts remain isolated unless a test opts in.
+            if (!string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase))
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+                    { ["Scoring:WorkerEnabled"] = "false", ["CvUpload:BaseDirectory"] = TempRoot() }));
             if (settings is not null)
             {
                 builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings));

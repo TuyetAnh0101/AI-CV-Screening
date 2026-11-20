@@ -20,6 +20,9 @@ public sealed class CvUploadOptions
     /// <summary>Thư mục gốc lưu file (A6 dùng), tính từ thư mục chạy của Api.</summary>
     public string StorageRoot { get; set; } = "Uploads/CV";
 
+    /// <summary>Optional absolute data directory outside the deployment. Existing DB StoredPath values stay relative.</summary>
+    public string? BaseDirectory { get; set; }
+
     public long MaxFileSizeBytes => MaxFileSizeMB * 1024L * 1024L;
 
     /// <summary>

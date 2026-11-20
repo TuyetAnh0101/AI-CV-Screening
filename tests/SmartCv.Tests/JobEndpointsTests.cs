@@ -23,16 +23,14 @@ public class JobEndpointsTests
         });
 
     [Fact]
-    public async Task Health_returns_ok_without_database()
+    public async Task Health_returns_public_dependency_readiness_without_SQL_Server()
     {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
         using var response = await client.GetAsync("/api/health");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<HealthBody>();
-        Assert.Equal("ok", body?.Status);
+        await TestSupport.AssertHealthResponseAsync(response);
     }
 
     [Fact]

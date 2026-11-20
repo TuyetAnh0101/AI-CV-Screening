@@ -23,11 +23,6 @@ public static class JobEndpoints
 
     public static IEndpointRouteBuilder MapJobEndpoints(this IEndpointRouteBuilder app)
     {
-        // Giao diện gọi để biết API còn sống không (hiện huy hiệu "Đã kết nối API")
-        app.MapGet("/api/health", () => TypedResults.Ok(new { status = "ok", time = DateTime.UtcNow }))
-            .WithTags("Health")
-            .WithName("Health").AllowAnonymous();
-
         var internalAccess = app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled;
         var group = app.MapGroup("/api/jobs").WithTags("Jobs").AddEndpointFilter(async (context, next) =>
         {

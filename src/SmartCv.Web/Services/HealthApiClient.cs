@@ -1,6 +1,6 @@
 namespace SmartCv.Web.Services;
 
-/// <summary>Kiểm tra API còn chạy không (GET /api/health). Dùng cho huy hiệu trạng thái trên thanh trên cùng.</summary>
+/// <summary>Kiểm tra API và các phụ thuộc sẵn sàng (GET /api/health); giữ hợp đồng status/time của huy hiệu.</summary>
 public sealed class HealthApiClient(HttpClient http, ILogger<HealthApiClient> logger) : ApiClientBase(http, logger)
 {
     public async Task<bool> IsApiOnlineAsync(CancellationToken ct = default)

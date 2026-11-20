@@ -30,6 +30,10 @@ public static class DatabaseSchemaDiagnostics
                 UNION ALL
                 SELECT N'ApplicationEvents' WHERE OBJECT_ID(N'dbo.ApplicationEvents', N'U') IS NULL
                 UNION ALL
+                SELECT N'AuditEvents' WHERE OBJECT_ID(N'dbo.AuditEvents', N'U') IS NULL
+                UNION ALL
+                SELECT N'ExportLogs' WHERE OBJECT_ID(N'dbo.ExportLogs', N'U') IS NULL
+                UNION ALL
                 SELECT required.Name
                 FROM (VALUES (N'CK_Applications_Stage'), (N'CK_Applications_RejectReason'), (N'CK_Applications_RejectReason_Stage'),
                              (N'CK_ApplicationEvents_FromStage'), (N'CK_ApplicationEvents_ToStage'), (N'CK_ApplicationEvents_RejectReason'),

@@ -137,7 +137,7 @@ public class AdminSeederTests
             ["Auth:SeedAdmin:Password"] = seed.Password
         });
         using var client = factory.CreateClient();
-        Assert.True((await client.GetAsync("/api/health")).IsSuccessStatusCode);
+        await TestSupport.AssertHealthResponseAsync(await client.GetAsync("/api/health"));
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         var user = await db.Users.SingleAsync();
