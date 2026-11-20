@@ -17,6 +17,7 @@ public static class AuthPolicies
 public static class AuthSetup
 {
     public const string LoginRateLimit = "login";
+    public const string AccountCredentialRateLimit = "account-credentials";
     public static IServiceCollection AddSmartCvAuth(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<JwtOptions>().Bind(configuration.GetSection(JwtOptions.SectionName)).ValidateOnStart();
@@ -27,6 +28,8 @@ public static class AuthSetup
         services.AddMemoryCache();
         services.AddSingleton<JwtTokenService>();
         services.AddSingleton<LoginDummyHash>();
+        services.AddSingleton<AccountWriteCoordinator>();
+        services.AddScoped<UserAccountService>();
         services.AddScoped<ISessionStateStore, DbSessionStateStore>();
         services.AddScoped<UserSessionValidator>();
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -61,11 +64,15 @@ public static class AuthSetup
             o.DefaultPolicy = business;
             o.FallbackPolicy = business;
             o.AddPolicy(AuthPolicies.Admin, new AuthorizationPolicyBuilder(business).RequireRole(UserRoles.Admin).Build());
-            // A30's password-change flow is not implemented here; /me remains available to describe the state.
+            // /me and /change-password remain available while MustChangePassword is true.
             o.AddPolicy(AuthPolicies.SignedIn, policy => policy.RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr));
         });
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
-        services.AddRateLimiter(o => o.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimit));
+        services.AddRateLimiter(o =>
+        {
+            o.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimit);
+            o.AddPolicy<string, AccountCredentialRateLimitPolicy>(AccountCredentialRateLimit);
+        });
         return services;
     }
 

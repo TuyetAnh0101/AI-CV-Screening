@@ -20,8 +20,8 @@ public sealed class ProblemAuthorizationResultHandler : IAuthorizationMiddleware
         {
             if (context.User.HasClaim(SmartCvClaims.MustChangePassword, "true"))
             {
-                await AuthProblems.Problem(403, "password_change_required", "Cần đổi mật khẩu",
-                    "Bạn phải đổi mật khẩu trước khi sử dụng chức năng nghiệp vụ.").ExecuteAsync(context);
+                await TypedResults.Problem(statusCode: 403, title: "Cần đổi mật khẩu", detail: "Bạn phải đổi mật khẩu trước khi sử dụng chức năng nghiệp vụ.",
+                    extensions: new Dictionary<string, object?> { ["code"] = "password_change_required", ["mustChangePassword"] = true }).ExecuteAsync(context);
                 return;
             }
             await AuthProblems.Problem(403, "access_denied", "Không có quyền", "Tài khoản không có quyền thực hiện thao tác này.").ExecuteAsync(context);

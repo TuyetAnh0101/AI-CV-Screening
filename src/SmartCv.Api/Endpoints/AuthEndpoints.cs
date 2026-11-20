@@ -25,6 +25,7 @@ public static class AuthEndpoints
             .WithName("Login").WithSummary("Đăng nhập bằng email và mật khẩu");
         group.MapGet("/me", MeAsync).RequireAuthorization(AuthPolicies.SignedIn)
             .WithName("Me").WithSummary("Thông tin tài khoản hiện tại");
+        AuthPasswordEndpoints.Map(group);
         return app;
     }
 

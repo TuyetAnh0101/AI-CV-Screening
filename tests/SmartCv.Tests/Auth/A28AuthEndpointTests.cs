@@ -337,14 +337,14 @@ public class A28AuthEndpointTests
     }
 
     [Fact]
-    public void A29_protects_business_routes_and_keeps_A30_routes_absent()
+    public void A29_and_A30_protect_business_and_account_routes()
     {
         using var factory = A28TestSupport.Factory();
         var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
         var protectedRoutes = routes.Where(e => e.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0).ToList();
         Assert.Contains(protectedRoutes, e => e.RoutePattern.RawText == "/api/auth/me");
         Assert.Contains(protectedRoutes, e => e.RoutePattern.RawText?.TrimEnd('/') == "/api/jobs");
-        Assert.DoesNotContain(routes, e => e.RoutePattern.RawText?.Contains("change-password") == true || e.RoutePattern.RawText?.StartsWith("/api/users") == true);
+        Assert.Contains(routes, e => e.RoutePattern.RawText == "/api/auth/change-password" && e.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a => a.Policy == AuthPolicies.SignedIn));
         Assert.NotNull(factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.FallbackPolicy);
     }
 }
