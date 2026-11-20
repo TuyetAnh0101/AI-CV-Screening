@@ -23,6 +23,8 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// B28: cho phép [Authorize] trên trang Blazor; bước HTTP luôn cho qua (giải thích ở Services/WebAuthSetup.cs).
+app.UseSmartCvWebAuth();
 app.UseAntiforgery();
 
 app.MapStaticAssets();

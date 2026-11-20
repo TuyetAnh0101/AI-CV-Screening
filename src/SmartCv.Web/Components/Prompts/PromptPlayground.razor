@@ -158,9 +158,12 @@
             <button type="button" class="pg-tab @(tab == 0 ? "is-active" : null)" aria-pressed="@(tab == 0 ? "true" : "false")" aria-controls="pg-panel-result" @onclick="() => ShowTabAsync(0)">
 <span>Kết quả</span>@if (result is not null && ResultStale) { <span class="pg-tab-flag">chưa cập nhật</span> }
             </button>
+            @if (CanViewPayload)
+            {
             <button type="button" class="pg-tab @(tab == 1 ? "is-active" : null)" aria-pressed="@(tab == 1 ? "true" : "false")" aria-controls="pg-panel-payload" @onclick="() => ShowTabAsync(1)">
 <span>Nội dung gửi Gemini</span><span class="pg-tab-free">không tốn lượt</span>
             </button>
+            }
         </div>
         <div class="pg-privacy"><AnonymousToggle /></div>
     </div>
@@ -445,10 +448,15 @@
     /// <summary>Tô màu cảnh báo chỉ khi có trở ngại thật (hồ sơ không dùng được, prompt không hợp lệ, hết lượt), không khi chỉ chưa chọn.</summary>
     private bool RunBlockedIsProblem => !running && RunBlocked is not null && SelectedCandidate is not null;
 
+    // B28: "Nội dung gửi Gemini" dùng POST /api/prompts/assembled-preview — API chỉ Admin (A29). HR chỉ có thẻ Kết quả
+    // (chấm thử /api/applications/{id}/ai-preview: HR được dùng).
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool CanViewPayload => AccessRules.Can(AuthState, AppPermission.PreviewAssembledPrompt);
+
     protected override async Task OnInitializedAsync()
     {
         Anonymity.Changed += PrivacyChanged;
-        (jobId, applicationId, tab) = (Selection.JobId, Selection.ApplicationId, Selection.Tab is 1 ? 1 : 0);
+        (jobId, applicationId, tab) = (Selection.JobId, Selection.ApplicationId, Selection.Tab is 1 && CanViewPayload ? 1 : 0);
         plan = PlaygroundRules.Plan(Draft.Content, Draft.Source);
         sourceId = Draft.Source?.PromptVersionId;
         setId = lastParamSetId = EvaluationSetId ?? 0;
@@ -619,7 +627,7 @@
     private async Task ShowTabAsync(int value)
     {
         if (disposed) return;
-        tab = value;
+        tab = value == 1 && CanViewPayload ? 1 : 0;
         SaveSelection();
         if (tab == 1) await LoadPayloadAsync();
     }
@@ -759,7 +767,7 @@
         debounceCts = null;
         pendingPayloadKey = null;
         var key = CurrentPayloadKey;
-        if (disposed || tab != 1 || key is null) return;
+        if (disposed || tab != 1 || key is null || !CanViewPayload) return;
         if (key == payloadLoadingKey || key == payloadErrorKey) return;
         if (key == payloadKey && (payload is not null || maskingDisabled)) return;
         var request = PlaygroundRules.AssembledRequest(key.ApplicationId, plan);

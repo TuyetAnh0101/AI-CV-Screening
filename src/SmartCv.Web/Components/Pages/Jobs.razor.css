@@ -37,7 +37,7 @@ td:first-child { padding-left:20px; } td:last-child { padding-right:20px; } tr:l
 tr.is-inactive { background:#fafcfb; }
 .position-cell { min-width:0; } .job-code { display:block; margin-bottom:5px; font-size:11px; letter-spacing:.05em; color:var(--sc-ink-500); }
 .job-title { display:block; color:var(--sc-ink-900); text-decoration:none; font-size:14px; font-weight:600; line-height:1.6; overflow-wrap:anywhere; }
-.job-title:hover { color:var(--sc-brand-700); text-decoration:underline; }
+a.job-title:hover { color:var(--sc-brand-700); text-decoration:underline; }
 .skill-caption { display:block; color:var(--sc-ink-500); font-size:12px; margin:9px 0 6px; }
 .skills { display:flex; flex-wrap:wrap; gap:5px; } .skills>span { border:1px solid var(--sc-line-200); border-radius:6px; padding:1px 7px; font-size:11px; color:var(--sc-ink-700); max-width:100%; overflow-wrap:anywhere; background:white; }
 .headcount { font-weight:600; font-size:14px; } td small { display:block; font-size:12px; color:var(--sc-ink-500); margin-top:4px; } .expired-label { color:#92601a; }
@@ -93,3 +93,5 @@ tr.is-inactive { background:#fafcfb; }
     .panel-footer { padding:16px; flex-wrap:wrap; } .panel-footer p { text-align:left; } .message { margin-inline:16px; }
 }
 @media(max-width:359px) { .status-filters { gap:5px; } .status-filters button { flex:1 1 100%; justify-content:space-between; padding-inline:12px; } .row-actions { gap:4px; } .row-actions a,.toggle-button { padding-inline:8px; } }
+/* B28: HR chỉ xem — ghi chú nhỏ dưới tiêu đề, không dùng màu cảnh báo. */
+.page-heading p.readonly-note { display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:4px 10px; border-radius:var(--sc-radius-pill); background:var(--sc-surface-100); color:var(--sc-ink-700); font-size:12px; line-height:1.5; }

@@ -17,6 +17,13 @@
         </div>
     </header>
 
+    @if (!CanManage)
+    {
+        <p id="prompt-readonly" class="readonly-note" role="note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z" /></svg>
+            <span>Chế độ chỉ xem. Lưu phiên bản mới và kích hoạt prompt do quản trị viên (Admin) thực hiện; bạn vẫn có thể thử phiên bản đang xem với hồ sơ.</span>
+        </p>
+    }
     <label for="system-prompt" class="editor-label">Nội dung system prompt</label>
     <div class="code-editor">
         <div class="line-numbers" aria-hidden="true" style="height: @(EditorHeight)px">
@@ -25,12 +32,24 @@
                 <span>@i</span>
             }
         </div>
-        <textarea id="system-prompt" aria-label="Nội dung system prompt" aria-describedby="prompt-hint"
-                  spellcheck="false" wrap="off" rows="@Math.Max(16, Draft.LineCount)" style="height: @(EditorHeight)px" disabled="@Locked"
-                  value="@Draft.Content" @oninput="ContentInput"></textarea>
+        @if (CanManage)
+        {
+            <textarea id="system-prompt" aria-label="Nội dung system prompt" aria-describedby="prompt-hint"
+                      spellcheck="false" wrap="off" rows="@Math.Max(16, Draft.LineCount)" style="height: @(EditorHeight)px" disabled="@Locked"
+                      value="@Draft.Content" @oninput="ContentInput"></textarea>
+        }
+        else
+        {
+            @* B28: HR đọc được (chọn, sao chép) nhưng không sửa; không có @oninput nên bản nháp không bao giờ "có thay đổi". *@
+            <textarea id="system-prompt" aria-label="Nội dung system prompt (chỉ xem)" aria-describedby="prompt-readonly"
+                      spellcheck="false" wrap="off" rows="@Math.Max(16, Draft.LineCount)" style="height: @(EditorHeight)px" readonly
+                      value="@Draft.Content"></textarea>
+        }
     </div>
     <p id="prompt-hint" class="editor-hint">Chỉ viết vai trò và quy tắc đánh giá. Hệ thống tự bổ sung thông tin Job, tiêu chí tuyển dụng, nội dung CV và yêu cầu JSON.</p>
 
+    @if (CanManage)
+    {
     <div class="version-fields">
         <label class="version-field" for="prompt-version-name">
             <span>Tên phiên bản mới <span class="required" aria-hidden="true">*</span></span>
@@ -47,23 +66,27 @@
             <small>@Draft.ChangeNote.Length/@PromptDraft.MaxNoteLength ký tự</small>
         </label>
     </div>
+    }
     @if (validation is not null || Error is not null)
     {
         <p id="prompt-feedback" class="editor-error" role="alert">@(validation ?? Error)</p>
     }
     <footer class="editor-actions">
-        <span class="immutable-note">Mỗi lần lưu tạo một phiên bản riêng.</span>
+        <span class="immutable-note">@(CanManage ? "Mỗi lần lưu tạo một phiên bản riêng." : "Mỗi phiên bản đã lưu không thay đổi được.")</span>
         <div class="editor-buttons">
             @* B39: mở/đóng khung chấm thử ngay dưới ô soạn; không đụng tới nội dung, tên hay ghi chú đang soạn. *@
             <button type="button" class="btn sc-btn-secondary try-btn @(showPlayground ? "is-open" : null)" @ref="tryButton" @onclick="TogglePlayground"
                     aria-expanded="@(showPlayground ? "true" : "false")" aria-controls="@(showPlayground ? "prompt-playground" : null)">
                 <span class="try-mark" aria-hidden="true">✦</span><span>Thử với hồ sơ…</span><span class="try-chevron" aria-hidden="true"></span>
             </button>
-            <button type="button" class="btn sc-btn-secondary" @onclick="ResetAsync" disabled="@(Locked || !Draft.IsDirty)">Hoàn tác</button>
-            <button type="button" class="btn sc-btn-primary" @onclick="SaveAsync" disabled="@Locked">
-                @if (Saving) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
-                @(Saving ? "Đang lưu..." : "Lưu thành phiên bản mới")
-            </button>
+            @if (CanManage)
+            {
+                <button type="button" class="btn sc-btn-secondary" @onclick="ResetAsync" disabled="@(Locked || !Draft.IsDirty)">Hoàn tác</button>
+                <button type="button" class="btn sc-btn-primary" @onclick="SaveAsync" disabled="@Locked">
+                    @if (Saving) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                    @(Saving ? "Đang lưu..." : "Lưu thành phiên bản mới")
+                </button>
+            }
         </div>
     </footer>
     @if (showPlayground)
@@ -85,6 +108,9 @@
     [Parameter] public int? EvaluationSetId { get; set; }
     [Parameter] public int LabelsVersion { get; set; }
     [Parameter] public EventCallback<int> OnEvaluationSetChanged { get; set; }
+    // B28: lưu phiên bản (POST /api/prompts) chỉ Admin (A29). Không đủ quyền → ô prompt chỉ đọc, không có Lưu / Hoàn tác.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool CanManage => AccessRules.Can(AuthState, AppPermission.ManagePromptVersions);
     private bool showPlayground, focusTryButton;
     private ElementReference tryButton;
     private readonly PlaygroundSelection playgroundSelection = new();
@@ -101,7 +127,7 @@
         loadedId = Draft.Source?.PromptVersionId;
         validation = null;
     }
-    private Task ContentInput(ChangeEventArgs e) { Draft.Content = e.Value?.ToString() ?? ""; return ChangedAsync(); }
+    private Task ContentInput(ChangeEventArgs e) { if (!CanManage) return Task.CompletedTask; Draft.Content = e.Value?.ToString() ?? ""; return ChangedAsync(); }
     private Task NameInput(ChangeEventArgs e) { Draft.VersionName = e.Value?.ToString() ?? ""; return ChangedAsync(); }
     private Task NoteInput(ChangeEventArgs e) { Draft.ChangeNote = e.Value?.ToString() ?? ""; return ChangedAsync(); }
     private Task ChangedAsync() { validation = null; return OnDirtyChanged.InvokeAsync(Draft.IsDirty); }
@@ -117,7 +143,7 @@
     }
     private async Task SaveAsync()
     {
-        if (Locked) return;
+        if (Locked || !CanManage) return;
         validation = Draft.Validate(Versions);
         if (validation is not null) return;
         submitting = true;

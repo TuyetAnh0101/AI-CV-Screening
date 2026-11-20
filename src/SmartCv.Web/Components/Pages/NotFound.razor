@@ -1,5 +1,28 @@
 ﻿@page "/not-found"
 @layout MainLayout
+@*
+    Router.NotFoundPage và UseStatusCodePagesWithReExecute("/not-found").
+    B28: công khai ([AllowAnonymous]) — đường dẫn không tồn tại báo "không tìm thấy" dù đã đăng nhập hay chưa, không chuyển
+    về /login. Đã đăng nhập: hiện trong khung có menu; chưa đăng nhập: khung trống, có nút Đăng nhập.
+*@
+@attribute [AllowAnonymous]
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>Không tìm thấy trang · SCApp</PageTitle>
+
+<section class="missing" aria-labelledby="missing-title">
+    <span class="missing-code" aria-hidden="true">404</span>
+    <h1 id="missing-title" tabindex="-1">Không tìm thấy trang</h1>
+    <p>Đường dẫn này không tồn tại hoặc đã được chuyển đi. Kiểm tra lại địa chỉ, hoặc quay về trang chính.</p>
+    @if (AccessRules.CanUseApp(AccessRules.Current(AuthState)))
+    {
+        <a class="btn sc-btn-primary" href="">Về Tổng quan</a>
+    }
+    else
+    {
+        <a class="btn sc-btn-primary" href="login">Đăng nhập</a>
+    }
+</section>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+}

@@ -31,7 +31,8 @@ public enum AuthEndReason
 /// Token chỉ nằm trong bộ nhớ máy chủ Web và trong sessionStorage của tab ở dạng đã mã hóa bằng Data Protection
 /// (ProtectedSessionStorage) — JavaScript trên trang không đọc được. Đóng tab là phải đăng nhập lại.
 ///
-/// B28 sẽ bọc lớp này bằng AuthenticationStateProvider (vai trò, AuthorizeView); không tạo cơ chế thứ hai song song.
+/// B28: ApiAuthenticationStateProvider bọc lớp này (vai trò cho AuthorizeRouteView / quyền thao tác); đây vẫn là nguồn
+/// trạng thái DUY NHẤT — không có phiên thứ hai, không đọc token ở nơi khác.
 /// </summary>
 public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvider time, ILogger<AuthSession> logger)
 {
@@ -46,6 +47,12 @@ public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvide
     public bool IsVerified { get; private set; }
 
     public AuthEndReason EndReason { get; private set; }
+
+    /// <summary>
+    /// B28: circuit này đã từng giữ một phiên (khôi phục hoặc đăng nhập). Khi phiên kết thúc mà cờ này bật, giao diện phải
+    /// tải lại trang (forceLoad) để bỏ toàn bộ trạng thái Scoped của người trước; lần đầu mở trang khi chưa đăng nhập thì không cần.
+    /// </summary>
+    public bool HadSessionInCircuit { get; private set; }
 
     public bool IsRestored => _restore is { IsCompleted: true };
     public bool IsSignedIn => Token is not null && ExpiresAt is { } e && e > time.GetUtcNow().UtcDateTime;
@@ -86,7 +93,7 @@ public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvide
         var me = await authApi.GetMeAsync(saved.Token);
         if (me.IsSuccess && me.Data is { } user)
         {
-            (Token, ExpiresAt, User, IsVerified) = (saved.Token, saved.ExpiresAt, user, true);
+            (Token, ExpiresAt, User, IsVerified, HadSessionInCircuit) = (saved.Token, saved.ExpiresAt, user, true, true);
             await SafeSaveAsync();
             return;
         }
@@ -100,8 +107,35 @@ public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvide
 
         // API tạm không trả lời (mất kết nối, 503, quá thời gian): giữ phiên chưa xác minh. Mỗi request sau vẫn được API
         // kiểm tra token; 401 lúc đó sẽ đưa về trang đăng nhập.
-        (Token, ExpiresAt, User, IsVerified) = (saved.Token, saved.ExpiresAt, saved.User, false);
+        (Token, ExpiresAt, User, IsVerified, HadSessionInCircuit) = (saved.Token, saved.ExpiresAt, saved.User, false, true);
         logger.LogInformation("Chưa xác minh được phiên đăng nhập đã lưu (API tạm không trả lời); giữ phiên hiện có.");
+    }
+
+    private Task<bool>? _verify;
+
+    /// <summary>
+    /// B28: thử xác minh lại phiên chưa xác minh được lúc khôi phục (API tạm mất kết nối). Thành công → nhận vai trò mới nhất
+    /// từ /api/auth/me và báo Changed; 401 → kết thúc phiên (Expired); lỗi khác → giữ nguyên, trả false. Không tự thử lại;
+    /// bấm trùng trong lúc đang chờ dùng chung một lần gọi API.
+    /// </summary>
+    public Task<bool> VerifyAsync() => _verify is { IsCompleted: false } running ? running : _verify = VerifyCoreAsync();
+
+    private async Task<bool> VerifyCoreAsync()
+    {
+        await EnsureRestoredAsync();
+        if (Token is not { } token || !IsSignedIn) return false;
+        if (IsVerified) return true;
+        var me = await authApi.GetMeAsync(token);
+        if (token != Token) return IsVerified;            // đã đăng nhập lại / đăng xuất trong lúc chờ
+        if (me.IsSuccess && me.Data is { } user)
+        {
+            (User, IsVerified) = (user, true);
+            await SafeSaveAsync();
+            Changed?.Invoke();
+            return true;
+        }
+        if (me.StatusCode == 401) await EndAsync(token);
+        return false;
     }
 
     /// <summary>Lưu kết quả POST /api/auth/login. Không nhận mật khẩu.</summary>
@@ -113,7 +147,7 @@ public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvide
             DateTimeKind.Local => response.ExpiresAt.ToUniversalTime(),
             _ => DateTime.SpecifyKind(response.ExpiresAt, DateTimeKind.Utc)
         };
-        (Token, ExpiresAt, User, IsVerified, EndReason) = (response.Token, expires, response.User, true, AuthEndReason.None);
+        (Token, ExpiresAt, User, IsVerified, EndReason, HadSessionInCircuit) = (response.Token, expires, response.User, true, AuthEndReason.None, true);
         _restore = Task.CompletedTask;
         await SafeSaveAsync();
         Changed?.Invoke();

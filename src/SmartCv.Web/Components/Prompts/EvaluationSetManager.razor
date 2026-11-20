@@ -22,7 +22,7 @@
         <div class="head-actions">
             @if (Services.GetService<AnonymityState>() is not null) { <AnonymousToggle /> }
             <button type="button" class="btn sc-btn-secondary" disabled="@Busy" @onclick="ReloadAsync">Tải lại</button>
-            <button id="create-set-open" type="button" class="btn sc-btn-primary" disabled="@(Busy || creatingOpen)" @onclick="OpenCreate"><span aria-hidden="true">+</span> Tạo bộ CV</button>
+            @if (CanCreate) { <button id="create-set-open" type="button" class="btn sc-btn-primary" disabled="@(Busy || creatingOpen)" @onclick="OpenCreate"><span aria-hidden="true">+</span> Tạo bộ CV</button> }
         </div>
     </header>
 
@@ -30,7 +30,13 @@
     @if (sets.Error is not null) { <p class="set-error" role="alert">@sets.Error</p> }
     @if (sets.Message is not null) { <p class="set-success" role="status">@sets.Message</p> }
 
-    @if (creatingOpen || (sets.Loaded && sets.Sets.Count == 0))
+    @if (!CanCreate && sets.Loaded && sets.Sets.Count == 0)
+    {
+        @* B28: tạo bộ (POST /api/evaluation-sets) chỉ Admin (A29); HR thêm hồ sơ và gán nhãn sau khi đã có bộ. *@
+        <p id="set-empty-hr" class="set-empty" role="status">Chưa có bộ CV đánh giá. Quản trị viên (Admin) tạo bộ; sau đó bạn có thể chọn CV đã quét và gán nhãn HR tại đây.</p>
+    }
+
+    @if (CanCreate && (creatingOpen || (sets.Loaded && sets.Sets.Count == 0)))
     {
         <form class="create-card" @onsubmit="CreateAsync" @onsubmit:preventDefault="true" aria-labelledby="create-set-title">
             <fieldset disabled="@(Busy || sets.CreationUncertain)">
@@ -305,7 +311,11 @@
         if (result.IsSuccess) jobs = result.Data!;
     }
 
-    private void OpenCreate() { creatingOpen = true; }
+    // B28: chỉ Admin tạo bộ CV (A29: POST /api/evaluation-sets). Thêm / bỏ hồ sơ, gán nhãn: cả HR.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool CanCreate => AccessRules.Can(AuthState, AppPermission.CreateEvaluationSet);
+
+    private void OpenCreate() { if (CanCreate) creatingOpen = true; }
 
     private async Task ReloadAsync()
     {
@@ -322,7 +332,7 @@
 
     private async Task CreateAsync()
     {
-        if (Busy) return;
+        if (Busy || !CanCreate) return;
         creating = true;
         try
         {

@@ -26,6 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenStore, ProtectedSessionTokenStore>();
         services.AddScoped<AuthSession>();
         services.AddScoped<IAuthApi>(sp => sp.GetRequiredService<AuthApiClient>());
+        // B28: vai trò cho AuthorizeRouteView / quyền thao tác, đọc từ AuthSession ở trên (không phải phiên thứ hai).
+        services.AddSmartCvWebAuth();
 
         // authenticated = true: client được gắn AuthSession của scope đang yêu cầu nó (scope của circuit khi một component
         // inject client). Token được đặt lên từng HttpRequestMessage lúc gửi (ApiClientBase), không đặt lên HttpClient dùng chung.

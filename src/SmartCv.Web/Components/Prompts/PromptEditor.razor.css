@@ -47,3 +47,8 @@ button:focus-visible { outline: 3px solid var(--brand-accent); outline-offset: 3
     .editor-buttons .try-btn { flex: 1 1 100%; min-height: 44px; }
     .editor-buttons .btn { min-height: 44px; }
 }
+
+/* B28: HR xem prompt ở chế độ chỉ đọc (không lưu / kích hoạt được — A29 chỉ cho Admin). */
+.readonly-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border-radius: var(--sc-radius-md); border: 1px solid var(--sc-info-line); background: var(--sc-info-bg); color: var(--sc-ink-700); font-size: 13px; line-height: 1.55; }
+.readonly-note svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; fill: var(--sc-info); }
+.code-editor textarea[readonly] { cursor: text; }

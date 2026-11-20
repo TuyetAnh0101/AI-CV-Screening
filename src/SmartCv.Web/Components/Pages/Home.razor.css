@@ -92,3 +92,4 @@ select:disabled { background:var(--sc-surface-50); }
 /* SCApp v2: biểu đồ xu hướng toàn chiều rộng, trên các biểu đồ phụ */
 .trend-panel { margin-bottom: 20px; }
 .trend-scope { margin: 10px 0 0; color: var(--text-muted); font-size: 11px; }
+.onboarding-actions>.onboarding-hint { color:var(--sc-ink-500); font-size:13px; line-height:1.5; } /* B28: HR không tạo được vị trí */

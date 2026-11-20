@@ -1,0 +1,15 @@
+@*
+    B28: AuthorizeRouteView gặp tab chưa đăng nhập → /login?returnUrl=<trang đang mở> (AuthText.SafeReturnUrl: chỉ đường dẫn
+    trong ứng dụng). Việc chuyển trang do AuthNavigator làm: nếu AuthGate / nút Đăng xuất đã bắt đầu chuyển thì ở đây không
+    chuyển lần hai. Trong lúc chờ chỉ có vòng quay, không có menu hay dữ liệu.
+*@
+@inject AuthNavigator Navigator
+
+<div class="auth-wait" role="status">
+    <span class="auth-wait-spinner" aria-hidden="true"></span>
+    <span>Đang chuyển tới trang đăng nhập…</span>
+</div>
+
+@code {
+    protected override void OnInitialized() => Navigator.ToLogin();
+}

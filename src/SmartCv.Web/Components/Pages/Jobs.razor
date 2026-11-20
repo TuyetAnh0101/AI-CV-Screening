@@ -11,12 +11,19 @@
             <p class="eyebrow"><span aria-hidden="true">✧</span> Quản lý tuyển dụng</p>
             <h1 id="jobs-title" tabindex="-1">Vị trí tuyển dụng</h1>
             <p>Theo dõi từng vị trí, kết nối với ứng viên phù hợp.</p>
+            @if (!CanManage)
+            {
+                <p id="jobs-readonly-note" class="readonly-note">Bạn có quyền xem danh sách. Thêm, sửa hoặc ngừng tuyển vị trí do quản trị viên (Admin) thực hiện.</p>
+            }
         </div>
         <div class="heading-actions">
             <button id="jobs-refresh" type="button" class="btn sc-btn-secondary" @onclick="Model.LoadAsync" disabled="@(Model.Loading || Model.Busy || Model.Pending is not null)">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>Làm mới
             </button>
-            <a class="btn sc-btn-primary" href="jobs/new"><span aria-hidden="true">＋</span> Tạo vị trí</a>
+            @if (CanManage)
+            {
+                <a class="btn sc-btn-primary" href="jobs/new"><span aria-hidden="true">＋</span> Tạo vị trí</a>
+            }
         </div>
     </header>
 
@@ -59,7 +66,14 @@
         }
         else if (Model.Jobs.Count == 0)
         {
-            <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Sẵn sàng cho vị trí đầu tiên</h2><p>Tạo vị trí tuyển dụng để bắt đầu tiếp nhận và sàng lọc CV.</p><a class="btn sc-btn-primary" href="jobs/new">Tạo vị trí</a></div>
+            @if (CanManage)
+            {
+                <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Sẵn sàng cho vị trí đầu tiên</h2><p>Tạo vị trí tuyển dụng để bắt đầu tiếp nhận và sàng lọc CV.</p><a class="btn sc-btn-primary" href="jobs/new">Tạo vị trí</a></div>
+            }
+            else
+            {
+                <div class="empty-state"><span class="state-icon" aria-hidden="true">▦</span><h2>Chưa có vị trí tuyển dụng</h2><p>Quản trị viên (Admin) tạo vị trí tuyển dụng; sau đó bạn có thể tải CV lên và sàng lọc cho từng vị trí.</p></div>
+            }
         }
         else if (Model.Visible.Count == 0)
         {
@@ -78,7 +92,8 @@
                             <tr class="@status.Css" @key="job.JobId">
                                 <td class="position-cell">
                                     <span class="job-code">VỊ TRÍ #@job.JobId</span>
-                                    <a class="job-title" href="jobs/@job.JobId">@job.Title</a>
+                                    @if (CanManage) { <a class="job-title" href="jobs/@job.JobId">@job.Title</a> }
+                                    else { <span class="job-title">@job.Title</span> }
                                     <span class="skill-caption">@job.MustHaveCount kỹ năng bắt buộc</span>
                                     <div class="skills">@foreach (var skill in job.Skills.Where(s => s.SkillType == SkillTypes.MustHave)) { <span>@skill.DisplayName</span> }</div>
                                 </td>
@@ -95,8 +110,11 @@
                                 <td class="status-cell"><span class="status-badge @status.Css">@status.Text</span></td>
                                 <td class="actions-cell"><div class="row-actions">
                                     <a class="results-link" href="@JobText.ResultsUrl(job.JobId)" aria-label="Xem kết quả của @job.Title">Kết quả <span aria-hidden="true">↗</span></a>
-                                    <a class="edit-link" href="jobs/@job.JobId" aria-label="Sửa @job.Title">Sửa vị trí</a>
-                                    <button id="job-toggle-@job.JobId" type="button" class="toggle-button @(job.IsActive ? "stop-button" : "open-button")" @onclick="() => Model.Ask(job)" disabled="@(!Model.CanToggle(job))" aria-label="@((job.IsActive ? "Ngừng tuyển " : "Mở lại ") + job.Title)">@(job.IsActive ? "Ngừng tuyển" : "Mở lại")</button>
+                                    @if (CanManage)
+                                    {
+                                        <a class="edit-link" href="jobs/@job.JobId" aria-label="Sửa @job.Title">Sửa vị trí</a>
+                                        <button id="job-toggle-@job.JobId" type="button" class="toggle-button @(job.IsActive ? "stop-button" : "open-button")" @onclick="() => AskToggle(job)" disabled="@(!Model.CanToggle(job))" aria-label="@((job.IsActive ? "Ngừng tuyển " : "Mở lại ") + job.Title)">@(job.IsActive ? "Ngừng tuyển" : "Mở lại")</button>
+                                    }
                                 </div></td>
                             </tr>
                         }
@@ -112,12 +130,17 @@
     }
 </div>
 
-@if (Model.Pending is { } pending)
+@if (CanManage && Model.Pending is { } pending)
 {
     <ConfirmDialog Title="@JobText.ConfirmTitle(pending)" Text="@JobText.ConfirmText(pending)" ConfirmText="@(pending.IsActive ? "Ngừng tuyển" : "Mở lại")" Danger="pending.IsActive" Busy="Model.Busy" ReturnFocusId="@($"job-toggle-{pending.JobId}")" OnConfirm="Model.ToggleAsync" OnCancel="Model.Cancel" />
 }
 
 @code {
+    // B28: HR xem được danh sách (GET /api/jobs); tạo / sửa / ngừng tuyển / mở lại là API chỉ Admin (A29) → ẩn với HR.
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private bool CanManage => AccessRules.Can(AuthState, AppPermission.ManageJobs);
+    private void AskToggle(JobDto job) { if (CanManage) Model.Ask(job); }
+
     private JobsWorkspace Model = default!;
     private static readonly (string Value, string Label)[] Filters = [("active", "Đang tuyển"), ("inactive", "Ngừng tuyển"), ("all", "Tất cả")];
     protected override async Task OnInitializedAsync() { Model = new(JobApi); await Model.LoadAsync(); }
