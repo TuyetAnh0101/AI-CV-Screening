@@ -65,9 +65,21 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     protected Task<ApiResult<T>> GetWithBearerAsync<T>(string url, string token, CancellationToken ct = default) =>
         SendAsync<T>(() => new HttpRequestMessage(HttpMethod.Get, url), url, ct, bearer: token);
 
+    /// <summary>
+    /// B29: gửi request do service con tự dựng (thêm header If-Match, Bearer chỉ định...) mà vẫn dùng chung cách đọc lỗi,
+    /// phân loại mạng / quá giờ và xử lý 401 / 403 của phiên. <paramref name="route"/> là nhãn ghi log (không có query riêng tư);
+    /// <paramref name="onSuccess"/> đọc header của phản hồi thành công (ví dụ X-Total-Count) trước khi đọc nội dung.
+    /// </summary>
+    protected Task<ApiResult<T>> SendRequestAsync<T>(Func<HttpRequestMessage> create, string route, CancellationToken ct,
+        Action<HttpResponseMessage>? onSuccess = null, string? bearer = null) =>
+        SendAsync<T>(create, route, ct, sensitive: true, bearer: bearer, onSuccess: onSuccess);
+
     // Giống PostAsJsonAsync/PutAsJsonAsync: JsonContent mặc định dùng JsonSerializerDefaults.Web.
     private static HttpRequestMessage Json(HttpMethod method, string url, object body) =>
         new(method, url) { Content = JsonContent.Create(body) };
+
+    /// <summary>B29: request JSON cho service con dùng với <see cref="SendRequestAsync{T}"/>.</summary>
+    protected static HttpRequestMessage JsonRequest(HttpMethod method, string url, object body) => Json(method, url, body);
 
     /// <summary>
     /// B27: gửi một request đã dựng sẵn qua đúng phiên đăng nhập. Trả null (không gửi gì) khi client gắn phiên mà tab chưa
@@ -113,7 +125,8 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
         }
     }
 
-    private async Task<ApiResult<T>> SendAsync<T>(Func<HttpRequestMessage> create, string url, CancellationToken ct, bool delete = false, bool sensitive = false, string? bearer = null)
+    private async Task<ApiResult<T>> SendAsync<T>(Func<HttpRequestMessage> create, string url, CancellationToken ct, bool delete = false, bool sensitive = false, string? bearer = null,
+        Action<HttpResponseMessage>? onSuccess = null)
     {
         try
         {
@@ -124,6 +137,7 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
 
             if (response.IsSuccessStatusCode)
             {
+                onSuccess?.Invoke(response);
                 if (delete) return ApiResult<T>.Success((T)(object)true);
                 var data = await response.Content.ReadFromJsonAsync<T>(ct);
                 return data is null

@@ -14,17 +14,31 @@ namespace SmartCv.Web.Services;
 /// </summary>
 public sealed class AuthNavigator(AuthSession session, NavigationManager nav)
 {
+    /// <summary>
+    /// Đang tải lại trang (forceLoad): circuit này sắp bị bỏ, không chuyển trang / đăng xuất thêm lần nào nữa.
+    /// B29: chỉ bật cho lần chuyển có tải lại. Lần chuyển TRONG circuit (mở trang lần đầu khi chưa đăng nhập) không bật cờ này —
+    /// trước đây (B28) cờ bị giữ mãi nên sau khi đăng nhập trong cùng circuit, nút Đăng xuất / Đổi mật khẩu bị vô hiệu.
+    /// </summary>
     public bool IsLeaving { get; private set; }
 
     /// <summary>Tab không còn đăng nhập → /login (kèm ?returnUrl an toàn, ?expired=1 hoặc ?signedOut=1).</summary>
     public void ToLogin()
     {
         if (IsLeaving) return;
-        IsLeaving = true;
+        var forceLoad = session.HadSessionInCircuit;
+        // Chuyển trong circuit: nếu đã ở /login rồi (một nơi khác vừa chuyển) thì không chuyển lần hai.
+        if (!forceLoad && IsOnLogin()) return;
+        if (forceLoad) IsLeaving = true;
         var url = session.EndReason == AuthEndReason.SignedOut
             ? AuthText.LoginPath + "?signedOut=1"
             : AuthText.LoginUrl("/" + nav.ToBaseRelativePath(nav.Uri), expired: session.EndReason == AuthEndReason.Expired);
-        nav.NavigateTo(url, forceLoad: session.HadSessionInCircuit, replace: true);
+        nav.NavigateTo(url, forceLoad: forceLoad, replace: true);
+    }
+
+    private bool IsOnLogin()
+    {
+        var path = nav.ToBaseRelativePath(nav.Uri).Split('?', '#')[0].TrimEnd('/');
+        return path.Equals(AuthText.LoginPath, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Nút Đăng xuất (thanh trên cùng, menu di động, các màn hình chặn): xóa phiên rồi tải lại /login.</summary>

@@ -17,6 +17,11 @@
     {
         <a class="btn sc-btn-primary" href="">Về Tổng quan</a>
     }
+    else if (AccessRules.Level(AccessRules.Current(AuthState)) == AccessLevel.PasswordChangeRequired)
+    {
+        @* B29: đang dùng mật khẩu tạm — bước tiếp theo là đổi mật khẩu, không phải đăng nhập lại. *@
+        <a class="btn sc-btn-primary" href="@AuthText.ChangePasswordPath">Đổi mật khẩu</a>
+    }
     else
     {
         <a class="btn sc-btn-primary" href="login">Đăng nhập</a>

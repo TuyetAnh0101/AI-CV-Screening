@@ -6,6 +6,7 @@
 *@
 @using SmartCv.Core.Auth
 @inject AuthNavigator Navigator
+@inject NavigationManager Nav
 
 @if (AccessRules.FullName(user) is { } name)
 {
@@ -17,6 +18,10 @@
             <span class="role">@role</span>
         </span>
         <span class="visually-hidden">Đang đăng nhập: @name, @role.</span>
+        @* B29: đổi mật khẩu tự nguyện; quay lại trang đang mở sau khi đổi. *@
+        <button type="button" class="pw-change" @onclick="OpenChangePassword" disabled="@Navigator.IsLeaving" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14a5 5 0 1 1 4.6-7H22v4h-2v3h-3v-3h-5.4A5 5 0 0 1 7 14zm0-3a2 2 0 1 0 0-4a2 2 0 0 0 0 4z" /></svg>
+        </button>
         <button type="button" class="logout" @onclick="Navigator.SignOutAsync" disabled="@Navigator.IsLeaving" aria-label="Đăng xuất" title="Đăng xuất khỏi SCApp">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zm-.6 4.4L11 9l-2 2h8v2H9l2 2-1.6 1.6L4.8 12z" /></svg>
             <span>Đăng xuất</span>
@@ -30,4 +35,6 @@
     private System.Security.Claims.ClaimsPrincipal user = AccessRules.Nobody;
 
     protected override async Task OnParametersSetAsync() => user = await AccessRules.ResolveAsync(AuthState);
+
+    private void OpenChangePassword() => Nav.NavigateTo(AuthText.ChangePasswordUrl("/" + Nav.ToBaseRelativePath(Nav.Uri)));
 }

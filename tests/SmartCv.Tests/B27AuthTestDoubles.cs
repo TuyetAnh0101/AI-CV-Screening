@@ -50,6 +50,17 @@ internal sealed class B27FakeAuthApi : IAuthApi
         MeCalls.Enqueue(token);
         return Task.FromResult(Me(token));
     }
+
+    // B29: đổi mật khẩu (token, mật khẩu hiện tại, mật khẩu mới).
+    public Func<string, string, string, Task<ApiResult<ChangePasswordResponse>>> ChangePassword { get; set; } =
+        (_, _, _) => Task.FromResult(ApiResult<ChangePasswordResponse>.Failure("not configured", 500));
+    public ConcurrentQueue<(string Token, string Current, string New)> ChangeCalls { get; } = new();
+
+    public Task<ApiResult<ChangePasswordResponse>> ChangePasswordAsync(string token, string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        ChangeCalls.Enqueue((token, currentPassword, newPassword));
+        return ChangePassword(token, currentPassword, newPassword);
+    }
 }
 
 /// <summary>B27: máy chủ API giả — ghi lại mọi request (đường dẫn + header Authorization) và trả lời theo hàm cấu hình.</summary>

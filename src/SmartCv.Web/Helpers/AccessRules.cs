@@ -29,7 +29,9 @@ public enum AppPermission
     /// <summary>POST /api/prompts/assembled-preview (xem nội dung sẽ gửi Gemini).</summary>
     PreviewAssembledPrompt,
     /// <summary>POST /api/evaluation-sets (tạo bộ CV đánh giá). Thêm/bỏ hồ sơ, gán nhãn: HR cũng được.</summary>
-    CreateEvaluationSet
+    CreateEvaluationSet,
+    /// <summary>B29: cả nhóm /api/users (xem, tạo, sửa, khóa / mở khóa, đặt lại mật khẩu HR).</summary>
+    ManageUsers
 }
 
 /// <summary>
@@ -76,6 +78,7 @@ public static class AccessRules
         AppPermission.ManagePromptVersions => IsAdmin(user),
         AppPermission.PreviewAssembledPrompt => IsAdmin(user),
         AppPermission.CreateEvaluationSet => IsAdmin(user),
+        AppPermission.ManageUsers => IsAdmin(user),
         _ => false
     };
 
@@ -105,4 +108,8 @@ public static class AccessRules
     };
 
     public static string? FullName(ClaimsPrincipal? user) => user?.FindFirst(SmartCvClaims.Name)?.Value;
+
+    /// <summary>B29: mã tài khoản đang đăng nhập (claim "sub"); null nếu không có.</summary>
+    public static int? UserId(ClaimsPrincipal? user) =>
+        int.TryParse(user?.FindFirst(SmartCvClaims.UserId)?.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : null;
 }

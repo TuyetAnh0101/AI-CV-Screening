@@ -1,0 +1,20 @@
+/* B29 — xác nhận khóa / mở khóa / đặt lại mật khẩu. */
+.ua-target { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--sc-line-200); border-radius: var(--sc-radius-md); background: var(--sc-surface-50); }
+.ua-avatar { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: var(--sc-brand-100); color: var(--sc-brand-800); font-size: 13px; font-weight: 600; }
+.ua-who { display: grid; flex: 1 1 auto; min-width: 0; line-height: 1.35; }
+.ua-who strong { font-size: 14px; font-weight: 600; color: var(--sc-ink-900); overflow-wrap: anywhere; }
+.ua-who span { font-size: 12.5px; color: var(--sc-ink-500); overflow-wrap: anywhere; }
+.ua-role { flex-shrink: 0; padding: 2px 8px; border-radius: var(--sc-radius-pill); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.ua-role.role-admin { background: var(--sc-brand-800); color: #fff; }
+.ua-role.role-hr { background: var(--sc-cyan-50); color: var(--sc-cyan-600); border: 1px solid var(--sc-cyan-100); }
+
+.ua-effects { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 18px; font-size: 13.5px; line-height: 1.55; color: var(--sc-ink-700); }
+.ua-effects strong { color: var(--sc-ink-900); font-weight: 600; }
+
+.ua-alert { display: grid; gap: 10px; margin-top: 16px; padding: 12px 14px; border: 1px solid; border-radius: var(--sc-radius-md); font-size: 13.5px; line-height: 1.55; }
+.ua-alert p { margin: 0; }
+.ua-alert .btn { justify-self: start; min-height: 36px; font-size: 13px; }
+.ua-alert.is-danger { color: var(--sc-danger); background: var(--sc-danger-bg); border-color: var(--sc-danger-line); }
+.ua-alert.is-warning { color: var(--sc-warning); background: var(--sc-warning-bg); border-color: var(--sc-warning-line); }
+
+@media (max-width: 420px) { .ua-target { flex-wrap: wrap; } }

@@ -142,7 +142,7 @@ else
         await Session.EnsureRestoredAsync();
         if (Session.IsSignedIn)
         {
-            Nav.NavigateTo(AuthText.SafeReturnUrl(ReturnUrl), replace: true);
+            Nav.NavigateTo(NextUrl, replace: true);
             return;
         }
 
@@ -152,6 +152,9 @@ else
     }
 
     private void TogglePassword() => form.ShowPassword = !form.ShowPassword;
+
+    /// <summary>B29: tài khoản dùng mật khẩu tạm vào thẳng trang đổi mật khẩu (giữ trang muốn mở để quay lại sau).</summary>
+    private string NextUrl => Session.MustChangePassword ? AuthText.ChangePasswordUrl(ReturnUrl) : AuthText.SafeReturnUrl(ReturnUrl);
 
     private async Task SubmitAsync()
     {
@@ -163,7 +166,7 @@ else
         if (response is not null)
         {
             await Session.SignInAsync(response);
-            Nav.NavigateTo(AuthText.SafeReturnUrl(ReturnUrl), replace: true);
+            Nav.NavigateTo(NextUrl, replace: true);
             return;
         }
         if (form.IsRateLimited) StartRetryTimer();

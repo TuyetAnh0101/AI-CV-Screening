@@ -1,0 +1,39 @@
+/* B29 — form tạo / sửa tài khoản trong ModalShell (560px). Nhãn 13px, ô 42px, khoảng cách 16px. */
+.uf fieldset { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.uf-field { display: grid; gap: 6px; min-width: 0; }
+.uf-field > label, .uf-label { font-size: 13px; font-weight: 600; color: var(--sc-ink-700); }
+.uf-field .sc-input { width: 100%; min-height: 42px; font-size: 14px; }
+.uf-field .sc-input[aria-invalid="true"] { border-color: var(--sc-danger-line); box-shadow: 0 0 0 1px var(--sc-danger-line); }
+.uf-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--sc-ink-500); }
+.uf-hint.is-lock { color: var(--sc-ink-700); }
+.uf-error { margin: 0; font-size: 13px; line-height: 1.45; color: var(--sc-danger); }
+
+.uf-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.uf-role {
+    position: relative; display: grid; gap: 2px; padding: 10px 12px 10px 36px; min-height: 64px;
+    border: 1px solid var(--sc-line-300); border-radius: var(--sc-radius-md); background: var(--sc-surface-0); cursor: pointer;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+.uf-role input { position: absolute; left: 12px; top: 13px; width: 16px; height: 16px; margin: 0; accent-color: var(--sc-brand-700); }
+.uf-role-title { font-size: 13.5px; font-weight: 600; color: var(--sc-ink-900); }
+.uf-role-text { font-size: 12px; line-height: 1.45; color: var(--sc-ink-500); }
+.uf-role:hover { border-color: #a9c7c3; }
+.uf-role.on { border-color: var(--sc-brand-600); background: var(--sc-brand-50); box-shadow: 0 0 0 1px var(--sc-brand-600); }
+.uf-role:focus-within { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
+.uf-role.is-locked { cursor: not-allowed; opacity: .55; }
+
+.uf-confirm, .uf-switch { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--sc-radius-md); font-size: 13px; line-height: 1.5; color: var(--sc-ink-700); cursor: pointer; }
+.uf-confirm { background: var(--sc-warning-bg); border: 1px solid var(--sc-warning-line); }
+.uf-confirm.has-error { border-color: var(--sc-danger-line); }
+.uf-switch { padding: 0; }
+.uf-confirm input, .uf-switch input { flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--sc-brand-700); }
+.uf-switch strong, .uf-confirm strong { color: var(--sc-ink-900); font-weight: 600; }
+
+.uf-alert { display: grid; gap: 10px; margin-top: 16px; padding: 12px 14px; border: 1px solid; border-radius: var(--sc-radius-md); font-size: 13.5px; line-height: 1.55; }
+.uf-alert p { margin: 0; }
+.uf-alert .btn { justify-self: start; min-height: 36px; font-size: 13px; }
+.uf-alert.is-danger { color: var(--sc-danger); background: var(--sc-danger-bg); border-color: var(--sc-danger-line); }
+.uf-alert.is-warning { color: var(--sc-warning); background: var(--sc-warning-bg); border-color: var(--sc-warning-line); }
+
+@media (max-width: 480px) { .uf-roles { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .uf-role { transition: none; } }

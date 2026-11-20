@@ -39,6 +39,9 @@
                 <span class="nav-account-name">@name</span>
                 <span class="nav-account-role">@AccessRules.RoleName(user)</span>
             </span>
+            <a class="nav-account-key" href="@AuthText.ChangePasswordPath" @onclick="Collapse" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14a5 5 0 1 1 4.6-7H22v4h-2v3h-3v-3h-5.4A5 5 0 0 1 7 14zm0-3a2 2 0 1 0 0-4a2 2 0 0 0 0 4z" /></svg>
+            </a>
             <button type="button" class="nav-account-logout" @onclick="Navigator.SignOutAsync" disabled="@Navigator.IsLeaving">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zm-.6 4.4L11 9l-2 2h8v2H9l2 2-1.6 1.6L4.8 12z" /></svg>
                 <span>Đăng xuất</span>

@@ -1,0 +1,85 @@
+@*
+    B29: xác nhận Khóa / Mở khóa / Đặt lại mật khẩu (A30). Nêu rõ tài khoản đích và hậu quả; một lần bấm = một request
+    (Busy chặn bấm trùng); không tự gửi lại khi lỗi.
+*@
+@using SmartCv.Core.Auth
+
+<ModalShell Id="user-action" Eyebrow="@Eyebrow" Title="@Title" Busy="Model.Busy" Danger="@(Model.Dialog == UserDialogKind.Lock)"
+            FocusId="user-action-cancel" ReturnFocusId="@ReturnFocusId" FallbackFocusId="users-title" OnClose="OnClose">
+    <ChildContent>
+        @if (Model.Target is { } u)
+        {
+            <div class="ua-target">
+                <span class="ua-avatar" aria-hidden="true">@AuthText.Initials(u.FullName)</span>
+                <span class="ua-who"><strong>@u.FullName</strong><span>@u.Email</span></span>
+                <span class="ua-role @UserText.RoleCss(u.Role)">@UserText.Role(u.Role)</span>
+            </div>
+            <ul class="ua-effects">
+                @switch (Model.Dialog)
+                {
+                    case UserDialogKind.Lock:
+                        <li>Người này bị <strong>đăng xuất ngay</strong> khỏi mọi thiết bị và không đăng nhập được nữa.</li>
+                        <li>Dữ liệu, lịch sử quyết định và nhãn đã gán vẫn được giữ nguyên.</li>
+                        <li>Có thể mở khóa lại bất cứ lúc nào.</li>
+                        break;
+                    case UserDialogKind.Unlock:
+                        <li>Người này đăng nhập lại được bằng <strong>mật khẩu hiện có</strong>.</li>
+                        <li>Mật khẩu và yêu cầu đổi mật khẩu (nếu có) giữ nguyên — mở khóa không đặt lại mật khẩu.</li>
+                        break;
+                    case UserDialogKind.Reset:
+                        <li>Hệ thống tạo <strong>mật khẩu tạm mới</strong>; mật khẩu cũ hết hiệu lực ngay.</li>
+                        <li>Phiên đăng nhập hiện tại của người này <strong>kết thúc</strong>.</li>
+                        <li>Lần đăng nhập tới, người này phải đổi sang mật khẩu riêng.</li>
+                        <li>Mật khẩu tạm chỉ hiện <strong>một lần</strong> sau khi đặt lại — hãy chuẩn bị gửi riêng cho người này.</li>
+                        break;
+                }
+            </ul>
+        }
+        @if (Model.DialogError is { } error)
+        {
+            <div class="ua-alert @(Model.NeedsReload ? "is-warning" : "is-danger")" role="alert">
+                <p>@error</p>
+                @if (Model.NeedsReload)
+                {
+                    <button type="button" class="btn sc-btn-secondary" @onclick="ReloadAsync" disabled="@Model.Busy">Tải thông tin mới nhất</button>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button id="user-action-cancel" type="button" class="btn sc-btn-secondary" @onclick="OnClose" disabled="@Model.Busy">Hủy</button>
+        <button type="button" class="btn @(Model.Dialog == UserDialogKind.Lock ? "sc-btn-danger" : "sc-btn-primary")" @onclick="ConfirmAndNotifyAsync"
+                disabled="@(Model.Busy || Model.NeedsReload)" aria-busy="@(Model.Busy ? "true" : "false")">
+            @(Model.Busy ? "Đang thực hiện…" : Action)
+        </button>
+    </Footer>
+</ModalShell>
+
+@code {
+    [Parameter, EditorRequired] public UsersWorkspace Model { get; set; } = default!;
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Báo trang cha vẽ lại sau mỗi thao tác: trang cha quyết định hộp thoại nào đang mở (vd. Tạo → Mật khẩu tạm).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task ReloadAsync() { await Model.ReloadTargetAsync(); await OnChanged.InvokeAsync(); }
+
+    private string Eyebrow => Model.Dialog switch { UserDialogKind.Lock => "Khóa tài khoản", UserDialogKind.Unlock => "Mở khóa tài khoản", _ => "Đặt lại mật khẩu" };
+    private string Title => Model.Dialog switch
+    {
+        UserDialogKind.Lock => $"Khóa tài khoản {Model.Target?.FullName}?",
+        UserDialogKind.Unlock => $"Mở khóa tài khoản {Model.Target?.FullName}?",
+        _ => $"Đặt lại mật khẩu cho {Model.Target?.FullName}?"
+    };
+    private string Action => Model.Dialog switch { UserDialogKind.Lock => "Khóa tài khoản", UserDialogKind.Unlock => "Mở khóa", _ => "Đặt lại mật khẩu" };
+
+    private async Task ConfirmAndNotifyAsync() { await ConfirmAsync(); await OnChanged.InvokeAsync(); }
+
+    private Task ConfirmAsync() => Model.Dialog switch
+    {
+        UserDialogKind.Lock => Model.ConfirmLockAsync(),
+        UserDialogKind.Unlock => Model.ConfirmUnlockAsync(),
+        UserDialogKind.Reset => Model.ConfirmResetAsync(),
+        _ => Task.CompletedTask
+    };
+}

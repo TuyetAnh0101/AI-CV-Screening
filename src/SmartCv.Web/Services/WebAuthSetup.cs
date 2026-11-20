@@ -36,6 +36,7 @@ public static class WebAuthSetup
         services.AddScoped<ApiAuthenticationStateProvider>();
         services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<ApiAuthenticationStateProvider>());
         services.AddScoped<AuthNavigator>();
+        services.AddScoped<AccountNotice>();   // B29
         return services;
     }
 

@@ -183,4 +183,12 @@
     .nav-account-logout:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
     .nav-account-logout:focus-visible { outline: 2px solid var(--sc-sidebar-accent); outline-offset: 2px; }
     .nav-account-logout:disabled { opacity: .6; cursor: progress; }
+    /* B29: đổi mật khẩu trong khối tài khoản di động */
+    .nav-account-key {
+        display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0;
+        border: 1px solid rgba(255, 255, 255, .24); border-radius: var(--sc-radius-md); color: #fff;
+    }
+    .nav-account-key svg { width: 18px; height: 18px; fill: currentColor; }
+    .nav-account-key:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+    .nav-account-key:focus-visible { outline: 2px solid var(--sc-sidebar-accent); outline-offset: 2px; }
 }

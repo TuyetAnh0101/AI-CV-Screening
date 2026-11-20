@@ -1,0 +1,135 @@
+@*
+    B29: hộp thoại Tạo / Sửa tài khoản (A30). Kiểm tra bằng đúng UserRules của Core trước khi gửi; lỗi hiện dưới từng ô.
+    - Tạo: mặc định hệ thống tự tạo mật khẩu tạm (khuyến nghị). Chọn vai trò Admin phải đánh dấu xác nhận.
+    - Sửa: chỉ họ tên và vai trò (email là tên đăng nhập, không đổi được). Ô vai trò khóa khi sửa chính mình hoặc Admin cuối cùng.
+*@
+@using SmartCv.Core.Auth
+
+<ModalShell Id="user-form" Eyebrow="@(IsCreate ? "Tài khoản mới" : "Sửa tài khoản")" Title="@(IsCreate ? "Tạo tài khoản" : (Model.Target?.FullName ?? ""))"
+            Description="@(IsCreate ? "Người dùng nhận mật khẩu tạm từ bạn và phải đổi mật khẩu ở lần đăng nhập đầu tiên." : Model.Target?.Email)"
+            Busy="Model.Busy" FocusId="user-form-name" ReturnFocusId="@ReturnFocusId" FallbackFocusId="user-create-open" OnClose="OnClose">
+    <ChildContent>
+        <form id="user-form-body" class="uf" @onsubmit="SubmitAsync" @onsubmit:preventDefault novalidate>
+            <fieldset disabled="@(Model.Busy || Model.NeedsReload)">
+                <div class="uf-field">
+                    <label for="user-form-name">Họ và tên</label>
+                    <input id="user-form-name" class="sc-input" maxlength="@UserRules.MaxNameLength" autocomplete="off" placeholder="Ví dụ: Trần Thị Lan"
+                           value="@Model.FormName" @oninput="e => Model.FormName = e.Value?.ToString() ?? string.Empty"
+                           aria-invalid="@Invalid("fullName")" aria-describedby="@ErrorId("fullName")" />
+                    @Error("fullName")
+                </div>
+
+                @if (IsCreate)
+                {
+                    <div class="uf-field">
+                        <label for="user-form-email">Email đăng nhập</label>
+                        <input id="user-form-email" class="sc-input" type="email" maxlength="254" autocomplete="off" inputmode="email" spellcheck="false" placeholder="ten@congty.vn"
+                               value="@Model.FormEmail" @oninput="e => Model.FormEmail = e.Value?.ToString() ?? string.Empty"
+                               aria-invalid="@Invalid("email")" aria-describedby="@(ErrorId("email") ?? "user-form-email-hint")" />
+                        @if (Model.FieldErrors.ContainsKey("email")) { @Error("email") } else { <p id="user-form-email-hint" class="uf-hint">Email là tên đăng nhập và không đổi được sau khi tạo.</p> }
+                    </div>
+                }
+
+                <div class="uf-field">
+                    <span class="uf-label" id="user-form-role-label">Vai trò</span>
+                    <div class="uf-roles" role="radiogroup" aria-labelledby="user-form-role-label" aria-describedby="@(ErrorId("role") ?? (RoleLockedReason is null ? null : "user-form-role-locked"))">
+                        @foreach (var (value, title, text) in Roles)
+                        {
+                            var on = Model.FormRole == value;
+                            var locked = RoleLockedReason is not null && value != Model.Target?.Role;
+                            <label class="uf-role @(on ? "on" : null) @(locked ? "is-locked" : null)">
+                                <input type="radio" name="user-form-role" value="@value" checked="@on" disabled="@locked" @onchange="() => SelectRole(value)" />
+                                <span class="uf-role-title">@title</span>
+                                <span class="uf-role-text">@text</span>
+                            </label>
+                        }
+                    </div>
+                    @if (RoleLockedReason is { } why) { <p id="user-form-role-locked" class="uf-hint is-lock">@why</p> }
+                    @Error("role")
+                </div>
+
+                @if (Model.AdminConfirmationRequired)
+                {
+                    <label class="uf-confirm @(Model.FieldErrors.ContainsKey("confirmAdmin") ? "has-error" : null)">
+                        <input type="checkbox" checked="@Model.ConfirmAdmin" @onchange="e => Model.ConfirmAdmin = e.Value is true"
+                               aria-describedby="@ErrorId("confirmAdmin")" />
+                        <span>Tôi hiểu tài khoản <strong>Quản trị viên</strong> có toàn quyền: tạo / khóa tài khoản, sửa vị trí tuyển dụng và kích hoạt prompt.</span>
+                    </label>
+                    @Error("confirmAdmin")
+                }
+
+                @if (IsCreate)
+                {
+                    <div class="uf-field">
+                        <label class="uf-switch">
+                            <input type="checkbox" checked="@Model.GeneratePassword" @onchange="e => { Model.GeneratePassword = e.Value is true; Model.InitialPassword = string.Empty; }" />
+                            <span><strong>Tự tạo mật khẩu tạm</strong> (khuyến nghị) — mật khẩu ngẫu nhiên 12 ký tự, chỉ hiện một lần sau khi tạo.</span>
+                        </label>
+                        @if (!Model.GeneratePassword)
+                        {
+                            <PasswordInput Id="user-form-password" Label="Mật khẩu ban đầu" Autocomplete="new-password"
+                                           Value="@Model.InitialPassword" ValueChanged="v => Model.InitialPassword = v"
+                                           Show="Model.ShowInitialPassword" ShowChanged="v => Model.ShowInitialPassword = v"
+                                           Error="@(Model.FieldErrors.GetValueOrDefault("password"))"
+                                           Hint="Ít nhất 8 ký tự, có chữ và số, không trùng email. Người dùng vẫn phải đổi ở lần đăng nhập đầu." />
+                        }
+                    </div>
+                }
+            </fieldset>
+
+            @if (Model.DialogError is { } error)
+            {
+                <div class="uf-alert @(Model.NeedsReload ? "is-warning" : "is-danger")" role="alert">
+                    <p>@error</p>
+                    @if (Model.NeedsReload)
+                    {
+                        <button type="button" class="btn sc-btn-secondary" @onclick="ReloadAsync" disabled="@Model.Busy">Tải thông tin mới nhất</button>
+                    }
+                </div>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn sc-btn-secondary" @onclick="OnClose" disabled="@Model.Busy">Hủy</button>
+        <button type="submit" form="user-form-body" class="btn sc-btn-primary" disabled="@(Model.Busy || Model.NeedsReload)" aria-busy="@(Model.Busy ? "true" : "false")">
+            @(Model.Busy ? "Đang lưu…" : IsCreate ? "Tạo tài khoản" : "Lưu thay đổi")
+        </button>
+    </Footer>
+</ModalShell>
+
+@code {
+    private static readonly (string Value, string Title, string Text)[] Roles =
+    [
+        (UserRoles.Hr, "Nhân sự (HR)", "Tải CV, sàng lọc, gán nhãn, quyết định ứng viên."),
+        (UserRoles.Admin, "Quản trị viên", "Toàn quyền, gồm quản lý tài khoản và cấu hình AI."),
+    ];
+
+    [Parameter, EditorRequired] public UsersWorkspace Model { get; set; } = default!;
+    [Parameter] public int? Me { get; set; }
+    [Parameter] public string? ReturnFocusId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Báo trang cha vẽ lại sau mỗi thao tác: trang cha quyết định hộp thoại nào đang mở (vd. Tạo → Mật khẩu tạm).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task ReloadAsync() { await Model.ReloadTargetAsync(); await OnChanged.InvokeAsync(); }
+
+    private bool IsCreate => Model.Dialog == UserDialogKind.Create;
+
+    /// <summary>Lý do không đổi được vai trò (sửa chính mình / Admin cuối cùng); null = đổi được.</summary>
+    private string? RoleLockedReason => IsCreate || Model.Target is not { } t ? null
+        : UserText.RoleBlockedReason(t, t.Role == UserRoles.Admin ? UserRoles.Hr : UserRoles.Admin, Me, Model.ActiveAdmins);
+
+    private void SelectRole(string value) { Model.FormRole = value; Model.ConfirmAdmin = false; Model.FieldErrors.Remove("role"); }
+
+    private async Task SubmitAsync()
+    {
+        await (IsCreate ? Model.SubmitCreateAsync() : Model.SubmitEditAsync(Me));
+        await OnChanged.InvokeAsync();
+    }
+
+    private string Invalid(string key) => Model.FieldErrors.ContainsKey(key) ? "true" : "false";
+    private string? ErrorId(string key) => Model.FieldErrors.ContainsKey(key) ? $"user-form-{key}-error" : null;
+    private RenderFragment Error(string key) => Model.FieldErrors.GetValueOrDefault(key) is { } text
+        ? @<p class="uf-error" id="@($"user-form-{key}-error")">@text</p>
+        : _ => { };
+}

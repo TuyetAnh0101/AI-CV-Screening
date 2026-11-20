@@ -181,16 +181,16 @@ public class B27LoginUiTests
     }
 
     [Fact]
-    public async Task Must_change_password_account_sees_guidance_instead_of_failing_pages()
+    public async Task Must_change_password_account_is_sent_to_change_password_instead_of_failing_pages()
     {
+        // B29: hướng dẫn "liên hệ Admin" của B27/B28 được thay bằng trang đổi mật khẩu thật.
         var nav = new Nav("https://app.test/");
         using var sp = Services(await SignedIn("HR", mustChange: true), nav);
         var html = await Html<MainLayout>(sp, new() { ["Body"] = await DeniedBody(sp) });
-        Assert.Contains("Cần đổi mật khẩu trước khi tiếp tục", html);
-        Assert.Contains("Đăng xuất", html);
+        Assert.Contains("Đang mở trang đổi mật khẩu", html);
         Assert.DoesNotContain("DASHBOARD-DATA", html);
         Assert.DoesNotContain("main-navigation", html);
-        Assert.Empty(nav.Navigations);
+        Assert.Equal(("change-password", false, true), Assert.Single(nav.Navigations));
     }
 
     [Fact]
