@@ -26,6 +26,7 @@ public static class SmartCvApi
         api.MapPromptEndpoints();
         api.MapEvaluationSetEndpoints();
         api.MapPromptTestEndpoints();
+        api.MapUserEndpoints();
         return app;
     }
 }

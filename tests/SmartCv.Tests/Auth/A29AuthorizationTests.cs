@@ -31,7 +31,9 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         "DELETE /api/jobs/{id:int}/skills/{code}", "PUT /api/jobs/{id:int}/skills/{code}/aliases",
         "POST /api/prompts", "POST /api/prompts/assembled-preview", "POST /api/prompts/{id:int}/activate",
         "POST /api/evaluation-sets", "POST /api/cvs/{id:guid}/anonymize", "POST /api/retention/run",
-        "GET /api/health/database", "GET /api/health/gemini"
+        "GET /api/health/database", "GET /api/health/gemini",
+        "GET /api/users", "POST /api/users", "PUT /api/users/{id:int}",
+        "POST /api/users/{id:int}/lock", "POST /api/users/{id:int}/unlock", "POST /api/users/{id:int}/reset-password"
     ];
 
     private static string Path(RouteEndpoint endpoint) => "/" + endpoint.RoutePattern.RawText!.Trim('/');
@@ -101,7 +103,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         var auth = factory.Services.GetRequiredService<IAuthorizationService>();
         var options = factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
         Assert.NotNull(options.FallbackPolicy);
-        Assert.Equal(82, endpoints.Count);
+        Assert.Equal(89, endpoints.Count);
         var observedAdmin = new HashSet<string>();
         foreach (var endpoint in endpoints)
         {
@@ -127,7 +129,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             Assert.Equal(!adminOnly, hrAllowed);
             // A temporary password only reaches /api/auth/me; every business route is denied for Admin and HR alike.
             var mustChangeAllowed = (await auth.AuthorizeAsync(Principal(admin, mustChange: true), null, policy)).Succeeded;
-            Assert.Equal(route == "GET /api/auth/me", mustChangeAllowed);
+            Assert.Equal(route is "GET /api/auth/me" or "POST /api/auth/change-password", mustChangeAllowed);
             var hrStatus = "-";
             if (adminOnly)
             {
@@ -149,7 +151,8 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             Assert.Empty(await db.ApplicationFlags.ToListAsync());
             Assert.Empty(await db.CandidateDataRequests.ToListAsync());
         });
-        Assert.DoesNotContain(endpoints, e => Path(e).StartsWith("/api/users") || Path(e).Contains("change-password"));
+        Assert.Contains(endpoints, e => Path(e) == "/api/users");
+        Assert.Contains(endpoints, e => Path(e) == "/api/auth/change-password");
     }
 
     [Theory]

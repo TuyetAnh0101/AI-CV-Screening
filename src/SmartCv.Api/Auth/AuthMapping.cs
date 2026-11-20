@@ -11,4 +11,17 @@ public static class AuthMapping
         MustChangePassword = user.MustChangePassword,
         LastLoginAt = user.LastLoginAt is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : null
     };
+    public static UserDto ToDto(User user) => new()
+    {
+        UserId = user.UserId, Email = user.Email, FullName = user.FullName, Role = user.Role,
+        RoleName = SmartCv.Core.Auth.UserRoles.DisplayName(user.Role), IsActive = user.IsActive,
+        MustChangePassword = user.MustChangePassword, Version = Version(user),
+        CreatedAt = DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc),
+        LastLoginAt = user.LastLoginAt is { } last ? DateTime.SpecifyKind(last, DateTimeKind.Utc) : null
+    };
+
+    // A digest of the revision state is safe to expose as an opaque ETag. The stamp itself is never returned in UserDto.
+    public static string Version(User user) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new
+        { user.UserId, user.Email, user.FullName, user.Role, user.IsActive, user.MustChangePassword, user.SecurityStamp }))));
 }
