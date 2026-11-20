@@ -80,6 +80,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 var app = builder.Build();
+await app.WarnIfSchemaOutOfDateAsync();
 await app.SeedAdminAsync();
 
 if (app.Environment.IsDevelopment())

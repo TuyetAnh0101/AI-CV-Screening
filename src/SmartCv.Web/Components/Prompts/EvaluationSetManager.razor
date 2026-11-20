@@ -189,7 +189,7 @@
                             </ul>
                         }
                         <div class="sticky-actions">
-                            <label>Người thao tác<input aria-label="Người thêm hồ sơ" maxlength="100" @bind="actor" placeholder="HR - Họ tên" /></label>
+                            <p>Người thực hiện: <strong>@actor</strong></p>
                             <button id="add-members" type="button" class="btn sc-btn-primary" disabled="@(Busy || members.Selected.Count == 0)" @onclick="AddAsync">Thêm @members.Selected.Count hồ sơ vào bộ</button>
                         </div>
                     }
@@ -215,7 +215,7 @@
                                         <span>@Anonymity.FileName(m.FileName) · @m.JobTitle · Hồ sơ #@m.ApplicationId</span>
                                         @if (!m.IsReady) { <span class="chip chip-warn">@m.NotReadyReason</span> }
                                         <span class="member-links">
-                                            @if (m.IsReady && m.CvId != Guid.Empty) { <a href="@Api.EvaluationCvUrl(m.CvId)" target="_blank" rel="noopener">Xem CV gốc ↗</a> }
+                                            @if (m.IsReady && m.CvId != Guid.Empty) { <CvFileButton CvId="m.CvId" Text="Xem CV gốc" /> }
                                             @if (m.CvId != Guid.Empty && !m.IsAnonymized) { <button id="@($"text-{m.ApplicationId}")" type="button" class="link-btn" @onclick="() => textMember = m">Nội dung đã trích xuất</button> }
                                         </span>
                                     </div>
@@ -240,7 +240,7 @@
                             }
                         </ul>
                         <div class="sticky-actions">
-                            <label>Người gán nhãn<input aria-label="Người gán nhãn HR" maxlength="100" @bind="actor" placeholder="HR - Họ tên" /></label>
+                            <p>Người thực hiện: <strong>@actor</strong></p>
                             <span class="muted-line">@(members.DirtyCount == 0 ? "Không có thay đổi" : $"{members.DirtyCount} thay đổi chưa lưu")</span>
                             <button id="save-labels" type="button" class="btn sc-btn-primary" disabled="@(Busy || members.DirtyCount == 0)" @onclick="SaveAsync">Lưu nhãn HR</button>
                         </div>
@@ -254,7 +254,7 @@
 
 @if (textMember is { } shown)
 {
-    <ExtractedTextDialog @key="shown.ApplicationId" CvId="shown.CvId" FileName="@Anonymity.FileName(shown.FileName)" FileUrl="@Api.EvaluationCvUrl(shown.CvId)"
+    <ExtractedTextDialog @key="shown.ApplicationId" CvId="shown.CvId" FileName="@Anonymity.FileName(shown.FileName)"
                          ReturnFocusIds="@([$"text-{shown.ApplicationId}", "tab-labels"])" OnClose="() => textMember = null" />
 }
 

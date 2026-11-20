@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.55.0" />
     <!-- A5: test kiểm tra trùng trong database mà không cần SQL Server -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.14" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

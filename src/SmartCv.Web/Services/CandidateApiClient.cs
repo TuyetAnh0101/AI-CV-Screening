@@ -61,9 +61,9 @@ public sealed class CandidateApiClient(HttpClient http, ILogger<CandidateApiClie
     public Task<ApiResult<List<DataRequestDto>>> ListRequestsAsync(int candidateId, CancellationToken ct = default) =>
         GetPrivateAsync<List<DataRequestDto>>($"api/data-requests?candidateId={candidateId}", "Candidate data requests", ct);
 
-    /// <summary>Đường dẫn tải JSON (A43). Mở bằng thẻ &lt;a download&gt;; API ghi nhật ký mỗi lần tải.</summary>
-    public string ExportUrl(int id, string handledBy) =>
-        new Uri(Http.BaseAddress!, $"api/candidates/{id}/data-export?handledBy={Uri.EscapeDataString(handledBy.Trim())}").AbsoluteUri;
+    /// <summary>A43/B43: stream JSON qua đúng phiên. Backend lấy người xuất từ JWT, không có handledBy trong URL.</summary>
+    public Task<ApiResult<DownloadedFile>> ExportAsync(int id, CancellationToken ct = default) =>
+        GetFileAsync($"api/candidates/{id}/data-export", ct);
 
     private async Task<CandidateWriteResult<T>> WriteAsync<T>(HttpMethod method, string url, object body, string route, CancellationToken ct)
     {

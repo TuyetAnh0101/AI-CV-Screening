@@ -42,7 +42,7 @@ public static class ServiceCollectionExtensions
             clientBuilder.RedactLoggedHeaders(_ => true);
             // HttpClient's default logger includes the entire URI, including private search queries.
             // B29: tìm tài khoản theo email cũng là dữ liệu riêng tư.
-            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient))
+            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient) || typeof(TClient) == typeof(AuditApiClient))
                 clientBuilder.RemoveAllLoggers();
             if (authenticated)
             {
@@ -66,6 +66,7 @@ public static class ServiceCollectionExtensions
         // Mọi client nghiệp vụ dưới đây đều gửi kèm Bearer của tab đang dùng (A29 bắt buộc).
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
         Add<UserApiClient>(TimeSpan.FromSeconds(20)); // B29: quản lý tài khoản (A30, chỉ Admin)
+        Add<AuditApiClient>(TimeSpan.FromSeconds(20));
         Add<DashboardApiClient>(TimeSpan.FromSeconds(30)); // B19: A19 summary, read-only.
         Add<ApplicationApiClient>(TimeSpan.FromSeconds(30));
         Add<RunApiClient>(TimeSpan.FromSeconds(30));   // B6: tạo lượt phân tích, hỏi tiến độ
@@ -82,6 +83,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedSessionStorage>();
         services.AddScoped<HrActorState>();
+        services.AddScoped<FileDownloadService>();
         services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage>();
         services.AddScoped<AnonymityState>();
         services.AddScoped<CandidateHubState>(); // B24: từ khóa tìm người + phiên bản dữ liệu dùng chung giữa hai chế độ, chỉ trong phiên

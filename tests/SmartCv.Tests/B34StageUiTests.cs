@@ -72,8 +72,7 @@ public class B34StageUiTests
             };
             db.Add(run); await db.SaveChangesAsync(); runId = run.RunId;
         }
-        var actor = new HrActorState();
-        await actor.SetAsync("HR - Trần Thu Hà");
+        var actor = B43UiTestSupport.Actor("HR - Trần Thu Hà");
         using var services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView()).AddSingleton(actor).AddSingleton<IJSRuntime>(new NoJs())
             .AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance)).BuildServiceProvider();
         await using var renderer = new LiveRenderer(services);
@@ -102,14 +101,11 @@ public class B34StageUiTests
     }
 
     [Fact]
-    public async Task First_decision_asks_actor_then_next_decision_saves_immediately_with_versions()
+    public async Task Decisions_use_the_verified_session_without_an_actor_input_and_preserve_versions()
     {
         await using var env = await Environment.CreateAsync();
         await env.Renderer.Change("stage-select-1", "Shortlisted");
-        Assert.Contains("Tên của bạn", env.Renderer.Text);
-        Assert.Equal(0, env.Api.Writes);
-        await env.Renderer.Input("Tên HR thực hiện quyết định", "  HR Hà  ");
-        await env.Renderer.Click("Lưu quyết định");
+        Assert.DoesNotContain("Tên HR thực hiện quyết định", env.Renderer.Text);
         Assert.Equal(1, env.Api.Writes);
         Assert.Equal("HR Hà", env.Actor.Actor);
         Assert.Equal("New", env.Api.LastSingle!.ExpectedStage);
@@ -292,26 +288,26 @@ public class B34StageUiTests
     }
 
     [Fact]
-    public async Task Actor_can_be_changed_without_creating_a_decision()
+    public async Task Manual_actor_override_is_ignored_without_creating_a_decision()
     {
         await using var env = await Environment.CreateAsync(actor: "HR 1");
-        await env.Renderer.ClickId("change-hr");
-        await env.Renderer.Input("Tên HR thực hiện quyết định", "HR 2");
-        await env.Renderer.Click("Lưu tên HR");
-        Assert.Equal("HR 2", env.Actor.Actor);
+        await env.Actor.SetAsync("HR 2");
+        Assert.DoesNotContain("change-hr", env.Renderer.Attribute("id"));
+        Assert.Equal("HR 1", env.Actor.Actor);
         Assert.Equal(0, env.Api.Writes);
     }
 
     private sealed class Environment : IAsyncDisposable
     {
         public readonly FakeStageApi Api;
-        public readonly HrActorState Actor = new();
+        public readonly HrActorState Actor;
         private readonly ServiceProvider services;
         public readonly LiveRenderer Renderer;
         public int Refreshes;
         public bool RefreshFails;
-        private Environment(int count)
+        private Environment(int count, string name)
         {
+            Actor = B43UiTestSupport.Actor(name);
             Api = new(count);
             services = new ServiceCollection().AddSingleton(B36PrivacyTests.NormalView()).AddSingleton(Actor)
                 .AddSingleton(new ApplicationApiClient(new HttpClient(Api) { BaseAddress = new("https://api.test/") }, NullLogger<ApplicationApiClient>.Instance))
@@ -320,8 +316,7 @@ public class B34StageUiTests
         }
         public static async Task<Environment> CreateAsync(int count = 2, string? actor = null)
         {
-            var env = new Environment(count);
-            if (actor is not null) await env.Actor.SetAsync(actor);
+            var env = new Environment(count, actor ?? "HR Hà");
             await env.Renderer.Render(env.Api.Snapshot(), env.Refresh);
             return env;
         }

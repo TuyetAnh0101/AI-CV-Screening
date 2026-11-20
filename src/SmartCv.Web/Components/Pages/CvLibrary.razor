@@ -96,7 +96,7 @@
                             <td class="actions-cell"><div class="row-actions">
                                 @if (!cv.IsAnonymized)
                                 {
-                                    @if (!Anonymity.Enabled) { <a class="file-link" href="@CvApi.FileUrl(cv.CvId)" target="_blank" rel="noopener noreferrer">Xem file <span aria-hidden="true">↗</span><span class="visually-hidden"> (mở tab mới)</span></a> }
+                                    @if (!Anonymity.Enabled) { <CvFileButton CvId="cv.CvId" CssClass="btn sc-btn-ghost btn-sm" /> }
                                     <button id="attach-@CvLibraryText.ShortId(cv.CvId)" type="button" disabled="@Anonymity.Enabled" title="@(Anonymity.Enabled ? "Tắt chế độ Ẩn danh để xem file và gắn ứng viên" : null)" @onclick="() => OpenAttach(cv)">@(cv.CandidateId is null ? "Gắn ứng viên" : "Đổi ứng viên")</button>
                                 }
                                 else { <span class="subtle">Đã ẩn danh</span> }

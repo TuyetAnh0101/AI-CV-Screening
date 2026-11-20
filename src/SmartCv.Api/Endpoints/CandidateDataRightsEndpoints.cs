@@ -108,8 +108,11 @@ public static partial class CandidateEndpoints
         };
         var bytes = JsonSerializer.SerializeToUtf8Bytes(export, ExportJson);
         db.CandidateDataRequests.Add(log);
+        var audit = http.RequestServices.GetRequiredService<SmartCv.Api.Auditing.AuditTrail>();
+        audit.Stage(db, "candidates.export_access_granted", id.ToString(), outcome: "AccessGranted");
         await db.SaveChangesAsync(ct);
         await write.CommitAsync(ct);
+        audit.ConfirmCommitted();
 
         http.Response.Headers.XContentTypeOptions = "nosniff";
         return TypedResults.File(bytes, "application/json", $"du-lieu-ung-vien-{id}-{now:yyyyMMdd}.json");

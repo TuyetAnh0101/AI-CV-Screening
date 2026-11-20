@@ -81,6 +81,46 @@ public abstract class ApiClientBase(HttpClient http, ILogger logger)
     /// <summary>B29: request JSON cho service con dùng với <see cref="SendRequestAsync{T}"/>.</summary>
     protected static HttpRequestMessage JsonRequest(HttpMethod method, string url, object body) => Json(method, url, body);
 
+    /// <summary>Authenticated streaming download; the caller owns/disposes the returned response and stream.</summary>
+    protected async Task<ApiResult<DownloadedFile>> GetFileAsync(string url, CancellationToken ct = default)
+    {
+        HttpResponseMessage? response = null;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            response = await SendAuthorizedAsync(request, ct, HttpCompletionOption.ResponseHeadersRead);
+            if (response is null) return ApiResult<DownloadedFile>.LocalFailure(SignedOutMessage, ApiFailureKind.SignedOut, 401, AuthenticationRequiredCode);
+            if (!response.IsSuccessStatusCode)
+            {
+                var status = (int)response.StatusCode;
+                var (_, code, _) = await ReadErrorMessageAsync(response, ct);
+                var message = status switch
+                {
+                    401 => "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+                    403 => "Bạn không có quyền truy cập file này.",
+                    404 => "Không tìm thấy file trên máy chủ.",
+                    410 => "Dữ liệu đã được ẩn danh hóa; không thể xem hoặc tải file.",
+                    429 => "Đang tải quá nhiều lần. Vui lòng chờ rồi thử lại.",
+                    _ => "Máy chủ chưa cung cấp được file. Vui lòng thử lại."
+                };
+                return ApiResult<DownloadedFile>.Failure(message, status, code);
+            }
+            if (response.Content.Headers.ContentLength > DownloadedFile.MaxBytes)
+                return ApiResult<DownloadedFile>.Failure("File vượt giới hạn tải an toàn 64 MiB.", 413, "file_too_large");
+            var type = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var header = response.Content.Headers.ContentDisposition;
+            var rawName = (header?.FileNameStar ?? header?.FileName)?.Trim('"') ?? "tai-xuong";
+            var name = new string(rawName.Where(c => !char.IsControl(c) && c is not '/' and not '\\').Take(200).ToArray());
+            var stream = await response.Content.ReadAsStreamAsync(ct);
+            var file = new DownloadedFile(response, stream, type, string.IsNullOrWhiteSpace(name) ? "tai-xuong" : name, ct);
+            response = null; // Ownership transferred, never buffered by ReadAsByteArray/MemoryStream.
+            return ApiResult<DownloadedFile>.Success(file);
+        }
+        catch (HttpRequestException) { return ApiResult<DownloadedFile>.LocalFailure("Không kết nối được máy chủ file. Vui lòng thử lại.", ApiFailureKind.Network); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return ApiResult<DownloadedFile>.LocalFailure("Máy chủ file phản hồi quá lâu.", ApiFailureKind.Timeout); }
+        finally { response?.Dispose(); }
+    }
+
     /// <summary>
     /// B27: gửi một request đã dựng sẵn qua đúng phiên đăng nhập. Trả null (không gửi gì) khi client gắn phiên mà tab chưa
     /// đăng nhập. Dùng cho service con cần tự dựng request (đọc header, ghi có kiểm tra lỗi riêng).

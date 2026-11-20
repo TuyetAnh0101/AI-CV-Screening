@@ -1,0 +1,8 @@
+.sc-file-preview { width:min(1050px,94vw);height:90dvh;padding:0;border:1px solid #c5dfdb;border-radius:16px;background:#f7fbfa;color:#123d39;box-shadow:0 24px 90px #062c2860; }
+.sc-file-preview::backdrop { background:#062d2b99; }
+.sc-file-preview header { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-bottom:1px solid #d4e6e2; }
+.sc-file-preview strong { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px; }
+.sc-file-preview header a { margin-left:auto;flex-shrink:0;font-size:13px;color:#126759;text-decoration:none; }
+.sc-file-preview button { flex-shrink:0;border:1px solid #aacfc8;border-radius:8px;padding:6px 12px;background:#e5f4f0;color:#12594f;font:inherit;cursor:pointer; }
+.sc-file-preview :is(iframe,img) { display:block;width:100%;height:calc(100% - 59px);border:0;object-fit:contain; }
+.sc-file-preview button:focus-visible { outline:3px solid #26bdb2;outline-offset:2px; }

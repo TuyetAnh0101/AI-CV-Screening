@@ -47,7 +47,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="actions"><label class="actor">Người gán nhãn<input aria-label="Người lưu nhãn đề xuất" maxlength="100" @bind="State.Actor" @bind:event="oninput" placeholder="Nhập tên HR" /></label><button type="button" class="btn sc-btn-primary" disabled="@(!State.CanSave)" @onclick="SaveAsync">@(State.Saving ? "Đang lưu nhãn…" : $"Lưu {State.Draft.PickedCount} nhãn được chọn")</button></div>
+                <div class="actions"><p class="actor">Người thực hiện: <strong>@ActorState.DisplayName</strong></p><button type="button" class="btn sc-btn-primary" disabled="@(!State.CanSave)" @onclick="SaveAsync">@(State.Saving ? "Đang lưu nhãn…" : $"Lưu {State.Draft.PickedCount} nhãn được chọn")</button></div>
             </fieldset>
             @if (State.Draft.PickedConflicts > 0) { <p class="notice">Bạn đã chủ động chọn @State.Draft.PickedConflicts nhãn xung đột. Lưu sẽ cập nhật nhãn hiện tại của các hồ sơ đó.</p> }
             @if (LabelSuggestionSelection.ValidateActor(State.Actor) is { } actorError) { <p class="hint">@actorError</p> }
@@ -70,7 +70,7 @@
     {
         if (!firstRender) return;
         await ActorState.EnsureLoadedAsync();
-        if (string.IsNullOrWhiteSpace(State.Actor)) State.Actor = ActorState.Actor ?? "";
+        State.Actor = ActorState.Actor ?? "";
         StateHasChanged();
     }
     private async Task LoadAsync()
@@ -82,6 +82,7 @@
     private async Task SaveAsync()
     {
         if (Disabled) return;
+        State.Actor = ActorState.Actor ?? "";
         if (await State.SaveAsync())
         { await ActorState.SetAsync(State.Actor); await OnSaved.InvokeAsync(State.SetId); }
         await ChangedAsync();

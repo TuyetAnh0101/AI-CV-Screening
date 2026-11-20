@@ -13,7 +13,8 @@ namespace SmartCv.Api.Auth;
 
 /// <summary>Account writes revalidate the actor and the target under the same database-wide account lock.</summary>
 public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordinator coordinator,
-    IPasswordHasher<User> hasher, IMemoryCache cache, TimeProvider time, ILogger<UserAccountService> logger)
+    IPasswordHasher<User> hasher, IMemoryCache cache, TimeProvider time, ILogger<UserAccountService> logger,
+    SmartCv.Api.Auditing.AuditTrail audit)
 {
     public async Task<List<UserDto>> ListAsync(HttpContext http, CancellationToken ct)
     {
@@ -76,7 +77,10 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
         db.Users.Add(user);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException error) when (error.InnerException is SqlException { Number: 2601 or 2627 }) { throw Duplicate(); }
+        audit.Stage(db, "accounts.created", user.UserId.ToString(), principal);
+        await db.SaveChangesAsync(ct);
         await write.CommitAsync(ct);
+        audit.ConfirmCommitted();
         logger.LogInformation("Account action {Action} by user {ActorId} on user {TargetId} at {Utc}", "create", actor.UserId, user.UserId, time.GetUtcNow());
         return new() { User = AuthMapping.ToDto(user), TemporaryPassword = generated ? password : null };
     }
@@ -181,15 +185,31 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
                 db.Users.Attach(current);
                 foreach (var name in new[] { nameof(User.FullName), nameof(User.Role), nameof(User.IsActive), nameof(User.MustChangePassword), nameof(User.PasswordHash), nameof(User.SecurityStamp) })
                     db.Entry(current).Property(name).IsModified = true;
-                await db.SaveChangesAsync(ct);
             }
+            audit.Stage(db, ActionCode(action, role != current.Role), id.ToString(), principal);
+            await db.SaveChangesAsync(ct);
             await write.CommitAsync(ct);
+            audit.ConfirmCommitted();
             UserSessionValidator.Invalidate(cache, id);
             logger.LogInformation("Account action {Action} by user {ActorId} on user {TargetId} at {Utc}; role changed {RoleChanged}", action, actor.UserId, id, time.GetUtcNow(), role != current.Role);
         }
-        else await write.CommitAsync(ct);
+        else
+        {
+            audit.Stage(db, ActionCode(action, false), id.ToString(), principal, outcome: "NoChange");
+            await db.SaveChangesAsync(ct);
+            await write.CommitAsync(ct);
+            audit.ConfirmCommitted();
+        }
         return current;
     }
+
+    private static string ActionCode(string action, bool roleChanged) => action switch
+    {
+        "update" => roleChanged ? "accounts.role_changed" : "accounts.updated",
+        "lock" => "accounts.locked", "unlock" => "accounts.unlocked",
+        "reset-password" => "accounts.password_reset", "change-password" => "auth.password_changed",
+        _ => throw new ArgumentOutOfRangeException(nameof(action))
+    };
 
     private async Task<User> ActorAsync(ClaimsPrincipal principal, bool requireAdmin, CancellationToken ct)
     {

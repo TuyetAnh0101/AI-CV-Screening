@@ -275,6 +275,113 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.AuditEvent", b =>
+                {
+                    b.Property<long>("AuditEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("AuditEventId"));
+
+                    b.Property<string>("ActionCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<string>("ActorNameSnapshot")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ActorRoleSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("ActorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(80)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("SafeSummary")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("AuditEventId")
+                        .HasName("PK_AuditEvents");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("IX_AuditEvents_Request");
+
+                    b.HasIndex("ActionCode", "OccurredAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditEvents_Action_Time");
+
+                    b.HasIndex("ActorUserId", "OccurredAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditEvents_Actor_Time");
+
+                    b.HasIndex("OccurredAtUtc", "AuditEventId")
+                        .IsDescending()
+                        .HasDatabaseName("IX_AuditEvents_Time");
+
+                    b.HasIndex("Category", "Outcome", "OccurredAtUtc")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_AuditEvents_Category_Outcome_Time");
+
+                    b.HasIndex("ResourceType", "ResourceId", "OccurredAtUtc")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_AuditEvents_Resource_Time");
+
+                    b.ToTable("AuditEvents", null, t =>
+                        {
+                            t.HasTrigger("TR_AuditEvents_NoChange");
+
+                            t.HasCheckConstraint("CK_AuditEvents_Actor", "([ActorUserId] IS NULL AND [ActorNameSnapshot] IS NULL AND [ActorRoleSnapshot] IS NULL) OR ([ActorUserId] IS NOT NULL AND [ActorUserId] > 0 AND [ActorNameSnapshot] IS NOT NULL AND LEN([ActorNameSnapshot]) > 0 AND [ActorRoleSnapshot] IS NOT NULL AND [ActorRoleSnapshot] COLLATE Latin1_General_100_BIN2 IN (N'Admin',N'HR'))");
+
+                            t.HasCheckConstraint("CK_AuditEvents_Outcome", "[Outcome] COLLATE Latin1_General_100_BIN2 IN ('Succeeded','Denied','Failed','Partial','NoChange','AccessGranted')");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Candidate", b =>
                 {
                     b.Property<int>("CandidateId")
@@ -1638,6 +1745,15 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasConstraintName("FK_ApplicationFlagEvents_ApplicationFlags");
 
                     b.Navigation("Flag");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.AuditEvent", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_AuditEvents_Users");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Cv", b =>

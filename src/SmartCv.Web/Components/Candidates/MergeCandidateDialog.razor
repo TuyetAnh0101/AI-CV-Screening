@@ -6,6 +6,7 @@
 *@
 @implements IDisposable
 @inject CandidateApiClient Api
+@inject HrActorState ActorState
 
 <ModalShell Id="merge" Title="@(step == 1 ? "Xem và gộp ứng viên" : "Xác nhận gộp")" Eyebrow="Có thể là cùng một người" Wide="true"
             Description="@(step == 1 ? "So sánh hai hồ sơ và chọn hồ sơ được giữ lại. Chưa có gì thay đổi cho tới khi bạn xác nhận ở bước sau." : "Kiểm tra lại hậu quả. Thao tác này không hoàn tác được.")"
@@ -40,8 +41,7 @@
                 <li><b>Không thay đổi:</b> giai đoạn tuyển dụng, điểm và nhãn HR của từng hồ sơ ứng tuyển.</li>
                 <li><b>Không phải xóa dữ liệu theo yêu cầu ứng viên:</b> không ẩn danh hóa CV nào.</li>
             </ul>
-            <label class="c-label" for="merge-actor">Người thực hiện</label>
-            <input id="merge-actor" class="c-input" value="@actor" @oninput="e => actor = e.Value?.ToString() ?? string.Empty" maxlength="100" autocomplete="off" disabled="@busy" placeholder="HR - Họ tên" />
+            <p class="c-label">Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></p>
             <label class="c-check"><input id="merge-confirm" type="checkbox" checked="@confirmed" disabled="@busy" @onchange="e => confirmed = e.Value is true" /> Tôi đã kiểm tra: đây là cùng một người.</label>
         }
         @if (error is not null) { <p class="c-alert" role="alert">@error</p> }
@@ -74,11 +74,11 @@
                                           new(Other.CandidateId, Other.FullName, Other.Email, Other.PhoneNumber, Other.CvCount)];
     private readonly CancellationTokenSource lifetime = new();
     private int step = 1, keepId;
-    private string actor = "";
+    private string actor => ActorState.Actor ?? "";
     private string? error;
     private bool busy, confirmed, uncertain;
 
-    protected override void OnInitialized() { keepId = Current.CandidateId; actor = Actor ?? ""; }
+    protected override void OnInitialized() { keepId = Current.CandidateId; }
 
     private async Task MergeAsync()
     {

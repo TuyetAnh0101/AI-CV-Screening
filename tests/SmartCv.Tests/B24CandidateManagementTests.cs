@@ -216,7 +216,12 @@ public class B24CandidateManagementTests
         Assert.Contains("\"targetCandidateId\":1", ok.Writes.First().Body);
         Assert.Contains("\"confirm\":true", ok.Writes.Last().Body);
         Assert.Contains("\"note\":null", ok.Writes.Last().Body);
-        Assert.Equal("http://localhost/api/candidates/5/data-export?handledBy=HR%20%26%20Lan", client.ExportUrl(5, " HR & Lan "));
+        string? exportPath = null;
+        ok.Handle = (req, _) => { exportPath = req.RequestUri!.PathAndQuery; return Task.FromResult(Json(new { exported = true })); };
+        var export = await client.ExportAsync(5);
+        Assert.True(export.IsSuccess);
+        await export.Data!.DisposeAsync();
+        Assert.Equal("/api/candidates/5/data-export", exportPath); // B43: no actor or credential in the URL.
     }
 
     // ======================= Workspace: chống race, phân biệt đã xóa / không tồn tại =======================
@@ -267,7 +272,7 @@ public class B24CandidateManagementTests
     public async Task People_mode_lists_persons_links_details_and_never_hides_unattached_cvs()
     {
         var api = Standard();
-        using var sp = Services(api, new Nav("https://app.test/candidates"), Normal());
+        await using var sp = Services(api, new Nav("https://app.test/candidates"), Normal());
         await using var ui = new Ui(sp); await ui.Show<HubPage>();
         var html = await ui.Until(s => s.Contains("Trần Thị Bình"));
         Assert.Contains("/candidates/1", html);
@@ -284,7 +289,7 @@ public class B24CandidateManagementTests
     public async Task Anonymous_mode_keeps_names_emails_and_phones_out_of_the_page()
     {
         var api = Standard();
-        using var sp = Services(api, new Nav("https://app.test/candidates"), new AnonymityState());   // mặc định che tới khi đọc xong lựa chọn
+        await using var sp = Services(api, new Nav("https://app.test/candidates"), new AnonymityState());   // mặc định che tới khi đọc xong lựa chọn
         await using var ui = new Ui(sp); await ui.Show<HubPage>();
         var html = await ui.Until(s => s.Contains("Ứng viên #2"));
         foreach (var secret in new[] { "Nguyễn Văn An", "Trần Thị Bình", "thu@example.com", "0912", "NA" }) Assert.DoesNotContain(secret, html);
@@ -296,7 +301,7 @@ public class B24CandidateManagementTests
     {
         var api = Standard();
         var nav = new Nav("https://app.test/candidates");
-        using var sp = Services(api, nav, Normal());
+        await using var sp = Services(api, nav, Normal());
         await using var ui = new Ui(sp); await ui.Show<HubPage>();
         await ui.Until(s => s.Contains("Trần Thị Bình"));
         await ui.Go(nav, "/candidates?view=cvs");
@@ -316,7 +321,7 @@ public class B24CandidateManagementTests
     {
         var api = Standard();
         var nav = new Nav("https://app.test/candidates?page=2");
-        using var sp = Services(api, nav, Normal());
+        await using var sp = Services(api, nav, Normal());
         await using var ui = new Ui(sp); await ui.Show<HubPage>();
         await ui.Until(s => s.Contains("Trang 2/2"));
         var firstKey = ui.Input("people-search", "N");        // gõ tiếp trước khi hết 400 ms, như người dùng thật
@@ -333,7 +338,7 @@ public class B24CandidateManagementTests
     public async Task Legacy_cvs_route_redirects_with_filters_and_replaces_history()
     {
         var nav = new Nav("https://app.test/cvs?stage=Rejected&page=3");
-        using var sp = Services(Standard(), nav, Normal());
+        await using var sp = Services(Standard(), nav, Normal());
         await using var ui = new Ui(sp); await ui.Show<RedirectPage>();
         Assert.Equal("https://app.test/candidates?view=cvs&stage=Rejected&page=3", nav.Uri);
         Assert.True(nav.LastReplace);
@@ -343,7 +348,7 @@ public class B24CandidateManagementTests
     public async Task Detail_groups_applications_by_cv_with_per_application_scores_timeline_and_duplicates()
     {
         var api = Standard();
-        using var sp = Services(api, new Nav("https://app.test/candidates/1"), Normal());
+        await using var sp = Services(api, new Nav("https://app.test/candidates/1"), Normal());
         await using var ui = new Ui(sp); await ui.Show<DetailPage>(new() { ["Id"] = 1 });
         var html = await ui.Until(s => s.Contains("Nguyễn Văn An"));
         Assert.Contains("2 CV", html); Assert.Contains("3 hồ sơ ứng tuyển", html);
@@ -352,7 +357,9 @@ public class B24CandidateManagementTests
         Assert.Contains("điểm lần ứng tuyển này", html);                                 // điểm gắn với từng lần ứng tuyển
         Assert.DoesNotContain("Điểm của ứng viên", html);
         Assert.Contains("Có thể là cùng một người", html); Assert.Contains("Người Trùng", html);
-        Assert.Contains("api/cvs/" + CvA + "/file", html);
+        Assert.Contains("Xem file", html);
+        Assert.Contains("Tải về", html);
+        Assert.DoesNotContain("api/cvs/" + CvA + "/file", html); // B43: no unauthenticated API href in HTML.
         Assert.DoesNotContain("api/cvs/" + CvB + "/file", html);               // CV đã ẩn danh hóa: không mở file
         Assert.Contains("Đã gửi email", html);                                 // nhật ký yêu cầu
         Assert.Contains("HR - Lan", html);                                     // dòng thời gian mở sẵn cho hồ sơ mới nhất
@@ -361,7 +368,7 @@ public class B24CandidateManagementTests
     [Fact]
     public async Task Detail_in_anonymous_mode_hides_identity_and_locks_identity_actions()
     {
-        using var sp = Services(Standard(), new Nav("https://app.test/candidates/1"), new AnonymityState());
+        await using var sp = Services(Standard(), new Nav("https://app.test/candidates/1"), new AnonymityState());
         await using var ui = new Ui(sp); await ui.Show<DetailPage>(new() { ["Id"] = 1 });
         var html = await ui.Until(s => s.Contains("Ứng viên #1"));
         foreach (var secret in new[] { "Nguyễn Văn An", "thu@example.com", "0912", "cv-moi.pdf", "Người Trùng", "Đã gửi email", "HR - Lan" })
@@ -373,7 +380,7 @@ public class B24CandidateManagementTests
     [Fact]
     public async Task Detail_after_erase_or_for_missing_person_shows_the_right_state()
     {
-        using var sp = Services(Standard(), new Nav("https://app.test/candidates/5"), Normal());
+        await using var sp = Services(Standard(), new Nav("https://app.test/candidates/5"), Normal());
         await using var ui = new Ui(sp); await ui.Show<DetailPage>(new() { ["Id"] = 5 });
         var html = await ui.Until(s => s.Contains("đã được xóa"));
         Assert.Contains("Nhật ký yêu cầu", html); Assert.Contains("Theo yêu cầu ứng viên", html);
@@ -386,7 +393,7 @@ public class B24CandidateManagementTests
     {
         var api = Standard();
         CandidateDto? saved = null;
-        using var sp = Services(api, new Nav(), Normal());
+        await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp);
         await ui.Show<EditorDialog>(new() { ["OnSaved"] = EventCallback.Factory.Create<CandidateDto>(this, c => saved = c) });
         await ui.Click("editor-save");
@@ -409,7 +416,7 @@ public class B24CandidateManagementTests
     {
         var api = Standard();
         api.Handle = (req, _) => req.Method == HttpMethod.Post ? throw new HttpRequestException("lost") : Task.FromResult(Json(new { }, 404));
-        using var sp = Services(api, new Nav(), Normal());
+        await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp); await ui.Show<EditorDialog>();
         await ui.Input("editor-name", "Người Mới"); await ui.Input("editor-phone", "0912 345 678");
         await ui.Click("editor-save");
@@ -424,7 +431,7 @@ public class B24CandidateManagementTests
         var api = Standard();
         api.MergeStatus = 409;
         string? uncertain = null;
-        using var sp = Services(api, new Nav(), Normal());
+        await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp);
         await ui.Show<MergeDialog>(new()
         {
@@ -445,19 +452,19 @@ public class B24CandidateManagementTests
     }
 
     [Fact]
-    public async Task Erase_requires_handler_then_keyword_before_one_confirmed_request()
+    public async Task Erase_uses_the_verified_actor_and_requires_keyword_before_one_confirmed_request()
     {
         var api = Standard();
         EraseCandidateResultDto? done = null;
-        using var sp = Services(api, new Nav(), Normal());
+        await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp);
         await ui.Show<EraseDialog>(new() { ["Candidate"] = Detail(), ["OnErased"] = EventCallback.Factory.Create<EraseCandidateResultDto>(this, r => done = r) });
         var step1 = await ui.All();
         Assert.Contains("Ẩn danh hóa 1 CV", step1); Assert.Contains("Rút 2 hồ sơ", step1);
+        Assert.Contains("HR - Lan", step1);
+        Assert.DoesNotContain("erase-handled-by", step1);
         await ui.Click("erase-next");
-        Assert.Contains("Bước 1/2", await ui.All());                           // thiếu người xử lý → chưa sang bước 2
-        await ui.Input("erase-handled-by", "HR - Lan");
-        await ui.Click("erase-next");
+        Assert.Contains("Bước 2/2", await ui.All());
         await ui.Input("erase-keyword", "XO");
         await ui.Click("erase-submit");
         Assert.Empty(api.Writes);
@@ -543,7 +550,8 @@ public class B24CandidateManagementTests
         var services = new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav).AddSingleton(anonymity)
             .AddSingleton(new CvApiClient(new(api) { BaseAddress = new("http://localhost/") }, Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance))
             .AddSingleton(new JobApiClient(new(api) { BaseAddress = new("http://localhost/") }, NullLogger<JobApiClient>.Instance))
-            .AddSingleton(Candidates(api)).AddSingleton(new CandidateHubState()).AddSingleton(new HrActorState())
+            .AddSingleton(Candidates(api)).AddSingleton(new CandidateHubState()).AddSingleton(B43UiTestSupport.Actor())
+            .AddSingleton(B43UiTestSupport.Session()).AddSingleton<FileDownloadService>()
             .AddSingleton<IJSRuntime>(new Js());
         services.AddSupplyValueFromQueryProvider();
         return services.BuildServiceProvider();

@@ -218,7 +218,7 @@
             }
         </div>
 
-        <div class="ranking-foot" aria-live="polite"><span>Hiển thị @rows.Count/@Items.Count CV</span><span>Người thao tác: <strong>@(ActorState.Actor ?? "Chưa nhập tên HR")</strong> <button id="change-hr" type="button" class="actor-edit" disabled="@TableLocked" @onclick="() => editingActor = true">Đổi tên</button></span></div>
+        <div class="ranking-foot" aria-live="polite"><span>Hiển thị @rows.Count/@Items.Count CV</span><span>Người thực hiện: <strong>@(ActorState.DisplayName ?? "Chưa có phiên hợp lệ")</strong></span></div>
         @if (ActorState.StorageWarning is { } storageWarning) { <p class="actor-warning" role="status">@storageWarning</p> }
     }
 </section>
@@ -238,10 +238,6 @@
 @if (pending is not null && showDecisionDialog)
 {
     <StageDialog ToStage="@pending.ToStage" Title="@DialogTitle" Actor="@ActorState.Actor" InitialReason="@DialogReason" Busy="busy" OnConfirm="ConfirmDecisionAsync" OnCancel="CancelPendingAsync" />
-}
-@if (editingActor)
-{
-    <StageDialog Title="Tên người thực hiện quyết định" ActorOnly="true" Actor="@ActorState.Actor" OnConfirm="SaveActorAsync" OnCancel="() => editingActor = false" />
 }
 
 @code {
