@@ -174,7 +174,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         using var response = await http.GetAsync("/api/jobs");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal("authentication_required", (await Json(response)).GetProperty("code").GetString());
-        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/health")).StatusCode);
+        await TestSupport.AssertHealthResponseAsync(await http.GetAsync("/api/health"));
     }
 
     private static string MalformedToken(User user, string kind)
@@ -312,7 +312,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         using var response = await http.GetAsync("/api/jobs");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.DoesNotContain("SYNTHETIC_PRIVATE_SQL_ERROR", await response.Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/health")).StatusCode);
+        await TestSupport.AssertHealthResponseAsync(await http.GetAsync("/api/health"));
     }
 
     [Fact]

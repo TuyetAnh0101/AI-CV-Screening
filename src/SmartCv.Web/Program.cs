@@ -2,6 +2,7 @@ using SmartCv.Web.Services;
 using SmartCv.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSmartCvWebProduction(builder.Configuration, builder.Environment);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

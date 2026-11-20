@@ -143,7 +143,7 @@ public class JobCrudEndpointTests
     public async Task Closed_gate_preserves_public_GET_health_and_hides_internal_stats_and_write_routes(string environment)
     {
         using var factory = Factory(environment, false); await SeedAsync(factory); using var client = factory.CreateClient();
-        using var health = await client.GetAsync("/api/health"); Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        using var health = await client.GetAsync("/api/health"); await TestSupport.AssertHealthResponseAsync(health);
         using var jobs = await client.GetAsync("/api/jobs"); Assert.Equal(HttpStatusCode.OK, jobs.StatusCode);
         var raw = await jobs.Content.ReadAsStringAsync();
         Assert.DoesNotContain("applicationCount", raw); Assert.DoesNotContain("hasEvaluations", raw); Assert.DoesNotContain("stageCounts", raw);

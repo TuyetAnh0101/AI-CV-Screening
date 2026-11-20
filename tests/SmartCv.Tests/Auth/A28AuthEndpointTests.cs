@@ -273,7 +273,7 @@ public class A28AuthEndpointTests
         using var http = factory.CreateClient(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password());
         http.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(user));
         using var me = await http.GetAsync("/api/auth/me"); Assert.Equal(HttpStatusCode.ServiceUnavailable, me.StatusCode);
-        using var health = await http.GetAsync("/api/health"); Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        using var health = await http.GetAsync("/api/health"); await TestSupport.AssertHealthResponseAsync(health);
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public class A28AuthEndpointTests
         using var secondUpload = await http.PostAsync("/api/cvs/upload", new MultipartFormDataContent());
         Assert.Equal(HttpStatusCode.TooManyRequests, secondUpload.StatusCode);
         Assert.Contains("tải CV", await secondUpload.Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/health")).StatusCode);
+        await TestSupport.AssertHealthResponseAsync(await http.GetAsync("/api/health"));
     }
 
     [Fact]

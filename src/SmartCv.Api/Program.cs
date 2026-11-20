@@ -6,6 +6,7 @@ using SmartCv.Api.Background;
 using SmartCv.Api.Auth;
 using SmartCv.Api.Endpoints;
 using SmartCv.Api.Middleware;
+using SmartCv.Api.Ops;
 using SmartCv.Core.Ai;
 using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
@@ -14,9 +15,10 @@ using SmartCv.Infrastructure;
 using SmartCv.Infrastructure.Privacy;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddOperationalLogging();
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+if (builder.Environment.IsDevelopment()) builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -33,6 +35,7 @@ builder.Services.AddScoped<CvAnonymizer>();
 builder.Services.AddScoped<SmartCv.Infrastructure.Candidates.CandidateErasureService>();
 builder.Services.AddScoped<RetentionProcessor>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<SmartCv.Infrastructure.Ops.ApplicationReadiness>();
 builder.Services.AddHostedService<RetentionWorker>();
 
 // A4: giới hạn tần suất cho API tải CV (mục "CvUpload:Endpoint" trong appsettings).
@@ -82,6 +85,8 @@ builder.Services.AddSingleton(sp =>
 });
 
 var app = builder.Build();
+// Validate the completed configuration (including host-provided providers) before any database/seed access.
+ProductionSetup.ValidateRequiredSettings(app.Configuration, app.Environment);
 await app.WarnIfSchemaOutOfDateAsync();
 await app.SeedAdminAsync();
 
@@ -89,8 +94,33 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi().AllowAnonymous();
 }
+app.UseOperationalRequestLogging();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler(handler =>
+    {
+        // Exception handling clears response headers; apply the same HSTS policy to the error branch.
+        handler.UseHsts();
+        handler.Run(http =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.Problem(statusCode: 500, title: "Lỗi máy chủ. Vui lòng thử lại hoặc báo quản trị kèm mã truy vết.",
+                extensions: new Dictionary<string, object?> { ["code"] = "server_error", ["requestId"] = http.TraceIdentifier }).ExecuteAsync(http);
+        });
+    });
+    app.UseHsts();
+}
 
 app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    // Disabled documentation stays 404 even though the fallback policy protects unmatched routes.
+    app.Use(async (http, next) =>
+    {
+        if (http.Request.Path.StartsWithSegments("/openapi")) { http.Response.StatusCode = 404; return; }
+        await next(http);
+    });
+}
 app.UseSmartCvAuth();
 
 app.UseMiddleware<SqlReadCancellationMiddleware>();

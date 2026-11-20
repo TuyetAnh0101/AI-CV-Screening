@@ -10,7 +10,7 @@ namespace SmartCv.Infrastructure.Storage;
 /// và không bị lỗi với tên chứa ký tự lạ hoặc đường dẫn giả mạo kiểu "../../".
 /// Thư mục nằm ngoài wwwroot nên không truy cập trực tiếp được qua web; chỉ đọc qua GET /api/cvs/{id}/file.
 /// </summary>
-public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage
+public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage, ICvStorageProbe
 {
     private readonly string _contentRoot;   // thư mục gốc của Api, ví dụ D:\Projects\SmartCv\src\SmartCv.Api
     private readonly string _storageRoot;   // tương đối, ví dụ "Uploads/CV"
@@ -20,9 +20,27 @@ public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage
     {
         _logger = logger ?? NullLogger<LocalCvFileStorage>.Instance;
         _contentRoot = Path.GetFullPath(contentRoot);
+        if (Path.IsPathRooted(storageRoot) || storageRoot.Contains(':'))
+            throw new ArgumentException("Thư mục lưu CV phải là đường dẫn tương đối hợp lệ.", nameof(storageRoot));
         _storageRoot = storageRoot.Replace('\\', '/').Trim('/');
         if (string.IsNullOrEmpty(_storageRoot) || _storageRoot.Split('/').Any(part => part is "." or ".."))
             throw new ArgumentException($"Thư mục lưu CV không hợp lệ: \"{storageRoot}\".", nameof(storageRoot));
+    }
+
+    public async Task CheckWritableAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var directory = Path.GetFullPath(Path.Combine(_contentRoot, _storageRoot));
+        Directory.CreateDirectory(directory);
+        // DeleteOnClose only deletes this new, random marker, including when the write is cancelled.
+        await using var probe = new FileStream(Path.Combine(directory, ".health-" + Guid.NewGuid().ToString("N")),
+            FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+        await probe.WriteAsync(new byte[] { 1 }, cancellationToken);
+        await probe.FlushAsync(cancellationToken);
+        probe.Position = 0;
+        var content = new byte[1];
+        if (await probe.ReadAsync(content, cancellationToken) != 1 || content[0] != 1)
+            throw new IOException("Không đọc lại được dữ liệu kiểm tra kho CV.");
     }
 
     public async Task<string> SaveAsync(Guid cvId, string extension, Stream content, DateTime uploadedAtUtc, CancellationToken cancellationToken = default)

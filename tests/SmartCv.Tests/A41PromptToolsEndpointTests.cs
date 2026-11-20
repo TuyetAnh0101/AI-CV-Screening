@@ -779,20 +779,20 @@ public class A41PromptToolsEndpointTests
     }
 
     // =====================================================================================
-    // Bảo vệ: chỉ Development + CvUpload:Endpoint:Enabled, giữ rate limiter A10, giới hạn body
+    // A29/A44: môi trường thật dùng JWT + chốt nghiệp vụ; giữ rate limiter A10 và giới hạn body.
     // =====================================================================================
 
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]
-    public async Task Prompt_tools_do_not_exist_outside_development(string environment)
+    public async Task Prompt_tools_require_authentication_outside_development_when_business_gate_is_enabled(string environment)
     {
-        using var factory = TestSupport.ApiFactory(environment);
+        using var factory = TestSupport.ApiFactory(environment, new() { ["CvUpload:Endpoint:Enabled"] = "true" }, authenticated: false);
         using var client = factory.CreateClient();
 
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/applications/ai-preview/quota")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync("/api/prompts/assembled-preview", new { applicationId = 1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync("/api/applications/1/ai-preview", new { systemPrompt = "x" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/applications/ai-preview/quota")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/prompts/assembled-preview", new { applicationId = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/applications/1/ai-preview", new { systemPrompt = "x" })).StatusCode);
     }
 
     [Fact]

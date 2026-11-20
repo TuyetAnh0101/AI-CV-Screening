@@ -1,8 +1,8 @@
-@* Huy hiệu trên thanh trên cùng: cho biết giao diện có kết nối được API không. Bấm vào để kiểm tra lại. *@
+@* A44: trạng thái sẵn sàng, bao gồm các phụ thuộc của API. Bấm để kiểm tra lại. *@
 @inject HealthApiClient HealthApi
 
 <button type="button" class="api-status @CssClass" @onclick="CheckAsync" disabled="@checking"
-        title="Bấm để kiểm tra lại kết nối API">
+        title="Bấm để kiểm tra lại khả năng sẵn sàng của API">
     <span class="dot"></span>
     @Text
 </button>
@@ -13,7 +13,7 @@
 
     private string CssClass => online switch { true => "online", false => "offline", _ => "checking" };
     private string Text => checking || online is null ? "Đang kiểm tra..."
-                         : online == true ? "Đã kết nối API" : "Mất kết nối API";
+                         : online == true ? "API sẵn sàng" : "API chưa sẵn sàng";
 
     protected override Task OnInitializedAsync() => CheckAsync();
 
