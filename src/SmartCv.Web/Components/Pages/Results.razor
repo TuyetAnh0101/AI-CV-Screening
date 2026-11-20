@@ -142,7 +142,7 @@
                 </button>
             </section>
 
-            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" StageFilter="@StageQuery" OnStageFilterChanged="StageChanged" />
+            <RankingTable @key="(ranking.RunId, ranking.JobId)" ProgressItems="progressItems" Items="ranking.Items" FlaggedCount="ranking.FlaggedCount" PassThreshold="ranking.PassThreshold" Loading="state == ViewState.Loading" RunId="ranking.RunId" JobId="ranking.JobId" RunStatus="@CurrentStatus" JobTitle="@ranking.JobTitle" ReloadStages="ReloadStagesAsync" OnInteractionChanged="StageInteractionChanged" FlaggedFilter="FlaggedQuery" OnFlaggedFilterChanged="FlaggedChanged" StageFilter="@StageQuery" OnStageFilterChanged="StageChanged" />
             break;
 
         case ViewState.NoRuns:

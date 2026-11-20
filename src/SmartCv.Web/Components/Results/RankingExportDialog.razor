@@ -1,0 +1,130 @@
+@implements IDisposable
+@inject ExportApiClient ExportApi
+@inject FileDownloadService Files
+@inject AuthSession Session
+
+<ModalShell Id="ranking-export" Title="Xuất kết quả" Eyebrow="BÁO CÁO TUYỂN DỤNG" Description="Chọn phạm vi và kiểm tra số hồ sơ trước khi tải." Busy="downloading" FocusId="export-scope" ReturnFocusId="ranking-export-open" FallbackFocusId="ranking-title" OnClose="CloseAsync">
+    <ChildContent>
+        <div class="export-context"><strong>@Context.JobTitle</strong><span>Vị trí #@Context.JobId · Lượt phân tích #@Context.RunId</span></div>
+        <fieldset class="export-options" disabled="@(checking || downloading)">
+            <label class="export-field" for="export-scope"><span>Phạm vi</span>
+                <select id="export-scope" class="sc-select" value="@scope" @onchange="ScopeChangedAsync">
+                    <option value="@RankingExportScope.Shortlisted">Qua vòng CV</option><option value="@RankingExportScope.All">Tất cả hồ sơ</option><option value="@RankingExportScope.Current">Theo bộ lọc hiện tại</option>
+                </select>
+            </label>
+            <p class="export-help">@(scope == RankingExportScope.Shortlisted ? "Hồ sơ đã được HR chuyển sang Qua vòng CV, không phải dự đoán Đạt của AI." : scope == RankingExportScope.All ? "Toàn bộ hồ sơ trong vị trí và lượt chấm này; bỏ qua bộ lọc của bảng." : "Giữ tìm kiếm, dự đoán AI, giai đoạn, Cần xem kỹ và Cờ HR đang áp dụng trên bảng.")</p>
+            <div class="export-field"><span id="export-format-label">Định dạng</span><div class="export-formats" role="radiogroup" aria-labelledby="export-format-label">
+                <label class="format-option selected"><input type="radio" name="export-format" checked value="xlsx" />Excel <small>.xlsx</small></label>
+                <label class="format-option unavailable"><input type="radio" name="export-format" disabled value="pdf" />PDF <small>Chưa hỗ trợ</small></label>
+            </div></div>
+            <label class="export-privacy"><input id="export-anonymous" type="checkbox" checked="@anonymous" @onchange="AnonymousChangedAsync" /><span>Ẩn danh ứng viên<small>@(anonymous ? "Dùng bí danh; không xuất tên và tên file CV." : "File sẽ chứa thông tin nhận diện ứng viên. Cân nhắc nơi lưu và người nhận.")</small></span></label>
+        </fieldset>
+        <div class="export-preview" data-scope="@scope" data-anonymous="@anonymous.ToString().ToLowerInvariant()" aria-live="polite" aria-busy="@checking.ToString().ToLowerInvariant()">
+            @if (checking) { <p class="preview-wait" role="status"><span class="spinner" aria-hidden="true"></span>Đang kiểm tra phạm vi xuất…</p> }
+            else if (preview is { } p) { <div class="preview-count"><strong>@DashboardText.Number(p.RowCount)</strong><span>hồ sơ sẽ xuất <small>trên @DashboardText.Number(p.TotalCount) hồ sơ · tối đa @DashboardText.Number(p.MaxRows)/file</small></span></div> }
+            @if (error is not null) { <p class="export-error" role="alert">@error</p> }
+            @if (!checking && error is not null && retryable) { <button type="button" class="export-retry" disabled="@downloading" @onclick="InitializeAsync">Kiểm tra lại</button> }
+        </div>
+        <p class="export-order">File giữ hạng gốc và thứ tự điểm cuối giảm dần@(Context.Sort != RankingSort.FinalDesc ? "; không theo cách sắp xếp riêng trên bảng" : ""). Phạm vi không phụ thuộc các ô chọn hồ sơ. Dữ liệu lấy tại thời điểm tạo file.</p>
+        @if (success is not null) { <p class="export-success" role="status">@success</p> }
+    </ChildContent>
+    <Footer><button type="button" class="btn sc-btn-secondary" disabled="@downloading" @onclick="CloseAsync">@(success is null ? "Hủy" : "Đóng")</button><button id="export-download" type="button" class="btn sc-btn-primary" disabled="@(!CanDownload)" @onclick="DownloadAsync">@(downloading ? "Đang tải…" : success is not null ? "Đã gửi file" : "Tải xuống")</button></Footer>
+</ModalShell>
+
+@code {
+    [Parameter, EditorRequired] public RankingExportContext Context { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    private RankingExportScope scope = RankingExportScope.Shortlisted;
+    private bool anonymous = true, checking, downloading, disposed, retryable;
+    private ExportSettingsDto? settings;
+    private RankingExportPreviewDto? preview;
+    private SmartCv.Core.Export.RankingExportQuery? approvedQuery;
+    private string? error, success;
+    private int revision;
+    private readonly CancellationTokenSource lifetime = new();
+    private CancellationTokenSource? previewRequest;
+    private bool CanDownload => !checking && !downloading && success is null && error is null && settings?.CanExport == true && preview?.CanExport == true && approvedQuery is not null;
+    protected override Task OnInitializedAsync() => InitializeAsync();
+    private async Task InitializeAsync()
+    {
+        if (disposed || downloading) return;
+        checking = true; error = success = null; preview = null; approvedQuery = null; retryable = false;
+        try
+        {
+            var result = await ExportApi.SettingsAsync(lifetime.Token);
+            if (disposed) return;
+            if (!result.IsSuccess) { error = RankingExportContext.Error(result); retryable = true; return; }
+            settings = result.Data;
+            if (settings?.CanExport != true || !settings.Formats.Contains("xlsx")) { error = "Tài khoản hoặc máy chủ hiện chưa cho phép xuất Excel."; return; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { return; }
+        finally { if (!disposed) checking = false; }
+        if (!disposed) await PreviewAsync();
+    }
+    private async Task ScopeChangedAsync(ChangeEventArgs e)
+    {
+        if (downloading || !Enum.TryParse<RankingExportScope>(e.Value?.ToString(), out var value) || !Enum.IsDefined(value)) return;
+        scope = value; await PreviewAsync();
+    }
+    private async Task AnonymousChangedAsync(ChangeEventArgs e) { if (!downloading) { anonymous = e.Value is true; await PreviewAsync(); } }
+    private async Task PreviewAsync()
+    {
+        var current = ++revision;
+        previewRequest?.Cancel(); previewRequest?.Dispose(); previewRequest = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        var ct = previewRequest.Token;
+        checking = true; preview = null; approvedQuery = null; error = success = null; retryable = false;
+        try
+        {
+            var (query, validation) = Context.Build(scope, anonymous);
+            if (query is null) { error = validation; return; }
+            if (settings is null || !settings.CanExport) { error = "Chưa kiểm tra được quyền xuất. Hãy thử kiểm tra lại."; retryable = true; return; }
+            if (!settings.Stages.Contains(query.Stage) || !settings.Fits.Contains(query.Fit)) { error = "Máy chủ chưa hỗ trợ bộ lọc này. Hãy chọn phạm vi khác; hệ thống không tự mở rộng phạm vi xuất."; return; }
+            var result = await ExportApi.PreviewAsync(Context.RunId, query, ct);
+            if (disposed || ct.IsCancellationRequested || current != revision) return;
+            if (!result.IsSuccess) { error = RankingExportContext.Error(result); retryable = true; return; }
+            AcceptPreview(result.Data!, query);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        finally { if (!disposed && current == revision) checking = false; }
+    }
+    private void AcceptPreview(RankingExportPreviewDto value, SmartCv.Core.Export.RankingExportQuery query)
+    {
+        if (value.RunId != Context.RunId || value.JobId != Context.JobId || value.Anonymous != query.Anonymous || value.RowCount < 0 || value.RowCount > value.TotalCount || value.MaxRows <= 0)
+        { error = "Bản xem trước không khớp vị trí, lượt chấm hoặc lựa chọn ẩn danh. Hãy đóng hộp thoại và tải lại kết quả."; return; }
+        preview = value;
+        if (!value.CanExport) { error = value.BlockCode switch { "export_empty" => "Không có hồ sơ trong phạm vi đã chọn. Hãy đổi phạm vi hoặc bộ lọc.", "export_too_many_rows" => $"Mỗi file tối đa {value.MaxRows} hồ sơ. Hãy thu hẹp bộ lọc.", _ => "Chỉ xuất khi lượt chấm hoàn tất và dữ liệu hợp lệ. Hãy tải lại kết quả." }; return; }
+        if (value.RunStatus != SmartCv.Core.Constants.RunStatuses.Completed || value.RowCount == 0 || value.RowCount > value.MaxRows)
+        { error = "Dữ liệu chưa đủ điều kiện xuất. Hãy kiểm tra lại kết quả."; return; }
+        approvedQuery = query;
+    }
+    private async Task DownloadAsync()
+    {
+        if (!CanDownload || approvedQuery is not { } query || preview is not { } shown) return;
+        downloading = true; retryable = false;
+        var token = Session.Token;
+        try
+        {
+            // Revalidate immediately before requesting a file; never replay a file request automatically.
+            var check = await ExportApi.PreviewAsync(Context.RunId, query, lifetime.Token);
+            if (disposed) return;
+            approvedQuery = null; preview = null;
+            if (!check.IsSuccess) { error = RankingExportContext.Error(check); retryable = true; return; }
+            AcceptPreview(check.Data!, query);
+            if (error is not null) return;
+            if (shown.RowCount != preview!.RowCount || shown.TotalCount != preview.TotalCount)
+            { error = "Dữ liệu vừa thay đổi. Số hồ sơ mới đã được cập nhật; hãy kiểm tra lại trước khi tải."; retryable = true; return; }
+            var result = await ExportApi.DownloadAsync(Context.RunId, query, lifetime.Token);
+            if (!result.IsSuccess) { error = RankingExportContext.Error(result); retryable = true; return; }
+            await using var file = result.Data!;
+            if (disposed || token != Session.Token || !Session.IsVerified || Session.MustChangePassword) return;
+            await Files.SaveRankingAsync(file, lifetime.Token);
+            if (!disposed) success = $"Đã chuyển file {file.FileName} tới trình duyệt.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is JSException or IOException or InvalidOperationException or OperationCanceledException)
+        { if (!disposed) { error = "Chưa xác nhận được việc tải file. Hãy kiểm tra mục Tải xuống của trình duyệt trước khi thử lại."; retryable = true; } }
+        finally { if (!disposed) downloading = false; }
+    }
+    private Task CloseAsync() => downloading ? Task.CompletedTask : OnClose.InvokeAsync();
+    public void Dispose() { disposed = true; lifetime.Cancel(); previewRequest?.Cancel(); previewRequest?.Dispose(); lifetime.Dispose(); }
+}

@@ -17,6 +17,9 @@ public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
 /// </summary>
 public static class AppNavigation
 {
+    public const string AdminHome = "/admin/dashboard";
+    public const string RecruitmentHome = "/recruitment";
+    public static string HomeFor(ClaimsPrincipal? user) => AccessRules.IsAdmin(user) ? AdminHome : "/";
     public static IReadOnlyList<NavGroup> Groups { get; } =
     [
         new("Tổng quan",
@@ -29,18 +32,14 @@ public static class AppNavigation
             // B24: một mục duy nhất cho người và file CV (thay "Kho CV"); /candidates/{id} cũng sáng mục này
             new("Ứng viên", "candidates", "M9 11a4 4 0 1 1 0-8a4 4 0 0 1 0 8zm-7 9a7 7 0 0 1 14 0v1H2zm15-9a3 3 0 1 0 0-6v6zm1 2a5 5 0 0 1 4 5v3h-3v-1a8 8 0 0 0-1-4z"),
             new("Kết quả", "results", "M4 20V10h3v10zm6.5 0V4h3v16zM17 20v-7h3v7z"),
+            new("Vị trí tuyển dụng", "jobs", "M3 7h18v14H3zm5-4h8v4h-2V5h-4v2H8zm-5 9h18v2H3z"),
+            new("Lịch sử lượt chấm", "runs", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM11 7h2v5l3 3-1 1-4-4z"),
         ]),
         new("Đánh giá AI",
         [
             new("System prompt", "prompts", "M4 4h16v12H8l-4 4zm4 5h8V7H8zm0 4h5v-2H8z"),
             // B25: bộ CV tham chiếu + nhãn HR tách khỏi trang System prompt
             new("Bộ dữ liệu đánh giá", "evaluation-sets", "M4 5h3v3H4zm5 .5h11v2H9zM4 10.5h3v3H4zm5 .5h11v2H9zM4 16h3v3H4zm5 .5h11v2H9z"),
-        ]),
-        new("Quản lý",
-        [
-            new("Vị trí tuyển dụng", "jobs", "M3 7h18v14H3zm5-4h8v4h-2V5h-4v2H8zm-5 9h18v2H3z"),
-            // B26: lịch sử lượt chấm (/runs và /runs/{id} cùng sáng mục này)
-            new("Lịch sử lượt chấm", "runs", "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14zM11 7h2v4.6l3.4 3.4-1.4 1.4L11 12.4z"),
         ]),
         new("Quản trị",
         [
@@ -56,7 +55,8 @@ public static class AppNavigation
         if (!AccessRules.CanUseApp(user)) return [];
         var admin = AccessRules.IsAdmin(user);
         return Groups
-            .Select(g => new NavGroup(g.Title, g.Items.Where(i => !i.AdminOnly || admin).ToList()))
+            .Select(g => new NavGroup(g.Title, g.Items.Where(i => !i.AdminOnly || admin)
+                .Select(i => i.Href.Length == 0 ? i with { Text = admin ? "Dashboard quản trị" : "Dashboard tuyển dụng", Href = admin ? "admin/dashboard" : "" } : i).ToList()))
             .Where(g => g.Items.Count > 0)
             .ToList();
     }

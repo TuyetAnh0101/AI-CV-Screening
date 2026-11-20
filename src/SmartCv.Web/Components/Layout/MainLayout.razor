@@ -12,7 +12,7 @@
 
             <div class="main-area">
                 <header class="topbar">
-                    <span class="topbar-title">Sàng lọc hồ sơ ứng viên ứng dụng AI</span>
+                    <span class="topbar-title">@(AccessRules.IsAdmin(AccessRules.Current(AuthState)) ? "Quản trị & vận hành SCApp" : "Sàng lọc hồ sơ ứng viên ứng dụng AI")</span>
                     <ApiStatusBadge />
                     <UserMenu />
                 </header>
@@ -32,3 +32,5 @@
     <a href="." class="reload">Tải lại trang</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code { [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; } }

@@ -29,7 +29,7 @@
         <div class="denied-actions">
             @if (canUseApp)
             {
-                <a class="btn sc-btn-primary" href="">Về Tổng quan</a>
+                <a class="btn sc-btn-primary" href="@AppNavigation.HomeFor(User)">Về Tổng quan</a>
                 @if (parent is not null)
                 {
                     <a class="btn sc-btn-secondary" href="@parent.Href">Mở @parent.Text</a>

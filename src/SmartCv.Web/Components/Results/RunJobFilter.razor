@@ -12,16 +12,16 @@
                 aria-describedby="@(RunsError is null ? null : "runs-error")">
             @if (SelectedRunId is null)
             {
-                <option value="" disabled>@(RunsLoading ? "Đang tải lượt chấm..." : "Chọn lượt chấm")</option>
+                <option value="" disabled selected>@(RunsLoading ? "Đang tải lượt chấm..." : "Chọn lượt chấm")</option>
             }
             @foreach (var run in Runs)
             {
-                <option value="@run.RunId">@RankingView.RunOption(run)</option>
+                <option value="@run.RunId" selected="@(SelectedRunId == run.RunId)">@RankingView.RunOption(run)</option>
             }
             @if (SelectedRunId is { } id && Runs.All(r => r.RunId != id))
             {
                 @* Lượt đang mở không nằm trong danh sách (cũ hơn giới hạn hoặc danh sách lỗi): vẫn giữ lựa chọn *@
-                <option value="@id">#@id</option>
+                <option value="@id" selected>#@id</option>
             }
         </select>
         @if (RunsError is not null)
@@ -43,11 +43,11 @@
             <select class="form-select" value="@(SelectedJobId?.ToString() ?? string.Empty)" @onchange="JobChanged">
                 @if (SelectedJobId is { } jobId && Jobs.All(j => j.JobId != jobId))
                 {
-                    <option value="@jobId" disabled>Vị trí #@jobId (không thuộc lượt này)</option>
+                    <option value="@jobId" disabled selected>Vị trí #@jobId (không thuộc lượt này)</option>
                 }
                 @foreach (var job in Jobs)
                 {
-                    <option value="@job.JobId">@RankingView.JobOption(job)</option>
+                    <option value="@job.JobId" selected="@(SelectedJobId == job.JobId)">@RankingView.JobOption(job)</option>
                 }
             </select>
         }

@@ -30,6 +30,25 @@ public sealed class FileDownloadService : IAsyncDisposable
         using var stream = new DotNetStreamReference(file.Content, leaveOpen: true);
         return await module.InvokeAsync<bool>("open", ct, stream, file.ContentType, file.FileName, preferPreview && CanPreview(file.ContentType));
     }
+
+    /// <summary>A31 has already applied the explicit export privacy choice. This does not relax CV preview's privacy guard.</summary>
+    public async Task SaveRankingAsync(DownloadedFile file, CancellationToken ct = default)
+    {
+        var token = session.Token;
+        void Check()
+        {
+            ct.ThrowIfCancellationRequested();
+            if (disposed || token != session.Token || !session.IsSignedIn || !session.IsVerified || session.MustChangePassword)
+                throw new InvalidOperationException("Phiên đăng nhập đã thay đổi.");
+        }
+        Check();
+        if (file.ContentType != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || !file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Máy chủ chưa cung cấp file Excel hợp lệ.");
+        importing ??= js.InvokeAsync<IJSObjectReference>("import", "./js/smartcv-files.js").AsTask();
+        module = await importing; Check();
+        using var stream = new DotNetStreamReference(file.Content, leaveOpen: true);
+        await module.InvokeAsync<bool>("open", ct, stream, file.ContentType, file.FileName, false);
+    }
     private void Navigated(object? sender, LocationChangedEventArgs args) => _ = CloseAsync();
     private void SessionChanged() { if (!session.IsSignedIn || !session.IsVerified || session.MustChangePassword) _ = CloseAsync(); }
     private void PrivacyChanged() { if (privacy.Enabled) _ = CloseAsync(); }
