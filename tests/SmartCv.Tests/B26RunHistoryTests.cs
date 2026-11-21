@@ -563,7 +563,7 @@ public class B26RunHistoryTests
     {
         using var sp = Services(new Api(), new Nav("https://app.test/runs/12"));
         var html = Decode(await Html<NavMenu>(sp));
-        var labels = new[] { "Bảng điều khiển", "Tải hồ sơ lên", "Kết quả", "System prompt", "Quản lý", "Vị trí tuyển dụng", "Lịch sử lượt chấm" };
+        var labels = new[] { "Dashboard quản trị", "Tải hồ sơ lên", "Kết quả", "System prompt", "Tuyển dụng", "Vị trí tuyển dụng", "Lịch sử lượt chấm" };
         var positions = labels.Select(l => html.IndexOf(l, StringComparison.Ordinal)).ToArray();
         Assert.All(positions, p => Assert.True(p >= 0)); Assert.True(positions[4] < positions[5] && positions[5] < positions[6]);
         Assert.Matches("<a[^>]*href=\"runs\"[^>]*class=\"nav-item active\"|<a[^>]*class=\"nav-item active\"[^>]*href=\"runs\"", html);

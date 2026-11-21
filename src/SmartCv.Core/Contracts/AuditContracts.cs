@@ -2,7 +2,11 @@ namespace SmartCv.Core.Contracts;
 
 public sealed record AuditEventDto(long AuditEventId, DateTime OccurredAtUtc, int? ActorUserId,
     string? ActorNameSnapshot, string? ActorRoleSnapshot, string ActionCode, string Category,
-    string ResourceType, string? ResourceId, string Outcome, string RequestId, string SafeSummary, string? FailureCode);
+    string ResourceType, string? ResourceId, string Outcome, string RequestId, string SafeSummary, string? FailureCode)
+{
+    public int? WorkspaceId { get; init; }
+    public string? WorkspaceName { get; init; }
+}
 
 public sealed class AuditPageDto
 {

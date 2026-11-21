@@ -110,17 +110,19 @@ public class A39PrivacyTests
 
     [Theory]
     [InlineData(null, 401)]
-    [InlineData("Viewer", 403)]
+    [InlineData("Viewer", 401)]
     [InlineData("HR", 200)]
     [InlineData("Admin", 200)]
     public async Task Configured_authentication_requires_authenticated_HR_or_Admin(string? role, int status)
     {
-        using var factory = TestSupport.ApiFactory(settings: new() { ["Scoring:WorkerEnabled"] = "false" }).WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddAuthentication("A39Test").AddScheme<AuthenticationSchemeOptions, TestAuth>("A39Test", _ =>
-        {
-        })));
+        using var factory = SmartCv.Tests.Auth.A28TestSupport.Factory(new() { ["Scoring:WorkerEnabled"] = "false" });
         using var http = factory.CreateClient();
-        if (role is not null)
-            http.DefaultRequestHeaders.Add("X-Test-Role", role);
+        if (role is "HR" or "Admin")
+        {
+            var user = await SmartCv.Tests.Auth.A28TestSupport.Seed(factory, SmartCv.Tests.Auth.A28TestSupport.Password(), role);
+            http.DefaultRequestHeaders.Authorization = new("Bearer", SmartCv.Tests.Auth.A28TestSupport.Token(user));
+        }
+        else if (role is not null) http.DefaultRequestHeaders.Authorization = new("Bearer", "invalid-role-token");
         Assert.Equal(status, (int)(await http.GetAsync("/api/retention/settings")).StatusCode);
         if (status != 200)
         {

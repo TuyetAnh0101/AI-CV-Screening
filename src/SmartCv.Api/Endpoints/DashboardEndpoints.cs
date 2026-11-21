@@ -74,7 +74,8 @@ public static class DashboardEndpoints
     }
 
     private static async Task<Results<Ok<DashboardSummaryDto>, ProblemHttpResult>> SummaryAsync(
-        HttpRequest request, SmartCvDbContext db, IOptions<ReviewFlagOptions> flags, CancellationToken ct)
+        HttpRequest request, SmartCvDbContext db, IOptions<ReviewFlagOptions> flags,
+        SmartCv.Core.Workspaces.IWorkspaceContext workspace, CancellationToken ct)
     {
         // Parse strings ourselves so malformed/overflowing and repeated filters have Vietnamese ProblemDetails.
         foreach (var key in new[] { "jobId", "from", "to" })
@@ -132,7 +133,7 @@ public static class DashboardEndpoints
             Funnel = FunnelCalculator.Build(current, reached),
             RejectedCount = current.GetValueOrDefault(ApplicationStages.Rejected),
             OnHoldCount = current.GetValueOrDefault(ApplicationStages.OnHold),
-            ScreeningTime = total == 0 ? new() : await ScreeningTimeAsync(db, jobId, period, ct),
+            ScreeningTime = total == 0 ? new() : await ScreeningTimeAsync(db, workspace.WorkspaceId ?? 0, jobId, period, ct),
             RejectReasons = RejectReasonCalculator.Build(reasons, current.GetValueOrDefault(ApplicationStages.Rejected)),
             RecentRuns = await RecentRunsAsync(db, jobId, ct)
         });
@@ -183,7 +184,7 @@ public static class DashboardEndpoints
         public decimal? MedianHours { get; set; }
     }
 
-    private static async Task<ScreeningTimeDto> ScreeningTimeAsync(SmartCvDbContext db, int? jobId, DashboardPeriod period, CancellationToken ct)
+    private static async Task<ScreeningTimeDto> ScreeningTimeAsync(SmartCvDbContext db, int workspaceId, int? jobId, DashboardPeriod period, CancellationToken ct)
     {
         // SQL Server computes the exact median, returning ONE row instead of every application's timing.
         // DATEDIFF_BIG avoids the 68-year overflow of DATEDIFF(SECOND).
@@ -198,7 +199,8 @@ public static class DashboardEndpoints
                     FROM Applications a
                     JOIN (SELECT ApplicationId, MIN(CreatedAt) AS FirstAt FROM ApplicationEvents GROUP BY ApplicationId) decision
                       ON decision.ApplicationId = a.ApplicationId
-                    WHERE ({jobId} IS NULL OR a.JobId = {jobId})
+                    WHERE a.WorkspaceId = {workspaceId}
+                      AND ({jobId} IS NULL OR a.JobId = {jobId})
                       AND ({period.FromUtc} IS NULL OR a.CreatedAt >= {period.FromUtc})
                       AND ({period.ToUtc} IS NULL OR a.CreatedAt < {period.ToUtc})
                 ) durations

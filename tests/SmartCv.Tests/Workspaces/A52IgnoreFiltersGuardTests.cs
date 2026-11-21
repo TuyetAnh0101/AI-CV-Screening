@@ -12,7 +12,10 @@ public class A52IgnoreFiltersGuardTests
     internal sealed record Allowed(string File, string Identifier, string Reason, string SecurityContext);
 
     /// <summary>Hiện chưa có lời gọi IgnoreQueryFilters() nào trong src/. A53 (Admin: /api/exports, audit) thêm mục tại đây kèm lý do.</summary>
-    internal static readonly Allowed[] IgnoreQueryFiltersAllowlist = [];
+    internal static readonly Allowed[] IgnoreQueryFiltersAllowlist =
+    [new("src/SmartCv.Api/Endpoints/ExportEndpoints.cs", "Admin export log list",
+        "Admin must see export log rows and Job titles across all workspaces.",
+        "Only ListAsync, protected by Admin policy; WorkspaceIsolationAdminTests proves system scope and HR denial.")];
 
     internal static readonly Allowed[] BeginSystemAllowlist =
     [

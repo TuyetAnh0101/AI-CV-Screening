@@ -54,7 +54,7 @@ public class JobSkillEndpointTests
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
             // InMemory does not enforce FKs; SQL tests below persist the full evaluation graph.
-            db.EvaluationSkills.Add(new EvaluationSkill { EvaluationId = 123, JobId = 1, SkillCode = "csharp", IsMatched = true, Evidence = "unchanged" }); await db.SaveChangesAsync();
+            db.EvaluationSkills.Add(new EvaluationSkill { Evaluation = TestSupport.CompletedEvaluation(1, 123), JobId = 1, SkillCode = "csharp", IsMatched = true, Evidence = "unchanged" }); await db.SaveChangesAsync();
         }
         using var used = await client.DeleteAsync("/api/jobs/1/skills/CSHARP"); await JobCrudEndpointTests.AssertProblemAsync(used, HttpStatusCode.Conflict);
         using var check = factory.Services.CreateScope(); var context = check.ServiceProvider.GetRequiredService<SmartCvDbContext>();

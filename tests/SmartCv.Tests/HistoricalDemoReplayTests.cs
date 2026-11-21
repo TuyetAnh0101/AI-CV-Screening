@@ -135,8 +135,7 @@ public class HistoricalDemoReplayTests
     public async Task Adding_calculated_replay_runs_preserves_existing_historical_scores_predictions_and_accuracy()
     {
         var fixture = ReadFixture();
-        await using var db = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>()
-            .UseInMemoryDatabase("HistoricalReplay-" + Guid.NewGuid()).Options);
+        await using var db = TestSupport.InMemoryDb("HistoricalReplay-" + Guid.NewGuid());
         await db.Database.EnsureCreatedAsync();
         var existing = await PromptCompareSeed.DemoAsync(db);
         var oldIds = new[] { existing.RunV1, existing.RunV2 };

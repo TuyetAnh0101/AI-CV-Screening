@@ -47,6 +47,10 @@ public static partial class RunEndpoints
             return Results.Problem(statusCode: 409, title: "Không chấm lại CV đã được ẩn danh hóa.");
         var prompts = await db.PromptVersions.AsNoTracking().Where(p => p.IsActive)
             .Select(p => new { p.PromptVersionId, p.VersionName }).Take(2).ToListAsync(ct);
+        if (prompts.Count == 0)
+            return Results.Problem(statusCode: 409, title: "Chưa có prompt đang hoạt động.",
+                detail: "Hãy kích hoạt một phiên bản prompt trong không gian làm việc của bạn trước khi chấm.",
+                extensions: new Dictionary<string, object?> { ["code"] = "no_active_prompt" });
         if (prompts.Count != 1)
             return Results.Problem(statusCode: 409, title: "Cần đúng một phiên bản prompt đang hoạt động.");
         var opt = options.Value;

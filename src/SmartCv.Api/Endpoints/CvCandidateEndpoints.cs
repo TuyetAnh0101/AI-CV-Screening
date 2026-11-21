@@ -52,6 +52,9 @@ public static partial class CvEndpoints
             }
             target = new Candidate
             {
+                // The CV was loaded through the request's workspace filter. Stamp the new principal
+                // before assigning it: composite FK fixup must not copy its unassigned workspace onto this CV key.
+                WorkspaceId = cv.WorkspaceId,
                 FullName = input.FullName, Email = input.Email, PhoneNumber = input.PhoneNumber,
                 CreatedAt = clock.GetUtcNow().UtcDateTime
             };

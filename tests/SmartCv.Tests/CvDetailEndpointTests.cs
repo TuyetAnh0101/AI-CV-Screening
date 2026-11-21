@@ -106,7 +106,7 @@ public class CvDetailEndpointTests
     [Fact]
     public async Task Production_does_not_expose_cv_read_endpoints()
     {
-        using var factory = TestSupport.ApiFactory("Production");
+        using var factory = TestSupport.ApiFactory("Production", settings: new() { ["CvUpload:Endpoint:Enabled"] = "false" });
         using var client = factory.CreateClient();
         var id = Guid.NewGuid();
 

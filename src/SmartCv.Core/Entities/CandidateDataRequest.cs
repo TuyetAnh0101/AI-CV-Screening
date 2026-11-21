@@ -5,8 +5,9 @@ namespace SmartCv.Core.Entities;
 /// CỐ Ý không có khóa ngoại tới Candidates và không lưu tên / email: sau khi xóa dữ liệu, dòng Candidates biến mất
 /// nhưng nhật ký vẫn phải còn để chứng minh đã làm. CandidateId chỉ là số tham chiếu.
 /// </summary>
-public class CandidateDataRequest
+public class CandidateDataRequest : SmartCv.Core.Workspaces.IWorkspaceOwned
 {
+    public int WorkspaceId { get; set; } = SmartCv.Core.Workspaces.WorkspaceKinds.UnassignedWorkspaceId;
     public long RequestId { get; set; }
     public int CandidateId { get; set; }
     public string RequestType { get; set; } = string.Empty;   // Export | Erase

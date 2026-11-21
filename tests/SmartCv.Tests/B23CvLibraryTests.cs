@@ -136,7 +136,7 @@ public class B23CvLibraryTests
             var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>(); await db.Database.EnsureCreatedAsync();
             await A23CvListEndpointTests.SeedAsync(db);
         }
-        using var sp = Services(factory.Server.CreateHandler(), new Nav(), Normal());
+        await using var sp = Services(factory.Server.CreateHandler(), new Nav(), Normal());
         var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
         Assert.Contains("Nguyễn Văn An", html); Assert.Contains("cv-nguyen-van-an.pdf", html); Assert.Contains(">82<", html);
         Assert.DoesNotContain(">95<", html); Assert.DoesNotContain("PRIVATE-legacy", html); Assert.Contains("Hồ sơ đã ẩn danh", html);
@@ -149,7 +149,7 @@ public class B23CvLibraryTests
     public async Task Anonymous_HTML_has_no_personal_values_in_text_title_aria_hidden_fields_or_file_links()
     {
         var api = new Api { List = (_, _) => Task.FromResult(Json(Page(1, 1, Row()))) };
-        using var sp = Services(api, new Nav()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
+        await using var sp = Services(api, new Nav()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
         Assert.DoesNotContain("PRIVATE", html); Assert.Contains("CV đã ẩn tên", html); Assert.DoesNotContain("/file\"", html);
         Assert.All(api.Methods, method => Assert.Equal("GET", method));
     }
@@ -158,7 +158,7 @@ public class B23CvLibraryTests
     public async Task Permanent_anonymization_overrides_normal_view_even_with_dirty_legacy_DTO()
     {
         var api = new Api { List = (_, _) => Task.FromResult(Json(Page(1, 1, Row(anonymized: true)))) };
-        using var sp = Services(api, new Nav(), Normal()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
+        await using var sp = Services(api, new Nav(), Normal()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
         Assert.DoesNotContain("PRIVATE", html); Assert.Contains("Hồ sơ đã ẩn danh", html);
         Assert.DoesNotContain("id=\"attach-", html); Assert.DoesNotContain("/file\"", html);
     }
@@ -168,7 +168,7 @@ public class B23CvLibraryTests
     {
         var first = Row(); var unknown = new CvListItemDto { CvId = Guid.NewGuid(), FileName = "long-" + new string('x', 180) + ".pdf" };
         var api = new Api { List = (_, _) => Task.FromResult(Json(Page(1, 2, first, unknown))) };
-        using var sp = Services(api, new Nav(), Normal()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
+        await using var sp = Services(api, new Nav(), Normal()); var html = WebUtility.HtmlDecode(await Html<LibraryPage>(sp));
         Assert.Contains("Chưa chấm", html); Assert.Contains(">0</strong>", html); Assert.Contains(unknown.FileName, html);
         Assert.Contains("QA Engineer", html); Assert.Contains("Loại", html); Assert.Contains("Đang xem", html);
         Assert.Equal("—", CvLibraryText.Retention(DateTime.MaxValue, null, Now));
@@ -177,7 +177,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Menu_adds_library_and_keeps_all_existing_destinations()
     {
-        using var sp = Services(new Api(), new Nav()); var html = await Html<NavMenu>(sp);
+        await using var sp = Services(new Api(), new Nav()); var html = await Html<NavMenu>(sp);
         // B24: một mục "Ứng viên" thay cho "Kho CV" (không để hai mục chồng chức năng).
         foreach (var route in new[] { "candidates", "upload", "results", "prompts", "jobs", "runs" }) Assert.Contains($"href=\"{route}\"", html);
         Assert.DoesNotContain("href=\"cvs\"", html); Assert.DoesNotContain("Kho CV", html);
@@ -191,7 +191,7 @@ public class B23CvLibraryTests
     public async Task Empty_filtered_empty_and_out_of_range_are_distinct(string query, int total, string expected)
     {
         var api = new Api { List = (_, _) => Task.FromResult(Json(Page(query.Contains("page=9") ? 9 : 1, total))) };
-        using var sp = Services(api, new Nav("https://app.test/cvs" + query));
+        await using var sp = Services(api, new Nav("https://app.test/cvs" + query));
         Assert.Contains(expected, WebUtility.HtmlDecode(await Html<LibraryPage>(sp)));
     }
 
@@ -200,7 +200,7 @@ public class B23CvLibraryTests
     public async Task API_errors_are_safe_and_retry_works(int status)
     {
         var api = new Api { List = (_, _) => Task.FromResult(Json(new { detail = "PRIVATE connection string SQL path" }, status)) };
-        using var sp = Services(api, new Nav()); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
+        await using var sp = Services(api, new Nav()); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
         Assert.DoesNotContain("PRIVATE", await ui.All()); Assert.Contains("Chưa tải được", await ui.All());
         api.List = (_, _) => Task.FromResult(Json(Page(1, 1, Row()))); await ui.Click("cvs-retry");
         await ui.Until(s => s.Contains("CV đã ẩn tên"));
@@ -209,7 +209,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Real_events_debounce_search_validate_length_clear_and_combine_filters_on_server()
     {
-        var api = new Api(); using var sp = Services(api, new Nav()); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
+        var api = new Api(); await using var sp = Services(api, new Nav()); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
         api.Calls.Clear();
         var tasks = new List<Task>();
         foreach (var text in new[] { "R", "Re", "Rea", "Reac", "React" }) tasks.Add(ui.Input("cvs-search", text));
@@ -229,7 +229,7 @@ public class B23CvLibraryTests
     public async Task Paging_URL_refresh_Back_Forward_and_reset_are_synchronized()
     {
         var api = new Api { List = (r, _) => { var page = int.Parse(QueryHelpers.ParseQuery(r.RequestUri!.Query)["page"]!); return Task.FromResult(Json(Page(page, 47, Row()))); } };
-        var nav = new Nav(); using var sp = Services(api, nav); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
+        var nav = new Nav(); await using var sp = Services(api, nav); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
         await ui.Click("cvs-next"); await ui.Until(s => s.Contains("Trang 2/3")); Assert.Contains("page=2", nav.Uri);
         await ui.Go(nav, "/cvs?stage=Rejected&page=3"); await ui.Until(s => s.Contains("Trang 3/3"));
         await ui.Change("cvs-source", "Referral"); await ui.Until(s => s.Contains("Trang 1/3")); Assert.DoesNotContain("page=3", nav.Uri);
@@ -242,7 +242,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Invalid_URL_never_requests_all_CVs_and_clear_recovers()
     {
-        var api = new Api(); using var sp = Services(api, new Nav("https://app.test/cvs?page=0"));
+        var api = new Api(); await using var sp = Services(api, new Nav("https://app.test/cvs?page=0"));
         await using var ui = new Ui(sp); await ui.Show<LibraryPage>(); Assert.Empty(api.Calls);
         await ui.Click("cvs-clear"); await ui.Until(_ => api.Calls.Any()); Assert.Contains("page=1", api.Calls.Last());
     }
@@ -250,7 +250,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Dialog_validates_with_Core_requires_explicit_duplicate_choice_and_refresh_callback()
     {
-        var api = new Api(); var attached = 0; using var sp = Services(api, new Nav(), Normal());
+        var api = new Api(); var attached = 0; await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp); await ui.Show<AttachDialog>(new() { ["CvId"] = Row().CvId, ["OnAttached"] = EventCallback.Factory.Create(this, () => attached++) });
         await ui.Input("attach-name", ""); await ui.Click("attach-save"); Assert.DoesNotContain("PUT", api.Methods);
         Assert.Contains("Họ tên là bắt buộc", await ui.All());
@@ -263,7 +263,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Dialog_confirm_new_is_explicit()
     {
-        var api = new Api(); using var sp = Services(api, new Nav(), Normal());
+        var api = new Api(); await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp); await ui.Show<AttachDialog>(new() { ["CvId"] = Row().CvId });
         await ui.Click("attach-save"); await ui.Click("attach-confirm-new"); Assert.True(api.Bodies.Last().ConfirmNew);
     }
@@ -271,7 +271,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Dialog_existing_search_is_paged_and_debounced()
     {
-        var api = new Api(); using var sp = Services(api, new Nav(), Normal());
+        var api = new Api(); await using var sp = Services(api, new Nav(), Normal());
         await using var ui = new Ui(sp); await ui.Show<AttachDialog>(new() { ["CvId"] = Row().CvId });
         await ui.Click("attach-existing"); api.AllCalls.Clear();
         var first = ui.Input("attach-search", "Ng"); var last = ui.Input("attach-search", "Người"); await Task.WhenAll(first, last);
@@ -284,7 +284,7 @@ public class B23CvLibraryTests
     public async Task Toggling_privacy_closes_dialog_and_removes_identity_from_every_rendered_attribute()
     {
         var api = new Api { List = (_, _) => Task.FromResult(Json(Page(1, 1, Row()))) };
-        var anonymity = Normal(); using var sp = Services(api, new Nav(), anonymity); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
+        var anonymity = Normal(); await using var sp = Services(api, new Nav(), anonymity); await using var ui = new Ui(sp); await ui.Show<LibraryPage>();
         await ui.Click("attach-" + CvLibraryText.ShortId(Row().CvId)); Assert.Contains("PRIVATE", await ui.All());
         await ui.Do(() => anonymity.SetAsync(true)); await ui.Until(s => s.Contains("CV đã ẩn tên") && !s.Contains("PRIVATE"));
         Assert.DoesNotContain("attach-email", await ui.All());
@@ -293,7 +293,7 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Anonymous_dialog_never_fetches_or_renders_contact_suggestions()
     {
-        var api = new Api(); using var sp = Services(api, new Nav()); var html = await HtmlWithParameters<AttachDialog>(sp, new() { ["CvId"] = Row().CvId });
+        var api = new Api(); await using var sp = Services(api, new Nav()); var html = await HtmlWithParameters<AttachDialog>(sp, new() { ["CvId"] = Row().CvId });
         Assert.Empty(api.AllCalls); Assert.DoesNotContain("PRIVATE", html); Assert.DoesNotContain("attach-name", html);
     }
 
@@ -313,7 +313,7 @@ public class B23CvLibraryTests
         .AddSingleton<NavigationManager>(nav).AddSingleton(anonymity ?? new AnonymityState()).AddSingleton(Client(handler))
         .AddSingleton(new JobApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<JobApiClient>.Instance))
         .AddSingleton(new CandidateApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<CandidateApiClient>.Instance))
-        .AddSingleton<IJSRuntime>(new Js()).AddB28Auth().BuildServiceProvider(); // B28: menu cần người đã đăng nhập
+        .AddSingleton<IJSRuntime>(new Js()).AddB28Auth().AddFixtureFileDownloads(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") }).BuildServiceProvider(); // B28: menu cần người đã đăng nhập
     private static async Task<string> Html<T>(ServiceProvider services) where T : IComponent
         => await HtmlWithParameters<T>(services, []);
     private static async Task<string> HtmlWithParameters<T>(ServiceProvider services, Dictionary<string, object?> parameters) where T : IComponent

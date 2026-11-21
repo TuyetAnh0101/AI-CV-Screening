@@ -32,7 +32,7 @@ public class KeywordScoreEndpointTests
 
     private static async Task<Env> CreateAsync(string environment = "Development")
     {
-        var factory = TestSupport.ApiFactory(environment, dbName: Guid.NewGuid().ToString("N"));
+        var factory = TestSupport.ApiFactory(environment, settings: new() { ["CvUpload:Endpoint:Enabled"] = (environment == "Development").ToString() }, dbName: Guid.NewGuid().ToString("N"));
         var env = new Env(factory, factory.CreateClient());
         await env.DbAsync(db => db.Database.EnsureCreatedAsync());
         return env;

@@ -110,7 +110,7 @@ public class B25EvaluationSetsTests
     {
         var api = new Api();
         var nav = new Nav("https://app.test/evaluation-sets?set=7");
-        using var services = Services(api, nav);
+        await using var services = Services(api, nav);
         await using var ui = new Ui(services);
         await ui.Show<SetsPage>();
 
@@ -138,7 +138,7 @@ public class B25EvaluationSetsTests
     {
         var api = new Api();
         var nav = new Nav("https://app.test/evaluation-sets?set=7");
-        using var services = Services(api, nav);
+        await using var services = Services(api, nav);
         await using var ui = new Ui(services);
         await ui.Show<SetsPage>();
         await ui.Until(t => t.Contains("#41"));
@@ -156,7 +156,7 @@ public class B25EvaluationSetsTests
     {
         var api = new Api { FailRuns = true };
         var nav = new Nav("https://app.test/evaluation-sets?set=7");
-        using var services = Services(api, nav);
+        await using var services = Services(api, nav);
         await using var ui = new Ui(services);
         await ui.Show<SetsPage>();
 
@@ -174,7 +174,7 @@ public class B25EvaluationSetsTests
     {
         var api = new Api();
         var nav = new Nav("https://app.test/evaluation-sets?set=7");
-        using var services = Services(api, nav);
+        await using var services = Services(api, nav);
         await using var ui = new Ui(services);
         await ui.Show<SetsPage>();
         await ui.Until(t => t.Contains("Hồ sơ #11"));
@@ -202,7 +202,7 @@ public class B25EvaluationSetsTests
     {
         var api = new Api();
         var nav = new Nav("https://app.test/prompts?set=7");
-        using var services = Services(api, nav);
+        await using var services = Services(api, nav);
         await using var ui = new Ui(services);
         await ui.Show<PromptsPage>();
 
@@ -235,7 +235,7 @@ public class B25EvaluationSetsTests
             .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance))
             .AddSingleton(new AiPreviewApiClient(http, NullLogger<AiPreviewApiClient>.Instance));
         services.AddSupplyValueFromQueryProvider();
-        return services.BuildServiceProvider();
+        return services.AddFixtureFileDownloads(http).BuildServiceProvider();
     }
 
     private static HttpResponseMessage Json(object value, HttpStatusCode status = HttpStatusCode.OK) =>

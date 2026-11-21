@@ -20,6 +20,18 @@ namespace SmartCv.Tests;
 /// <summary>Dữ liệu và môi trường dùng chung cho các test tải CV (không cần SQL Server, không gọi Gemini).</summary>
 internal static class TestSupport
 {
+    internal static SmartCv.Core.Entities.Evaluation CompletedEvaluation(int jobId, int evaluationId = 0, int? applicationId = null)
+    {
+        var evaluation = new SmartCv.Core.Entities.Evaluation
+        {
+            EvaluationId = evaluationId, Status = "Completed", CreatedAt = DateTime.UtcNow,
+            Run = new() { Status = "Completed", RunType = "Screening", ModelName = "synthetic",
+                PromptVersion = new() { VersionName = Guid.NewGuid().ToString("N"), SystemPrompt = "synthetic" } }
+        };
+        if (applicationId is { } id) evaluation.ApplicationId = id;
+        else evaluation.Application = new() { JobId = jobId, Cv = new() { CvId = Guid.NewGuid(), FileHash = Guid.NewGuid().ToString("N").PadRight(64, '0'), OriginalFileName = "synthetic.pdf", StoredPath = "synthetic", ContentType = "application/pdf", FileSizeBytes = 1 } };
+        return evaluation;
+    }
     // A44 changed /api/health from unconditional liveness to dependency readiness.
     // Non-health regression tests assert the full public contract without depending on installed OCR files.
     internal static async Task AssertHealthResponseAsync(HttpResponseMessage response)
@@ -81,7 +93,8 @@ internal static class TestSupport
 
     /// <summary>SmartCvDbContext chạy trong bộ nhớ (EF Core InMemory), mỗi tên một database riêng.</summary>
     public static SmartCvDbContext InMemoryDb(string name) =>
-        new(new DbContextOptionsBuilder<SmartCvDbContext>().UseInMemoryDatabase(name).Options);
+        new(new DbContextOptionsBuilder<SmartCvDbContext>().UseInMemoryDatabase(name).Options,
+            new TestHostWorkspaceContext(new Microsoft.AspNetCore.Http.HttpContextAccessor()));
 
     /// <summary>
     /// API chạy trong bộ nhớ: cấu hình giả, SmartCvDbContext thay bằng InMemory (tên <paramref name="dbName"/>).
@@ -176,6 +189,9 @@ internal class StartupGatedApiFactory : WebApplicationFactory<Program>
     internal static readonly string JwtTestKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Test hosts use ephemeral encryption keys; never read/write the developer's DPAPI key ring.
+        builder.ConfigureTestServices(services => Microsoft.AspNetCore.DataProtection.DataProtectionBuilderExtensions
+            .UseEphemeralDataProtectionProvider(services.AddDataProtection()));
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Jwt:Key"] = JwtTestKey,

@@ -8,6 +8,7 @@ public sealed record AuditQuery(DateTime FromUtc, DateTime UntilUtc, string? Sea
     string? Action, int? ActorUserId, string? Outcome, string? ResourceType, string? ResourceId,
     string? RequestId, int Page, int PageSize)
 {
+    public int? WorkspaceId { get; init; }
     public static readonly IReadOnlyList<string> Categories = Array.AsReadOnly(new[] { "Authentication", "Accounts", "Cvs", "Candidates", "Recruitment", "Ai", "EvaluationSets", "Privacy" });
     public static readonly IReadOnlyList<string> Outcomes = Array.AsReadOnly(new[] { "Succeeded", "Denied", "Failed", "Partial", "NoChange", "AccessGranted" });
 
@@ -48,7 +49,9 @@ public sealed record AuditQuery(DateTime FromUtc, DateTime UntilUtc, string? Sea
         var page = Number("page", 1, 1_000_000); var pageSize = Number("pageSize", 25, 100);
         var search = Value("search", 100); var action = Value("action"); var type = Value("resourceType", 40);
         var resource = Value("resourceId"); var request = Value("requestId", 64);
+        int? workspace = input.ContainsKey("workspaceId") ? Number("workspaceId", 0, int.MaxValue) : null;
+        if (workspace == 0) errors["workspaceId"] = ["Mã không gian làm việc phải là số nguyên dương."];
         return errors.Count > 0 ? (null, errors) : (new(VietnamTime.StartOfDayUtc(from), VietnamTime.StartOfDayUtc(to.AddDays(1)),
-            search, category, action, actor, outcome, type, resource, request, page, pageSize), errors);
+            search, category, action, actor, outcome, type, resource, request, page, pageSize) { WorkspaceId = workspace }, errors);
     }
 }

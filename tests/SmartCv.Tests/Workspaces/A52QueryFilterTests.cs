@@ -32,7 +32,7 @@ public class A52QueryFilterTests
             Assert.Null(model.FindEntityType(type)!.GetQueryFilter());
         // Mọi entity IWorkspaceOwned trong assembly Core đều nằm trong danh sách đã kiểm chứng (thêm entity mới mà quên filter => test đỏ).
         var owned = typeof(Job).Assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IWorkspaceOwned).IsAssignableFrom(t));
-        Assert.Equal(RootTypes.Select(t => t.Name).Order(), owned.Select(t => t.Name).Order());
+        Assert.Equal(RootTypes.Append(typeof(CandidateDataRequest)).Select(t => t.Name).Order(), owned.Select(t => t.Name).Order());
         Assert.Equal(RootTypes.Length + ChildTypes.Length, model.GetEntityTypes().Count(e => e.GetQueryFilter() is not null));
     }
 

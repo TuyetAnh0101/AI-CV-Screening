@@ -111,10 +111,12 @@ public class A27MigrationTests
         using var db = ModelDb();
         var model = db.GetService<IDesignTimeModel>().Model;
         var old = db.GetService<IModelRuntimeInitializer>().Initialize(new ScappWorkflowV2().TargetModel, designTime: true);
-        var differences = db.GetService<IMigrationsModelDiffer>().GetDifferences(old.GetRelationalModel(), model.GetRelationalModel());
+        var target = db.GetService<IModelRuntimeInitializer>().Initialize(new AddUsers().TargetModel, designTime: true);
+        var differences = db.GetService<IMigrationsModelDiffer>().GetDifferences(old.GetRelationalModel(), target.GetRelationalModel());
         Assert.Equal(new AddUsers().UpOperations.Select(o => o.GetType()), differences.Select(o => o.GetType()));
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(Current, db.Database.GetMigrations().Last());
+        Assert.Contains(Current, db.Database.GetMigrations());
+        Assert.Equal(A53JournalSqlTests.Current, db.Database.GetMigrations().Last());
     }
 
     [Fact]

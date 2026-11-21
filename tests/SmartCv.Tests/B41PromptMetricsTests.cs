@@ -268,7 +268,7 @@ public class B41PromptMetricsTests
     }
 
     private static ServiceProvider Services(Server server, AnonymityState? privacy=null)=>new ServiceCollection().AddLogging().AddSingleton(Api(server))
-        .AddSingleton(privacy??new AnonymityState()).AddSingleton(new HrActorState()).BuildServiceProvider();
+        .AddSingleton(privacy??new AnonymityState()).AddSingleton(B43UiTestSupport.Actor()).BuildServiceProvider();
     private static async Task<string> Html<T>(ServiceProvider services,Dictionary<string,object?>? parameters=null) where T:IComponent
     {
         await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
