@@ -54,12 +54,18 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
             .Skip((page - 1) * pageSize).Take(pageSize).Select(u => new User
             {
                 UserId = u.UserId, Email = u.Email, FullName = u.FullName, Role = u.Role, IsActive = u.IsActive,
-                MustChangePassword = u.MustChangePassword, CreatedAt = u.CreatedAt, LastLoginAt = u.LastLoginAt, SecurityStamp = u.SecurityStamp
+                MustChangePassword = u.MustChangePassword, CreatedAt = u.CreatedAt, LastLoginAt = u.LastLoginAt, SecurityStamp = u.SecurityStamp,
+                EmailVerifiedAt = u.EmailVerifiedAt, SignupSource = u.SignupSource
             }).ToListAsync(ct);
         http.Response.Headers["X-Total-Count"] = count.ToString(CultureInfo.InvariantCulture);
         http.Response.Headers["X-Page"] = page.ToString(CultureInfo.InvariantCulture);
         http.Response.Headers["X-Page-Size"] = pageSize.ToString(CultureInfo.InvariantCulture);
-        return rows.Select(AuthMapping.ToDto).ToList();
+        var ids = rows.Select(u => u.UserId).ToArray();
+        var memberships = await db.WorkspaceMembers.AsNoTracking().Where(m => ids.Contains(m.UserId))
+            .OrderBy(m => m.Workspace.Kind == "Internal" ? 0 : 1).ThenBy(m => m.WorkspaceId)
+            .Select(m => new { m.UserId, m.Workspace.Name }).ToListAsync(ct);
+        var names = memberships.GroupBy(m => m.UserId).ToDictionary(g => g.Key, g => g.First().Name);
+        return rows.Select(u => AuthMapping.ToDto(u, names.GetValueOrDefault(u.UserId))).ToList();
     }
 
     public async Task<UserCredentialResponse> CreateAsync(CreateUserRequest request, ClaimsPrincipal principal, CancellationToken ct)
@@ -68,13 +74,17 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
         if (input is null) throw AccountFailure.Invalid(errors);
         await using var write = await coordinator.BeginAsync(db, ct);
         var actor = await ActorAsync(principal, true, ct);
+        var internalWorkspace = await db.Workspaces.AsNoTracking().SingleOrDefaultAsync(w => w.WorkspaceId == 1 && w.Kind == "Internal" && w.IsActive, ct);
+        if (internalWorkspace is null) throw new AccountFailure(503, "workspace_unavailable", "Không gian làm việc nội bộ chưa sẵn sàng.");
         if (await db.Users.AnyAsync(u => u.Email == input.Email, ct)) throw Duplicate();
         var generated = string.IsNullOrEmpty(request.Password);
         var password = generated ? UserRules.GenerateTemporaryPassword() : request.Password!;
         var user = new User { Email = input.Email, FullName = input.FullName, Role = input.Role, IsActive = true,
-            MustChangePassword = true, CreatedAt = time.GetUtcNow().UtcDateTime };
+            MustChangePassword = true, CreatedAt = time.GetUtcNow().UtcDateTime,
+            EmailVerifiedAt = time.GetUtcNow().UtcDateTime, SignupSource = "Admin" };
         user.PasswordHash = hasher.HashPassword(user, password);
         db.Users.Add(user);
+        db.WorkspaceMembers.Add(new() { User = user, WorkspaceId = 1, Role = "Member", JoinedAt = time.GetUtcNow().UtcDateTime });
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException error) when (error.InnerException is SqlException { Number: 2601 or 2627 }) { throw Duplicate(); }
         audit.Stage(db, "accounts.created", user.UserId.ToString(), principal);
@@ -82,7 +92,7 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
         await write.CommitAsync(ct);
         audit.ConfirmCommitted();
         logger.LogInformation("Account action {Action} by user {ActorId} on user {TargetId} at {Utc}", "create", actor.UserId, user.UserId, time.GetUtcNow());
-        return new() { User = AuthMapping.ToDto(user), TemporaryPassword = generated ? password : null };
+        return new() { User = AuthMapping.ToDto(user, internalWorkspace.Name), TemporaryPassword = generated ? password : null };
     }
 
     public async Task<UserDto> UpdateAsync(int id, UpdateUserRequest request, ClaimsPrincipal principal, string? version, CancellationToken ct)

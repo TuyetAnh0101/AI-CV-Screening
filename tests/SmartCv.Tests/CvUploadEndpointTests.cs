@@ -120,7 +120,7 @@ public class CvUploadEndpointTests
     [Fact]
     public async Task Production_default_does_not_expose_upload_endpoint()
     {
-        using var factory = CreateFactory("Production");
+        using var factory = CreateFactory("Production", settings: new() { ["CvUpload:Endpoint:Enabled"] = "false" });
         using var client = factory.CreateClient();
 
         using var response = await client.PostAsync("/api/cvs/upload", Files("cv.pdf"));

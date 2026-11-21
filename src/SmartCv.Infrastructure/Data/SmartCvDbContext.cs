@@ -116,9 +116,8 @@ public class SmartCvDbContext : DbContext
         modelBuilder.Entity<ApplicationFlagEvent>().HasQueryFilter(e => InSystemScope || e.Flag.Application.WorkspaceId == CurrentWorkspaceId);
         modelBuilder.Entity<HrLabel>().HasQueryFilter(e => InSystemScope || e.EvaluationSet.WorkspaceId == CurrentWorkspaceId);
         modelBuilder.Entity<EvaluationSetMember>().HasQueryFilter(e => InSystemScope || e.EvaluationSet.WorkspaceId == CurrentWorkspaceId);
-        // CandidateDataRequests không có khóa ngoại tới Candidates (nhật ký phải còn sau khi xóa ứng viên) nên chỉ lọc được khi
-        // ứng viên còn trong workspace; dòng nhật ký của ứng viên đã xóa chỉ thấy trong system scope (giới hạn ghi nhận cho A53).
-        modelBuilder.Entity<CandidateDataRequest>().HasQueryFilter(e => InSystemScope || Candidates.Any(c => c.CandidateId == e.CandidateId));
+        // Journal ownership survives candidate deletion; it must never be inferred from a deleted principal.
+        modelBuilder.Entity<CandidateDataRequest>().HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
     }
 
     /// <summary>

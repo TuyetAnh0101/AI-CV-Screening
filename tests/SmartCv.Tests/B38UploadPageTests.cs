@@ -355,7 +355,7 @@ public class B38UploadPageTests
         services.AddSingleton(new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new CvUploadOptions { MaxFileSizeMB = 2 }), NullLogger<CvApiClient>.Instance));
         services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
         services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));
-        return services.BuildServiceProvider();
+        return services.AddFixtureFileDownloads(http).BuildServiceProvider();
     }
 
     private static async Task<R> OpenAsync(ServiceProvider services)
@@ -387,7 +387,7 @@ public class B38UploadPageTests
     public async Task Locked_until_source_and_consent_input_disabled_and_no_upload_request()
     {
         var api = new Api();
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
 
         Assert.True(IsTrue(r.FileInput, "disabled"));
@@ -422,7 +422,7 @@ public class B38UploadPageTests
     {
         var api = new Api();
         var tracker = new Tracker();
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync("JobBoard");
 
@@ -445,7 +445,7 @@ public class B38UploadPageTests
         var api = new Api();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         api.Upload = async u => { if (api.Uploads.Count == 1) await release.Task; return Json(api.AcceptAll(u)); };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync("Email");
 
@@ -479,7 +479,7 @@ public class B38UploadPageTests
             Upload = _ => Task.FromResult(Problem(400, "Chưa xác nhận đồng ý",
                 "Hãy xác nhận ứng viên đã đồng ý xử lý dữ liệu tuyển dụng (consentConfirmed = true) trước khi tải CV."))
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
 
@@ -508,7 +508,7 @@ public class B38UploadPageTests
         {
             Upload = _ => failure == "timeout" ? throw new TaskCanceledException("HttpClient.Timeout") : throw new HttpRequestException("Connection refused")
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
 
@@ -526,7 +526,7 @@ public class B38UploadPageTests
         var api = new Api();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         api.Upload = async u => { await release.Task; return Json(api.AcceptAll(u)); };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
 
@@ -558,7 +558,7 @@ public class B38UploadPageTests
             return Task.FromResult(Json(n < 2 ? new CvDetailDto { CvId = id, ExtractionStatus = ExtractionStatuses.Pending }
                 : name.Contains("mo") ? Completed(id, TextQualityLevels.Low, 182) : Completed(id, TextQualityLevels.Good, 724)));
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("cv-anh-ro.png", 4096, contentType: "image/png"), new FakeFile("cv-anh-mo.png", 4096, contentType: "image/png"));
@@ -592,7 +592,7 @@ public class B38UploadPageTests
         api.Detail = id => Task.FromResult(Json(api.NameOf(id) == "loi.pdf"
             ? new CvDetailDto { CvId = id, ExtractionStatus = ExtractionStatuses.Failed, ExtractionError = "Tesseract: lỗi kỹ thuật" }
             : new CvDetailDto { CvId = id, ExtractionStatus = ExtractionStatuses.Pending }));
-        using var services = Services(api, settings: new() { ["TextCheck:TimeoutMs"] = "200" });
+        await using var services = Services(api, settings: new() { ["TextCheck:TimeoutMs"] = "200" });
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("cho-mai.pdf"), new FakeFile("loi.pdf"));
@@ -617,7 +617,7 @@ public class B38UploadPageTests
             if (api.NameOf(id) == "xoa.pdf" && first) { first = false; return held.Task; }
             return Task.FromResult(Json(new CvDetailDto { CvId = id, ExtractionStatus = ExtractionStatuses.Pending }));
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("xoa.pdf"), new FakeFile("giu.pdf"));
@@ -646,7 +646,7 @@ public class B38UploadPageTests
         var hung = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         api.Detail = id => api.NameOf(id) == "cu.pdf" ? hung.Task   // máy chủ treo, không để ý CancellationToken
             : Task.FromResult(Json(Completed(id, TextQualityLevels.Good, 900)));
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("cu.pdf"));
@@ -668,7 +668,7 @@ public class B38UploadPageTests
     {
         var api = new Api { GetRun = id => Task.FromResult(Json(Run(id, RunStatuses.Completed))) };
         var nav = new TestNavigationManager();
-        using var services = Services(api, nav: nav);
+        await using var services = Services(api, nav: nav);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("dang-doc.pdf"));
@@ -702,7 +702,7 @@ public class B38UploadPageTests
         { JobId = 2, Items = [new() { CvId = oldId, ApplicationId = 99, Status = ApplicationItemStatuses.Created }] }));
         api.GetRun = id => Task.FromResult(Json(Run(id, RunStatuses.Completed)));
         var nav = new TestNavigationManager();
-        using var services = Services(api, nav: nav);
+        await using var services = Services(api, nav: nav);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
 
@@ -740,7 +740,7 @@ public class B38UploadPageTests
             if (n == 2) await slowTwo.Task;
             return Json(new RunEstimateDto { Count = n, Text = $"{n} CV · khoảng {n} phút", BasedOnRuns = 4, AiSimulated = true });
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("a.pdf"), new FakeFile("b.pdf"));
@@ -773,7 +773,7 @@ public class B38UploadPageTests
     public async Task Estimate_for_a_count_already_answered_is_reused_without_another_request()
     {
         var api = new Api();
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("a.pdf"), new FakeFile("b.pdf"));
@@ -802,7 +802,7 @@ public class B38UploadPageTests
     {
         var api = new Api();
         api.Text = id => Task.FromResult(Json(TextDto(id, TextQualityLevels.Low, "Dong 1\nDong 2")));
-        using var services = Services(api);
+        await using var services = Services(api);
         var (r, _, item) = await WithSavedCvAsync(services, api);
         await using var _ = r;
         Assert.Equal(0, api.CallCount("/text"));                     // chưa mở: chưa tải chữ
@@ -835,7 +835,7 @@ public class B38UploadPageTests
     public async Task Dialog_reports_anonymized_missing_and_server_errors_without_old_data(int status, string title, bool canRetry)
     {
         var api = new Api { Text = _ => Task.FromResult(Problem(status, "x")) };
-        using var services = Services(api);
+        await using var services = Services(api);
         var (r, _, item) = await WithSavedCvAsync(services, api);
         await using var _ = r;
 
@@ -863,7 +863,7 @@ public class B38UploadPageTests
             2 => Task.FromResult(Json(new CvTextDto { CvId = id, ExtractionStatus = ExtractionStatuses.Pending, StatusMessage = "CV đang chờ đọc chữ." })),
             _ => Task.FromResult(Json(TextDto(id, TextQualityLevels.Good, new string('a', 900))))
         };
-        using var services = Services(api);
+        await using var services = Services(api);
         var (r, _, item) = await WithSavedCvAsync(services, api);
         await using var _ = r;
 
@@ -891,7 +891,7 @@ public class B38UploadPageTests
                      new() { FileName = u.Files[1], Status = CvUploadStatuses.Rejected, ErrorCode = CvUploadErrorCodes.Duplicate,
                              CvId = Guid.NewGuid(), ErrorMessage = "Trùng với CV đã tải trước đó: \"Nguyen-Van-B.pdf\"." }]
         }));
-        using var services = Services(api, anonymity);
+        await using var services = Services(api, anonymity);
         await using var r = await OpenAsync(services);
         await r.EnableUploadAsync();
         await r.DropAsync(new FakeFile("moi.pdf"), new FakeFile("cu.pdf"));

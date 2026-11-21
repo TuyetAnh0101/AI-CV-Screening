@@ -90,7 +90,7 @@ public sealed class EvaluationDetailUiTests
         services.AddSupplyValueFromQueryProvider();
         services.AddSingleton<Microsoft.AspNetCore.Components.Web.IErrorBoundaryLogger, BoundaryLogger>();
         services.AddSingleton(new EvaluationApiClient(new HttpClient(api) { BaseAddress = new Uri("https://api.test:7123/") }, NullLogger<EvaluationApiClient>.Instance));
-        return services.BuildServiceProvider();
+        return services.AddFixtureFileDownloads(new HttpClient(api) { BaseAddress = new Uri("https://api.test:7123/") }).BuildServiceProvider();
     }
     private sealed class BoundaryLogger : Microsoft.AspNetCore.Components.Web.IErrorBoundaryLogger
     {
@@ -120,7 +120,7 @@ public sealed class EvaluationDetailUiTests
         var api = new Api { Reply = (_, _) => Task.FromResult(Json(completed
             ? Detail(reason: "Nhận xét AI mới đã lưu.")
             : Detail(status: "Pending", reason: "Chưa được phép hiển thị"))) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         Assert.Contains("Chưa có kết quả hoàn tất", await renderer.Text());
@@ -139,7 +139,7 @@ public sealed class EvaluationDetailUiTests
     public async Task Page_uses_real_dto_scores_evidence_raw_text_and_preserves_query()
     {
         var api = new Api { Reply = (_, _) => Task.FromResult(Json(Detail())) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         var text = await renderer.Text();
@@ -167,7 +167,7 @@ public sealed class EvaluationDetailUiTests
     public async Task Unavailable_ai_is_never_presented_as_success(string source, string status, string expected)
     {
         var api = new Api { Reply = (_, _) => Task.FromResult(Json(Detail(source: source, status: status, reason: "SHOULD_NOT_BE_AI_REVIEW"))) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         var text = await renderer.Text();
@@ -184,7 +184,7 @@ public sealed class EvaluationDetailUiTests
     public async Task Http_errors_are_safe(int status, string expected)
     {
         var api = new Api { Reply = (_, _) => Task.FromResult(new HttpResponseMessage((HttpStatusCode)status) { Content = JsonContent.Create(new { detail = "SECRET_TECHNICAL_TRACE" }) }) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 9999 });
         Assert.Contains(expected, await renderer.Text());
@@ -204,7 +204,7 @@ public sealed class EvaluationDetailUiTests
             "timeout" => throw new TaskCanceledException("private path"),
             _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(mode == "empty" ? "null" : "broken json") })
         } };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         Assert.Contains("Không tải được", await renderer.Text());
@@ -216,7 +216,7 @@ public sealed class EvaluationDetailUiTests
     {
         var old = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = new Api { Reply = (r, _) => r.RequestUri!.AbsolutePath.EndsWith("/22") ? old.Task : Task.FromResult(Json(Detail(23))) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         var first = renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         await renderer.Dispatcher.InvokeAsync(() => { });
@@ -239,7 +239,7 @@ public sealed class EvaluationDetailUiTests
             await Task.Delay(Timeout.Infinite, token);
             return Json(Detail());
         } };
-        using var services = Services(api);
+        await using var services = Services(api);
         var renderer = new TestRenderer(services);
         var loading = renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         await renderer.Dispatcher.InvokeAsync(() => { });
@@ -253,11 +253,11 @@ public sealed class EvaluationDetailUiTests
     {
         var api = new Api { Reply = (r, _) => r.RequestUri!.AbsolutePath.Contains("evaluations")
             ? Task.FromResult(Json(Detail())) : throw new HttpRequestException("PRIVATE_SERVER_PATH") };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         await renderer.ClickCv();
-        Assert.Contains("Không mở được CV", await renderer.Text());
+        Assert.Contains("Không kết nối được máy chủ file", await renderer.Text());
         Assert.DoesNotContain("PRIVATE_SERVER_PATH", await renderer.Text());
     }
 
@@ -309,21 +309,20 @@ public sealed class EvaluationDetailUiTests
     }
 
     [Theory]
-    [InlineData(200, "Mở CV gốc")]
-    [InlineData(404, "Không tìm thấy file CV gốc")]
+    [InlineData(200, "Xem CV gốc")]
+    [InlineData(404, "Không tìm thấy file trên máy chủ")]
     [InlineData(401, "đăng nhập lại")]
-    [InlineData(403, "không có quyền xem CV")]
+    [InlineData(403, "không có quyền")]
     public async Task Cv_uses_exact_id_and_api_origin_with_safe_errors(int status, string expected)
     {
         var api = new Api { Reply = (r, _) => Task.FromResult(r.RequestUri!.AbsolutePath.Contains("evaluations") ? Json(Detail()) : new HttpResponseMessage((HttpStatusCode)status)) };
-        using var services = Services(api);
+        await using var services = Services(api);
         await using var renderer = new TestRenderer(services);
         await renderer.Start<EvaluationDetail>(new() { ["Id"] = 22 });
         await renderer.ClickCv();
         Assert.Contains(expected, await renderer.Text());
         Assert.Equal("/api/cvs/11111111-1111-1111-1111-111111111111/file", api.Requests.Last());
-        if (status == 200) Assert.Contains(await renderer.Frames(), f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "href"
-            && Equals(f.AttributeValue, "https://api.test:7123/api/cvs/11111111-1111-1111-1111-111111111111/file"));
+        Assert.DoesNotContain(await renderer.Frames(), f => f.FrameType == RenderTreeFrameType.Attribute && f.AttributeName == "href" && (f.AttributeValue?.ToString()?.Contains("api/cvs/") ?? false));
     }
 }
 #pragma warning restore BL0006

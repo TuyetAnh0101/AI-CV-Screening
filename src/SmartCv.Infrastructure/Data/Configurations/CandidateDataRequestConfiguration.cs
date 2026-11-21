@@ -13,6 +13,9 @@ public class CandidateDataRequestConfiguration : IEntityTypeConfiguration<Candid
             t.HasCheckConstraint("CK_CandidateDataRequests_RequestType", "[RequestType] COLLATE Latin1_General_100_BIN2 IN (N'Export', N'Erase')"));
 
         b.HasKey(x => x.RequestId).HasName("PK_CandidateDataRequests");
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId).OnDelete(DeleteBehavior.NoAction);
+        b.HasIndex(x => new { x.WorkspaceId, x.CandidateId, x.CreatedAt }).HasDatabaseName("IX_CandidateDataRequests_Workspace_Candidate_CreatedAt");
         b.Property(x => x.RequestId).UseIdentityColumn(1, 1);
         b.Property(x => x.RequestType).HasMaxLength(10).IsRequired();
         b.Property(x => x.HandledBy).HasMaxLength(100).IsRequired();

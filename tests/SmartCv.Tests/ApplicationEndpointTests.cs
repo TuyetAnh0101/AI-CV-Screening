@@ -218,8 +218,8 @@ public class ApplicationEndpointTests
         var id = (await ApplyAsync(env, 1, cv)).Body!.Items[0].ApplicationId!.Value;
         await env.DbAsync(db =>
         {
-            if (scored) db.Evaluations.Add(new Evaluation { RunId = 1, ApplicationId = id, Status = "Completed", CreatedAt = DateTime.UtcNow });
-            else db.HrLabels.Add(new HrLabel { EvaluationSetId = 1, ApplicationId = id, IsPass = true, LabeledBy = "HR", LabeledAt = DateTime.UtcNow });
+            if (scored) db.Evaluations.Add(TestSupport.CompletedEvaluation(1, applicationId: id));
+            else db.HrLabels.Add(new HrLabel { EvaluationSet = new EvaluationSet { Name = "Synthetic deletion guard" }, ApplicationId = id, IsPass = true, LabeledBy = "HR", LabeledAt = DateTime.UtcNow });
             return db.SaveChangesAsync();
         });
 
@@ -233,7 +233,7 @@ public class ApplicationEndpointTests
     [Fact]
     public async Task Production_does_not_expose_application_endpoints()
     {
-        using var factory = TestSupport.ApiFactory("Production");
+        using var factory = TestSupport.ApiFactory("Production", settings: new() { ["CvUpload:Endpoint:Enabled"] = "false" });
         using var client = factory.CreateClient();
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/applications?jobId=1")).StatusCode);

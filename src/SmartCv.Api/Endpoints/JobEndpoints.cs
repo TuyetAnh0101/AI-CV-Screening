@@ -231,7 +231,7 @@ public static class JobEndpoints
         && sql.Errors.Cast<SqlError>().Any(e => e.Number is 2601 or 2627 && e.Message.Contains("UQ_Jobs_Workspace_Title", StringComparison.Ordinal));
     private static ProblemHttpResult Missing(int id) => TypedResults.Problem(statusCode: 404, title: "Không tìm thấy Job", detail: $"Không có Job #{id}.");
     private static ProblemHttpResult DuplicateTitle() => TypedResults.Problem(statusCode: 409, title: "Trùng tên Job",
-        detail: "Tên vị trí đã được sử dụng. Hãy chọn tên khác.", extensions: new Dictionary<string, object?> { ["errors"] = new Dictionary<string, string[]> { ["title"] = ["Tên vị trí đã được sử dụng."] } });
+        detail: "Đã có vị trí cùng tên trong không gian làm việc của bạn.", extensions: new Dictionary<string, object?> { ["errors"] = new Dictionary<string, string[]> { ["title"] = ["Đã có vị trí cùng tên trong không gian làm việc của bạn."] } });
     private static ProblemHttpResult Invalid(Dictionary<string, string[]> errors) => TypedResults.Problem(statusCode: 400,
         title: "Dữ liệu chưa hợp lệ", detail: string.Join(" ", errors.Values.SelectMany(e => e)), extensions: new Dictionary<string, object?> { ["errors"] = errors });
 }

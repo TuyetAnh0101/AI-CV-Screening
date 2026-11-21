@@ -12,8 +12,10 @@ public static class AuthMapping
         LastLoginAt = user.LastLoginAt is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : null,
         Workspace = workspace is null ? null : new MeWorkspaceDto { Id = workspace.Id, Name = workspace.Name, Kind = workspace.Kind, Role = workspace.Role }
     };
-    public static UserDto ToDto(User user) => new()
+    public static UserDto ToDto(User user) => ToDto(user, null);
+    public static UserDto ToDto(User user, string? workspaceName) => new()
     {
+        WorkspaceName = workspaceName, EmailVerified = user.EmailVerifiedAt is not null, SignupSource = user.SignupSource,
         UserId = user.UserId, Email = user.Email, FullName = user.FullName, Role = user.Role,
         RoleName = SmartCv.Core.Auth.UserRoles.DisplayName(user.Role), IsActive = user.IsActive,
         MustChangePassword = user.MustChangePassword, Version = Version(user),

@@ -533,7 +533,7 @@ public class A42UploadSupportEndpointTests
     [InlineData("Staging")]
     public async Task A42_endpoints_do_not_exist_outside_development(string environment)
     {
-        using var factory = TestSupport.ApiFactory(environment);
+        using var factory = TestSupport.ApiFactory(environment, settings: new() { ["CvUpload:Endpoint:Enabled"] = "false" });
         using var client = factory.CreateClient();
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/cvs/{Guid.NewGuid()}/text")).StatusCode);

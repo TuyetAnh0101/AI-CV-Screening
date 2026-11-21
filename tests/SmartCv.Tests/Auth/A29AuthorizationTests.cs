@@ -46,6 +46,13 @@ public class A29AuthorizationTests(ITestOutputHelper output)
     private static ClaimsPrincipal Principal(User user, bool mustChange = false) => new(new ClaimsIdentity(
     [new("sub", user.UserId.ToString()), new("role", user.Role), new("smartcv_mcp", mustChange ? "true" : "false")], "Bearer", "name", "role"));
 
+    private static Microsoft.AspNetCore.Http.HttpContext ValidatedRequest()
+    {
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        http.Items[HttpWorkspaceContext.ItemKey] = new SmartCv.Core.Workspaces.WorkspaceSessionInfo(1, "Synthetic internal", "Internal", "Member");
+        return http;
+    }
+
     [Fact]
     public async Task Regression_fixture_identity_is_created_only_in_the_current_InMemory_host()
     {
@@ -121,12 +128,12 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             Assert.True(response.Headers.CacheControl?.NoStore);
             var authorizeData = endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
             var policy = (await AuthorizationPolicy.CombineAsync(factory.Services.GetRequiredService<IAuthorizationPolicyProvider>(), authorizeData))!;
-            Assert.True((await auth.AuthorizeAsync(Principal(admin), null, policy)).Succeeded, route);
+            Assert.True((await auth.AuthorizeAsync(Principal(admin), ValidatedRequest(), policy)).Succeeded, route);
             var adminOnly = AdminRoutes.Contains(route);
-            var hrAllowed = (await auth.AuthorizeAsync(Principal(hr), null, policy)).Succeeded;
+            var hrAllowed = (await auth.AuthorizeAsync(Principal(hr), ValidatedRequest(), policy)).Succeeded;
             Assert.Equal(!adminOnly, hrAllowed);
             // A temporary password only reaches /api/auth/me; every business route is denied for Admin and HR alike.
-            var mustChangeAllowed = (await auth.AuthorizeAsync(Principal(admin, mustChange: true), null, policy)).Succeeded;
+            var mustChangeAllowed = (await auth.AuthorizeAsync(Principal(admin, mustChange: true), ValidatedRequest(), policy)).Succeeded;
             Assert.Equal(route is "GET /api/auth/me" or "POST /api/auth/change-password", mustChangeAllowed);
             var hrStatus = "-";
             if (adminOnly)

@@ -24,6 +24,7 @@ public static class AuditEndpoints
         try
         {
             var query = db.AuditEvents.AsNoTracking().Where(e => e.OccurredAtUtc >= filter.FromUtc && e.OccurredAtUtc < filter.UntilUtc);
+            if (filter.WorkspaceId is { } workspaceId) query = query.Where(e => e.WorkspaceId == workspaceId);
             if (filter.Category is { } category) query = query.Where(e => e.Category == category);
             if (filter.Action is { } action) query = query.Where(e => e.ActionCode == action);
             if (filter.ActorUserId is { } actor) query = query.Where(e => e.ActorUserId == actor);
@@ -39,8 +40,10 @@ public static class AuditEndpoints
             var failures = await query.CountAsync(e => e.Outcome == "Failed" || e.Outcome == "Denied" || e.Outcome == "Partial", ct);
             var rows = await query.OrderByDescending(e => e.OccurredAtUtc).ThenByDescending(e => e.AuditEventId)
                 .Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize).ToListAsync(ct);
+            var workspaceIds = rows.Where(e => e.WorkspaceId != null).Select(e => e.WorkspaceId!.Value).Distinct().ToArray();
+            var names = await db.Workspaces.AsNoTracking().Where(w => workspaceIds.Contains(w.WorkspaceId)).ToDictionaryAsync(w => w.WorkspaceId, w => w.Name, ct);
             return Results.Ok(new AuditPageDto { Page = filter.Page, PageSize = filter.PageSize, TotalCount = total,
-                LoginCount = logins, AccountActionCount = accounts, FailureCount = failures, Items = rows.Select(ToDto).ToList() });
+                LoginCount = logins, AccountActionCount = accounts, FailureCount = failures, Items = rows.Select(e => ToDto(e, e.WorkspaceId is { } w ? names.GetValueOrDefault(w) : null)).ToList() });
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error)) { return Unavailable(); }
     }
@@ -51,13 +54,14 @@ public static class AuditEndpoints
         try
         {
             var row = await db.AuditEvents.AsNoTracking().SingleOrDefaultAsync(e => e.AuditEventId == id, ct);
-            return row is null ? Results.Problem(statusCode: 404, title: "Không tìm thấy sự kiện.", extensions: new Dictionary<string, object?> { ["code"] = "audit_not_found" }) : Results.Ok(ToDto(row));
+            var name = row?.WorkspaceId is { } w ? await db.Workspaces.Where(x => x.WorkspaceId == w).Select(x => x.Name).SingleOrDefaultAsync(ct) : null;
+            return row is null ? Results.Problem(statusCode: 404, title: "Không tìm thấy sự kiện.", extensions: new Dictionary<string, object?> { ["code"] = "audit_not_found" }) : Results.Ok(ToDto(row, name));
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error)) { return Unavailable(); }
     }
     private static IResult Unavailable() => Results.Problem(statusCode: 503, title: "Nhật ký hoạt động tạm không khả dụng.",
         detail: "Kiểm tra kết nối và schema AuditEvents đã được phê duyệt trước khi thử lại.", extensions: new Dictionary<string, object?> { ["code"] = "audit_unavailable" });
-    private static AuditEventDto ToDto(AuditEvent e) => new(e.AuditEventId, DateTime.SpecifyKind(e.OccurredAtUtc, DateTimeKind.Utc),
+    private static AuditEventDto ToDto(AuditEvent e, string? workspaceName) => new(e.AuditEventId, DateTime.SpecifyKind(e.OccurredAtUtc, DateTimeKind.Utc),
         e.ActorUserId, e.ActorNameSnapshot, e.ActorRoleSnapshot, e.ActionCode, e.Category, e.ResourceType, e.ResourceId,
-        e.Outcome, e.RequestId, e.SafeSummary, e.FailureCode);
+        e.Outcome, e.RequestId, e.SafeSummary, e.FailureCode) { WorkspaceId = e.WorkspaceId, WorkspaceName = workspaceName };
 }

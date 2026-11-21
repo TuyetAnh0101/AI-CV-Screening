@@ -133,7 +133,8 @@ public static class ExportEndpoints
         if (errors.Count > 0 || filter is null) return Invalid(errors);
         try
         {
-            var query = db.ExportLogs.AsNoTracking().Where(e => e.AuditEvent.OccurredAtUtc >= filter.FromUtc && e.AuditEvent.OccurredAtUtc < filter.UntilUtc);
+            // Only this Admin-policy log reader crosses workspaces; export generation remains scoped.
+            var query = db.ExportLogs.IgnoreQueryFilters().AsNoTracking().Where(e => e.AuditEvent.OccurredAtUtc >= filter.FromUtc && e.AuditEvent.OccurredAtUtc < filter.UntilUtc);
             if (run is { } runId) query = query.Where(e => e.RunId == runId);
             if (job is { } jobId) query = query.Where(e => e.JobId == jobId);
             if (filter.ActorUserId is { } actor) query = query.Where(e => e.AuditEvent.ActorUserId == actor);
@@ -141,10 +142,11 @@ public static class ExportEndpoints
             var total = await query.CountAsync(ct);
             var rows = await query.OrderByDescending(e => e.AuditEvent.OccurredAtUtc).ThenByDescending(e => e.ExportId)
                 .Skip((filter.Page - 1) * filter.PageSize).Take(filter.PageSize)
-                .Join(db.Jobs, e => e.JobId, j => j.JobId, (e, j) => new ExportLogDto(e.ExportId, e.AuditEventId,
+                .Join(db.Jobs.IgnoreQueryFilters(), e => e.JobId, j => j.JobId, (e, j) => new ExportLogDto(e.ExportId, e.AuditEventId,
                     e.RunId, e.JobId, j.Title, e.Format, e.Stage, e.Fit, e.SearchApplied, e.NeedsReview, e.ManualFlags,
                     e.RowCount, e.Anonymized, e.AuditEvent.ActorUserId, e.AuditEvent.ActorNameSnapshot ?? "Không rõ",
-                    DateTime.SpecifyKind(e.AuditEvent.OccurredAtUtc, DateTimeKind.Utc))).ToListAsync(ct);
+                    DateTime.SpecifyKind(e.AuditEvent.OccurredAtUtc, DateTimeKind.Utc))
+                    { WorkspaceId = e.WorkspaceId, WorkspaceName = db.Workspaces.Where(w => w.WorkspaceId == e.WorkspaceId).Select(w => w.Name).First() }).ToListAsync(ct);
             return Results.Ok(new ExportLogPageDto(filter.Page, filter.PageSize, total,
                 (int)Math.Ceiling(total / (double)filter.PageSize), rows));
         }

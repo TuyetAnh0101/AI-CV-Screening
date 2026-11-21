@@ -570,7 +570,8 @@ public partial class RunScoringProcessorTests
         var run = await AddRunAsync(env, 1);
         var item = await AddItemAsync(env, run, GoodCv);
         await using var broken = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>()
-            .UseInMemoryDatabase(env.Name).AddInterceptors(new FailingSaves(skip: 1)).Options);
+            .UseInMemoryDatabase(env.Name).AddInterceptors(new FailingSaves(skip: 1)).Options,
+            new TestHostWorkspaceContext(new Microsoft.AspNetCore.Http.HttpContextAccessor()));
 
         await Assert.ThrowsAsync<DbUpdateException>(() => env.Processor(new StubAi(), broken).ProcessRunAsync(run, default));
 

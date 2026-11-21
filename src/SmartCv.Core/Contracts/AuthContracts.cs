@@ -50,6 +50,9 @@ public sealed class ChangePasswordResponse
 
 public sealed class UserDto
 {
+    public string? WorkspaceName { get; init; }
+    public bool EmailVerified { get; init; }
+    public string SignupSource { get; init; } = string.Empty;
     public string Version { get; init; } = string.Empty; // Opaque concurrency token; never the SecurityStamp.
     public int UserId { get; init; }
     public string Email { get; init; } = string.Empty;

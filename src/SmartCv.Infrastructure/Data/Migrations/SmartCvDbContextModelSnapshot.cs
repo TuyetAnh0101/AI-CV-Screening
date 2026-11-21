@@ -64,6 +64,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasDefaultValueSql("NEWID()");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("ApplicationId")
@@ -425,6 +426,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .IsFixedLength();
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("CandidateId")
@@ -476,11 +478,18 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
                     b.HasKey("RequestId")
                         .HasName("PK_CandidateDataRequests");
 
                     b.HasIndex("CandidateId", "CreatedAt")
                         .HasDatabaseName("IX_CandidateDataRequests_Candidate_CreatedAt");
+
+                    b.HasIndex("WorkspaceId", "CandidateId", "CreatedAt")
+                        .HasDatabaseName("IX_CandidateDataRequests_Workspace_Candidate_CreatedAt");
 
                     b.ToTable("CandidateDataRequests", null, t =>
                         {
@@ -557,6 +566,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Cvs_UploadedAt");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("CvId")
@@ -755,6 +765,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("RunId")
@@ -835,6 +846,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("EvaluationSetId")
@@ -963,6 +975,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("ExportId");
@@ -1071,6 +1084,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(150)");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("JobId")
@@ -1746,6 +1760,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.HasKey("PromptVersionId")
@@ -2143,6 +2158,15 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired()
                         .HasConstraintName("FK_Candidates_Workspaces");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.CandidateDataRequest", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Cv", b =>

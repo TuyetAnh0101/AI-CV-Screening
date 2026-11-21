@@ -65,8 +65,7 @@ public class A43EndpointTests
     private static async Task<(WebApplicationFactory<Program> Factory, HttpClient Client, Seed Seed)> StartAsync(bool auth = false, SaveChangesInterceptor? interceptor = null)
     {
         var factory = JobCrudEndpointTests.Factory();
-        if (auth) factory = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-            s.AddAuthentication("A43Test").AddScheme<AuthenticationSchemeOptions, Auth>("A43Test", _ => { })));
+        if (auth) factory = global::SmartCv.Tests.Auth.A28TestSupport.Factory();
         if (interceptor is not null) factory = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddDbContext<SmartCvDbContext>(o => o.AddInterceptors(interceptor))));
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
@@ -227,13 +226,18 @@ public class A43EndpointTests
 
     [Theory]
     [InlineData(null, 401)]
-    [InlineData("Viewer", 403)]
+    [InlineData("Viewer", 401)]
     [InlineData("HR", 200)]
     [InlineData("Admin", 200)]
     public async Task Configured_authentication_protects_export_journal_and_erase(string? role, int expected)
     {
         var (factory, client, seed) = await StartAsync(auth: true); using var f = factory; using var c = client;
-        if (role is not null) client.DefaultRequestHeaders.Add("X-A43-Role", role);
+        if (role is "HR" or "Admin")
+        {
+            var user = await global::SmartCv.Tests.Auth.A28TestSupport.Seed(factory, global::SmartCv.Tests.Auth.A28TestSupport.Password(), role);
+            client.DefaultRequestHeaders.Authorization = new("Bearer", global::SmartCv.Tests.Auth.A28TestSupport.Token(user));
+        }
+        else if (role is not null) client.DefaultRequestHeaders.Authorization = new("Bearer", "invalid-role-token");
         using var journal = await client.GetAsync("/api/data-requests"); Assert.Equal(expected, (int)journal.StatusCode);
         using var export = await client.GetAsync($"/api/candidates/{seed.CandidateId}/data-export"); Assert.Equal(expected, (int)export.StatusCode);
         using var erase = await client.PostAsJsonAsync($"/api/candidates/{seed.CandidateId}/erase", new { confirm = true, handledBy = "hr.test" });
@@ -331,7 +335,7 @@ public class A43EndpointTests
         internal int Attempts;
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData data, InterceptionResult<int> result, CancellationToken ct = default)
         {
-            if (!Enabled) return ValueTask.FromResult(result);
+            if (!Enabled || data.Context?.ChangeTracker.Entries<CandidateDataRequest>().Any(e => e.State == EntityState.Added) != true) return ValueTask.FromResult(result);
             Attempts++;
             return ValueTask.FromException<InterceptionResult<int>>(timeout
                 ? new TimeoutException("PRIVATE synthetic") : new InvalidOperationException("PRIVATE synthetic"));

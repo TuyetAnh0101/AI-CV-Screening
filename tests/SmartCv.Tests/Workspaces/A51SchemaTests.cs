@@ -31,8 +31,9 @@ public class A51SchemaTests
         using var db = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>()
             .UseSqlServer("Server=(local);Database=SmartCv_A51_ModelOnly;Integrated Security=True").Options);
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(WorkspaceMigration, db.Database.GetMigrations().Last());
-        Assert.Equal(PreviousMigration, db.Database.GetMigrations().SkipLast(1).Last());
+        Assert.Equal(A53JournalSqlTests.Current, db.Database.GetMigrations().Last());
+        Assert.Equal(WorkspaceMigration, db.Database.GetMigrations().SkipLast(1).Last());
+        Assert.Equal(PreviousMigration, db.Database.GetMigrations().SkipLast(2).Last());
     }
 
     [Fact]
@@ -238,7 +239,7 @@ public class A51SchemaTests
         var seedJobs = File.ReadAllText(Path.Combine(root, "src", "SmartCv.Infrastructure", "Data", "Migrations", "20261106142155_SeedJobs.cs"));
         Assert.DoesNotContain("Workspace", seedJobs);
         foreach (var file in Directory.GetFiles(Path.Combine(root, "src", "SmartCv.Infrastructure", "Data", "Migrations"), "2026*.cs")
-                     .Where(f => !Path.GetFileName(f).Contains("AddWorkspaces", StringComparison.Ordinal)))
+                     .Where(f => string.CompareOrdinal(Path.GetFileName(f), WorkspaceMigration) < 0))
             Assert.DoesNotContain("WorkspaceId", File.ReadAllText(file));
     }
 

@@ -48,6 +48,7 @@ internal sealed class RegressionIdentity
 #pragma warning restore EF1001
             await using var identityDb = new SmartCvDbContext(options.Options);
             if (identityDb.Database.IsInMemory()) await identityDb.Database.EnsureCreatedAsync();
+            await identityDb.EnsureInternalWorkspaceAsync();
             var user = new User
             {
                 Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = StartupGatedApiFactory.RegressionActor,

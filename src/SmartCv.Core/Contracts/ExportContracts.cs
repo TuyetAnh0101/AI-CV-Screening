@@ -22,6 +22,10 @@ public sealed record RankingExportPreviewDto(int RunId, int JobId, string RunSta
 
 public sealed record ExportLogDto(long ExportId, long AuditEventId, int RunId, int JobId, string JobTitle,
     string Format, string Stage, string Fit, bool SearchApplied, bool NeedsReview, bool ManualFlags,
-    int RowCount, bool Anonymized, int? UserId, string ExportedBy, DateTime CreatedAt);
+    int RowCount, bool Anonymized, int? UserId, string ExportedBy, DateTime CreatedAt)
+{
+    public int WorkspaceId { get; init; }
+    public string WorkspaceName { get; init; } = string.Empty;
+}
 
 public sealed record ExportLogPageDto(int Page, int PageSize, int TotalCount, int TotalPages, List<ExportLogDto> Items);
