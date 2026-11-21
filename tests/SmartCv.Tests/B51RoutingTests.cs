@@ -25,7 +25,7 @@ public sealed class B51RoutingTests
         Assert.Contains("/recruitment", dashboardRoutes);
         Assert.DoesNotContain("/", dashboardRoutes);
         Assert.True(typeof(Landing).GetCustomAttributes(true).OfType<IAllowAnonymous>().Any());
-        Assert.Equal(typeof(PublicLayout),
+        Assert.Equal(typeof(web::SmartCv.Web.Components.Layout.PublicLayout),
             typeof(Landing).GetCustomAttribute<LayoutAttribute>()?.LayoutType);
     }
 

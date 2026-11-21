@@ -1,0 +1,41 @@
+<section class="hero" aria-labelledby="landing-title">
+    <div class="hero-grid">
+        <div class="hero-copy">
+            <p class="hero-kicker"><span aria-hidden="true">●</span> HỖ TRỢ TUYỂN DỤNG BẰNG AI</p>
+            <h1 id="landing-title">Sàng lọc CV rõ ràng.<span> Quyết định tự tin hơn.</span></h1>
+            <p class="hero-lead">Từ vị trí tuyển dụng đến kết quả xếp hạng: SCApp giúp đội ngũ nhân sự quản lý CV, đối chiếu tiêu chí và xem lý do đánh giá tại một nơi.</p>
+            <div class="hero-actions">
+                <a class="hero-primary" href="@Cta.Href">@Cta.Text <span aria-hidden="true">↗</span></a>
+                <a class="hero-secondary" href="#how-it-works">Xem cách hoạt động</a>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Cta.Note))
+            { <p class="hero-note" role="status">@Cta.Note</p> }
+            <p class="hero-disclaimer">AI đề xuất và giải thích. Người tuyển dụng đưa ra quyết định cuối cùng.</p>
+        </div>
+        <div class="hero-media">
+            @if (HasScreenshot)
+            {
+                <img src="/img/landing/scapp-dashboard-demo.webp" width="1280" height="800"
+                     alt="Ảnh chụp Dashboard SCApp bằng dữ liệu CV mẫu tổng hợp đã ẩn danh"
+                     class="hero-shot" loading="eager" fetchpriority="high" />
+            }
+            else
+            {
+                <div class="hero-fallback" role="img" aria-label="Minh họa bố cục Dashboard SCApp, không phải dữ liệu ứng viên thật">
+                    <div class="fallback-top"><span class="fallback-brand">SCApp</span><span class="fallback-demo">MINH HỌA GIAO DIỆN</span></div>
+                    <div class="fallback-header"><strong>Tổng quan sàng lọc</strong><span>Vị trí • Hồ sơ • Đánh giá</span></div>
+                    <div class="fallback-cards"><span></span><span></span><span></span></div>
+                    <div class="fallback-columns"><div><i></i><i></i><i></i></div><div><i></i><i></i><i></i></div></div>
+                    <div class="fallback-caption">Thay minh họa bằng ảnh chụp SCApp với dữ liệu tổng hợp trước khi nghiệm thu B52</div>
+                </div>
+            }
+            <p class="hero-media-label">Giao diện minh họa · Không chứa hồ sơ ứng viên thật</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PublicCta Cta { get; set; } = PublicCta.SignIn;
+    // Bật true sau khi đã chụp & đặt ảnh SCApp mẫu đúng đường dẫn.
+    [Parameter] public bool HasScreenshot { get; set; }
+}

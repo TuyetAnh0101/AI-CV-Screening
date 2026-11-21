@@ -1,0 +1,19 @@
+<section id="features" class="section" aria-labelledby="features-heading">
+    <div class="heading"><p class="eyebrow">TÍNH NĂNG</p><h2 id="features-heading">Các công cụ kết nối thành một quy trình</h2><p>Giảm thao tác chuyển đổi giữa danh sách hồ sơ, bảng đánh giá và ghi chú tuyển dụng.</p></div>
+    <div class="features">
+        @foreach (var item in Items)
+        {
+            <article class="feature"><span class="icon" aria-hidden="true">@item.Icon</span><h3>@item.Title</h3><p>@item.Description</p></article>
+        }
+    </div>
+</section>
+@code {
+    private sealed record Item(string Icon, string Title, string Description);
+    private static readonly Item[] Items = [
+        new("01", "Quản lý vị trí", "Tạo vị trí tuyển dụng và thiết lập bộ tiêu chí phù hợp từng công việc."),
+        new("02", "Phân tích CV", "Kết hợp từ khóa và AI để hỗ trợ đối chiếu hồ sơ với yêu cầu tuyển dụng."),
+        new("03", "Xếp hạng có giải thích", "Xem điểm, mức độ phù hợp và các lý do cần được người tuyển dụng xem xét."),
+        new("04", "System Prompt phiên bản", "Lưu và thử nhiều phiên bản hướng dẫn AI để so sánh kết quả đánh giá."),
+        new("05", "Dashboard tuyển dụng", "Theo dõi lượt xử lý, trạng thái và thông tin tổng hợp trong một giao diện.")
+    ];
+}

@@ -9,6 +9,7 @@ using web::SmartCv.Web.Components.Pages;
 using JobsPage = web::SmartCv.Web.Components.Pages.Jobs;
 using web::SmartCv.Web.Helpers;
 using web::SmartCv.Web.Services;
+using PrivacyPage = web::SmartCv.Web.Components.Pages.Privacy;
 
 namespace SmartCv.Tests;
 
@@ -87,8 +88,25 @@ public class B28AccessRulesTests
 
     // ---------- Trang: AuthorizeRouteView ----------
 
-    private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error), typeof(Landing)];   // B51: Landing "/" công khai có chủ đích
-    private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs), typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)];
+    // B51/B52: Các trang được phép truy cập công khai.
+    private static readonly Type[] PublicPages =
+    [
+        typeof(Login),
+        typeof(NotFound),
+        typeof(Error),
+        typeof(Landing),
+        typeof(Terms),
+        typeof(PrivacyPage)
+    ];
+
+    // Các trang chỉ dành cho Admin.
+    private static readonly Type[] AdminPages =
+    [
+        typeof(Users),
+        typeof(ActivityLogs),
+        typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)
+    ];
+    // private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs), typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)];
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
         .Where(t => typeof(IComponent).IsAssignableFrom(t) && t.GetCustomAttributes<RouteAttribute>().Any());

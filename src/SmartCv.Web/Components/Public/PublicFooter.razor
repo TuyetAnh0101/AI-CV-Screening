@@ -1,0 +1,28 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+<footer id="contact" class="footer" aria-label="Thông tin cuối trang">
+    <div class="container">
+        <div class="brand"><strong>SC<span>App</span></strong><p>Công cụ hỗ trợ sàng lọc CV và quyết định tuyển dụng do con người kiểm soát.</p></div>
+        <nav aria-label="Liên kết cuối trang">
+            <a href="/">Trang giới thiệu</a><a href="/#features">Tính năng</a><a href="/terms">Điều khoản</a><a href="/privacy">Chính sách dữ liệu</a>
+        </nav>
+        <div class="contact"><strong>Liên hệ</strong>
+            @if (ContactEmail is { Length: > 0 } email)
+            { <a href="@($"mailto:{email}")">@email</a> }
+            else
+            { <p>Liên hệ quản trị viên dự án qua kênh được nhóm công bố.</p> }
+        </div>
+    </div>
+    <div class="bottom">© @DateTime.UtcNow.Year SCApp · Dự án thử nghiệm phục vụ học tập · AI hỗ trợ, HR quyết định</div>
+</footer>
+@code {
+    private string? ContactEmail
+    {
+        get
+        {
+            var value = Configuration["PublicSite:ContactEmail"];
+            return !string.IsNullOrWhiteSpace(value)
+                && System.Net.Mail.MailAddress.TryCreate(value, out var address)
+                && address.Address == value ? value : null;
+        }
+    }
+}
