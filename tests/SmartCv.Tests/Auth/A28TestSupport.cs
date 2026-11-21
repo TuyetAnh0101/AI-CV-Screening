@@ -24,8 +24,9 @@ internal static class A28TestSupport
     internal static string Key => StartupGatedApiFactory.JwtTestKey;
     internal static string Password() => "Synthetic9" + Guid.NewGuid().ToString("N");
     internal static JwtOptions Settings(string? key = null) => new() { Key = key ?? Key };
-    internal static string Token(User user, TimeProvider? time = null, JwtOptions? settings = null) =>
-        new JwtTokenService(Options.Create(settings ?? Settings()), time ?? TimeProvider.System).Create(user).Token;
+    /// <summary>A52: mặc định token mang workspace nội bộ (WorkspaceId = 1); truyền null để mô phỏng token cũ chưa có claim smartcv_ws.</summary>
+    internal static string Token(User user, TimeProvider? time = null, JwtOptions? settings = null, int? workspaceId = 1) =>
+        new JwtTokenService(Options.Create(settings ?? Settings()), time ?? TimeProvider.System).Create(user, workspaceId).Token;
 
     internal static WebApplicationFactory<Program> Factory(Dictionary<string, string?>? settings = null, DataFault? fault = null, LogCapture? logs = null)
     {
@@ -48,14 +49,18 @@ internal static class A28TestSupport
         });
     }
 
-    internal static async Task<User> Seed(WebApplicationFactory<Program> factory, string password, string role = "Admin", bool active = true, bool mustChange = false, bool oldHash = false)
+    internal static async Task<User> Seed(WebApplicationFactory<Program> factory, string password, string role = "Admin", bool active = true, bool mustChange = false, bool oldHash = false, int? memberOfWorkspace = 1, string workspaceRole = "Member")
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
         var user = new User { Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Tài khoản tổng hợp", Role = role, IsActive = active, MustChangePassword = mustChange, CreatedAt = DateTime.UtcNow };
         var hasher = oldHash ? new PasswordHasher<User>(Options.Create(new PasswordHasherOptions { IterationCount = 10000 })) : new PasswordHasher<User>();
         user.PasswordHash = hasher.HashPassword(user, password);
-        db.Add(user); await db.SaveChangesAsync();
+        await db.EnsureInternalWorkspaceAsync();
+        db.Add(user);
+        // A52: tài khoản tổng hợp là thành viên workspace nội bộ trừ khi test muốn mô phỏng tài khoản chưa có workspace.
+        if (memberOfWorkspace is { } workspace) db.Add(new WorkspaceMember { WorkspaceId = workspace, User = user, Role = workspaceRole, JoinedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
         return user;
     }
 

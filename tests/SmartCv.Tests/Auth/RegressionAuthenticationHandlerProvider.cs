@@ -54,8 +54,12 @@ internal sealed class RegressionIdentity
                 Role = "Admin", IsActive = true, CreatedAt = DateTime.UtcNow,
                 PasswordHash = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
             };
-            identityDb.Users.Add(user); await identityDb.SaveChangesAsync();
-            return token = new JwtTokenService(services.GetRequiredService<IOptions<JwtOptions>>(), TimeProvider.System).Create(user).Token;
+            // A52: người dùng nghiệp vụ của fixture là thành viên workspace nội bộ (WorkspaceId = 1, có sẵn qua migration/HasData);
+            // token mang claim smartcv_ws và được UserSessionValidator xác nhận với database như mọi request thật.
+            identityDb.Users.Add(user);
+            identityDb.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = 1, User = user, Role = "Member", JoinedAt = DateTime.UtcNow });
+            await identityDb.SaveChangesAsync();
+            return token = new JwtTokenService(services.GetRequiredService<IOptions<JwtOptions>>(), TimeProvider.System).Create(user, 1).Token;
         }
         finally { gate.Release(); }
     }

@@ -27,6 +27,14 @@ public sealed class CvExtractionWorker(
                     // Mỗi CV một scope mới: DbContext mới, không giữ dữ liệu cũ giữa các lần
                     using var scope = scopeFactory.CreateScope();
                     var processor = scope.ServiceProvider.GetRequiredService<CvExtractionProcessor>();
+                    var cvDb = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+                    if (await SmartCv.Infrastructure.Workspaces.WorkerWorkspaces.OfCvAsync(cvDb, cvId, stoppingToken) is not { } workspaceId)
+                    {
+                        logger.LogWarning("Không tìm thấy CV {CvId} để đọc chữ", cvId);
+                        continue;
+                    }
+                    // CV được đọc chữ trong workspace của chính nó.
+                    using var workspaceScope = SmartCv.Infrastructure.Workspaces.WorkspaceScope.Begin(workspaceId);
                     await processor.ProcessAsync(cvId, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -56,6 +64,8 @@ public sealed class CvExtractionWorker(
             {
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
+                // Khi khởi động, CV Pending của mọi workspace được xếp lại: chỉ bước liệt kê ID chạy ở system scope (allowlist có test).
+                using var system = SmartCv.Infrastructure.Workspaces.WorkspaceScope.BeginSystem("CvExtractionWorker.requeue-pending");
                 var pending = await db.Cvs.AsNoTracking()
                     .Where(c => c.AnonymizedAt == null && c.ExtractionStatus == ExtractionStatuses.Pending)
                     .OrderBy(c => c.UploadedAt)

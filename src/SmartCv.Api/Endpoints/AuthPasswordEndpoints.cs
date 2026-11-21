@@ -9,12 +9,14 @@ internal static class AuthPasswordEndpoints
         .WithName("ChangePassword").RequireAuthorization(AuthPolicies.SignedIn)
         .RequireRateLimiting(AuthSetup.AccountCredentialRateLimit).Produces<ChangePasswordResponse>();
 
-    private static Task<IResult> ChangeAsync(HttpContext http, UserAccountService service, JwtTokenService tokens,
+    private static Task<IResult> ChangeAsync(HttpContext http, UserAccountService service, JwtTokenService tokens, SmartCv.Infrastructure.Data.SmartCvDbContext db,
         ILogger<ChangePasswordRequest> logger, CancellationToken ct) => AccountApiSupport.RunAsync(http, logger, async () =>
     {
         var request = await AccountApiSupport.ReadAsync<ChangePasswordRequest>(http.Request, ct);
         var user = await service.ChangePasswordAsync(request, http.User, AccountApiSupport.ExpectedVersion(http.Request), ct);
-        var (token, expires) = tokens.Create(user);
-        return Results.Ok(new ChangePasswordResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user) });
+        // Token mới giữ (hoặc nâng cấp token cũ lên) workspace theo membership hiện tại trong database.
+        var workspace = await WorkspaceSelection.ResolveAsync(db, user.UserId, ct);
+        var (token, expires) = tokens.Create(user, workspace?.Id);
+        return Results.Ok(new ChangePasswordResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user, workspace) });
     });
 }

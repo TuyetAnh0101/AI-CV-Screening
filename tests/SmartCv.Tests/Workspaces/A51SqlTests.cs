@@ -57,7 +57,10 @@ internal sealed class A51Database : IAsyncDisposable
         return db;
     }
 
-    internal SmartCvDbContext Context() => new(new DbContextOptionsBuilder<SmartCvDbContext>().UseSqlServer(connection).Options);
+    internal DbContextOptions<SmartCvDbContext> Options(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) =>
+        new DbContextOptionsBuilder<SmartCvDbContext>().UseSqlServer(connection).AddInterceptors(interceptors).Options;
+
+    internal SmartCvDbContext Context() => new(Options());
 
     internal async Task MigrateAsync(string target)
     {

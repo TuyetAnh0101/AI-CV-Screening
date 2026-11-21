@@ -12,7 +12,8 @@ namespace SmartCv.Api.Auth;
 
 public sealed class JwtTokenService(IOptions<JwtOptions> options, TimeProvider time)
 {
-    public (string Token, DateTime ExpiresAt) Create(User user)
+    /// <param name="workspaceId">Workspace đã được xác nhận membership + Active; null thì token không có claim smartcv_ws (chỉ dùng được cho endpoint SignedIn).</param>
+    public (string Token, DateTime ExpiresAt) Create(User user, int? workspaceId = null)
     {
         var settings = options.Value;
         if (settings.Validate() is { } error) throw new InvalidOperationException(error);
@@ -20,14 +21,19 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options, TimeProvider t
             throw new InvalidOperationException("Tài khoản không đủ điều kiện cấp token.");
         var now = DateTimeOffset.FromUnixTimeSeconds(time.GetUtcNow().ToUnixTimeSeconds()).UtcDateTime;
         var expires = now.AddHours(settings.ExpiresHours);
+        if (workspaceId is <= 0) throw new InvalidOperationException("Mã workspace không hợp lệ.");
+        var claims = new List<Claim>
+        {
+            new(SmartCvClaims.UserId, user.UserId.ToString(CultureInfo.InvariantCulture)),
+            new(SmartCvClaims.Email, user.Email), new(SmartCvClaims.Name, user.FullName),
+            new(SmartCvClaims.Role, user.Role), new(SmartCvClaims.Stamp, user.SecurityStamp),
+            new(SmartCvClaims.MustChangePassword, user.MustChangePassword ? "true" : "false")
+        };
+        if (workspaceId is { } ws) claims.Add(new(SmartCvClaims.Workspace, ws.ToString(CultureInfo.InvariantCulture)));
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = settings.Issuer, Audience = settings.Audience, IssuedAt = now, NotBefore = now, Expires = expires,
-            Subject = new ClaimsIdentity([
-                new(SmartCvClaims.UserId, user.UserId.ToString(CultureInfo.InvariantCulture)),
-                new(SmartCvClaims.Email, user.Email), new(SmartCvClaims.Name, user.FullName),
-                new(SmartCvClaims.Role, user.Role), new(SmartCvClaims.Stamp, user.SecurityStamp),
-                new(SmartCvClaims.MustChangePassword, user.MustChangePassword ? "true" : "false")]),
+            Subject = new ClaimsIdentity(claims),
             SigningCredentials = new(SigningKey(settings), SecurityAlgorithms.HmacSha256)
         };
         return (new JsonWebTokenHandler().CreateToken(descriptor), expires);

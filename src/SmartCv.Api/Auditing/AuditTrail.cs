@@ -8,16 +8,18 @@ using SmartCv.Infrastructure.Data;
 namespace SmartCv.Api.Auditing;
 
 /// <summary>No payload APIs. Atomic callers stage an event on their existing context and confirm only after commit.</summary>
-public sealed class AuditTrail(IHttpContextAccessor accessor, IServiceScopeFactory scopes, TimeProvider time, ILogger<AuditTrail> logger)
+public sealed class AuditTrail(IHttpContextAccessor accessor, IServiceScopeFactory scopes, TimeProvider time, ILogger<AuditTrail> logger,
+    SmartCv.Core.Workspaces.IWorkspaceContext? workspace = null)
 {
     private const string RecordedKey = "B43.Audit.Recorded";
     public bool IsRecorded => accessor.HttpContext?.Items.ContainsKey(RecordedKey) == true;
     public void ConfirmCommitted() { if (accessor.HttpContext is { } http) http.Items[RecordedKey] = true; }
 
     public AuditEvent Stage(SmartCvDbContext db, string code, string? resourceId, ClaimsPrincipal? actor = null,
-        User? credentialVerifiedUser = null, string outcome = "Succeeded")
+        User? credentialVerifiedUser = null, string outcome = "Succeeded", int? workspaceId = null)
     {
         var row = Create(AuditCatalog.ByCode(code), resourceId, outcome, null, actor, credentialVerifiedUser);
+        if (workspaceId is > 0) row.WorkspaceId = workspaceId;
         db.AuditEvents.Add(row);
         return row;
     }
@@ -75,7 +77,9 @@ public sealed class AuditTrail(IHttpContextAccessor accessor, IServiceScopeFacto
             OccurredAtUtc = time.GetUtcNow().UtcDateTime, ActorUserId = id,
             ActorNameSnapshot = name, ActorRoleSnapshot = role, ActionCode = action.Code, Category = action.Category,
             ResourceType = action.ResourceType, ResourceId = SafeResource(resourceId), Outcome = outcome,
-            RequestId = RequestId(), SafeSummary = action.Summary, FailureCode = failure
+            RequestId = RequestId(), SafeSummary = action.Summary, FailureCode = failure,
+            // A52: sự kiện của request nghiệp vụ mang workspace hiện hành; sự kiện hệ thống/đăng nhập giữ NULL (schema A51 cho phép).
+            WorkspaceId = workspace is { IsSystemScope: false, WorkspaceId: > 0 } ? workspace.WorkspaceId : null
         };
     }
     private string RequestId()

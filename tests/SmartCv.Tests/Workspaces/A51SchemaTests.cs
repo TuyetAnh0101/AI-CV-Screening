@@ -57,13 +57,13 @@ public class A51SchemaTests
     [InlineData(typeof(EvaluationSet))]
     [InlineData(typeof(EvaluationRun))]
     [InlineData(typeof(ExportLog))]
-    public void Root_entities_are_workspace_owned_with_required_WorkspaceId_defaulting_to_internal(Type type)
+    public void Root_entities_are_workspace_owned_with_required_WorkspaceId_unset_until_stamped(Type type)
     {
         Assert.True(typeof(IWorkspaceOwned).IsAssignableFrom(type));
         var property = Model().FindEntityType(type)!.FindProperty(nameof(IWorkspaceOwned.WorkspaceId))!;
         Assert.False(property.IsNullable);
-        // Đến khi A52 đóng dấu tự động, code hiện tại tạo entity phải rơi vào workspace nội bộ (không phải 0, vi phạm FK).
-        Assert.Equal(WorkspaceKinds.InternalWorkspaceId, ((IWorkspaceOwned)Activator.CreateInstance(type)!).WorkspaceId);
+        // A52: entity mới để WorkspaceId = Unassigned (-1); SmartCvDbContext đóng dấu workspace hiện hành khi lưu (xem A52SaveGuardTests).
+        Assert.Equal(WorkspaceKinds.UnassignedWorkspaceId, ((IWorkspaceOwned)Activator.CreateInstance(type)!).WorkspaceId);
     }
 
     [Fact]
