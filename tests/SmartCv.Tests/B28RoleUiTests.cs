@@ -67,6 +67,7 @@ public class B28RoleUiTests
             .AddSingleton<INavigationInterception>(new NoInterception()).AddSingleton<IScrollToLocationHash>(new NoScroll())
             .AddSingleton(new HealthApiClient(http, NullLogger<HealthApiClient>.Instance))
             .AddSingleton(new JobApiClient(http, NullLogger<JobApiClient>.Instance))
+            .AddSingleton(new DashboardApiClient(http, NullLogger<DashboardApiClient>.Instance))
             .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
         services.AddSupplyValueFromQueryProvider();
         services.AddSmartCvWebAuth();   // đúng chính sách, provider, navigator của Web
@@ -137,7 +138,7 @@ public class B28RoleUiTests
     [InlineData("jobs", "login?returnUrl=%2Fjobs")]
     [InlineData("jobs/new", "login?returnUrl=%2Fjobs%2Fnew")]
     [InlineData("forbidden", "login?returnUrl=%2Fforbidden")]
-    [InlineData("", "login")]
+    [InlineData("dashboard", "login?returnUrl=%2Fdashboard")]
     public async Task Anonymous_visitor_is_sent_to_login_not_to_403_and_nothing_loads(string path, string expected)
     {
         var (html, nav, api) = await Open("anonymous", path);
@@ -145,6 +146,70 @@ public class B28RoleUiTests
         Assert.DoesNotContain("main-navigation", html);
         Assert.DoesNotContain("Bạn không có quyền", html);
         Assert.Empty(api.Calls);
+    }
+
+    // ---------- B51: Landing "/" công khai, Dashboard ở /dashboard ----------
+
+    [Fact]
+    public async Task B51_anonymous_root_shows_landing_without_menu_redirect_or_api_calls()
+    {
+        var (html, nav, api) = await Open("anonymous", "");
+        Assert.Contains("href=\"/login\"", html);
+        Assert.Contains("id=\"main-content\"", html);
+        Assert.DoesNotContain("main-navigation", html);
+        Assert.DoesNotContain("Vào bảng điều khiển", html);
+        Assert.Empty(nav.Navigations);
+        Assert.Empty(api.Calls);
+    }
+
+    [Fact]
+    public async Task B51_signed_in_root_shows_landing_with_dashboard_button_and_no_auto_redirect()
+    {
+        var (html, nav, api) = await Open("HR", "");
+        Assert.Contains("Vào bảng điều khiển", html);
+        Assert.Contains("href=\"/dashboard\"", html);
+        Assert.DoesNotContain("main-navigation", html);   // không dùng MainLayout
+        Assert.Empty(nav.Navigations);
+        Assert.Empty(BusinessCalls(api));
+    }
+
+    [Theory]
+    [InlineData("?jobId=3", "/dashboard?jobId=3")]
+    [InlineData("?from=2026-11-01&to=2026-11-10", "/dashboard?from=2026-11-01&to=2026-11-10")]
+    public async Task B51_signed_in_root_with_dashboard_query_moves_to_dashboard(string query, string expected)
+    {
+        var (_, nav, _) = await Open("HR", query);
+        Assert.Equal((expected, false, true), Assert.Single(nav.Navigations));
+    }
+
+    [Theory]
+    [InlineData("HR", "?utm_source=mail")]
+    [InlineData("HR", "?returnUrl=%2Fjobs")]
+    [InlineData("anonymous", "?jobId=3")]
+    public async Task B51_root_keeps_landing_for_foreign_query_or_anonymous(string state, string query)
+    {
+        var (html, nav, api) = await Open(state, query);
+        Assert.Empty(nav.Navigations);
+        Assert.Contains("id=\"main-content\"", html);
+        Assert.Empty(BusinessCalls(api));
+    }
+
+    [Fact]
+    public async Task B51_admin_opening_dashboard_goes_to_admin_dashboard_once()
+    {
+        var (_, nav, _) = await Open("Admin", "dashboard?jobId=3");
+        Assert.Equal(("/admin/dashboard", false, true), Assert.Single(nav.Navigations));
+        var (_, recruitmentNav, _) = await Open("Admin", "recruitment");
+        Assert.Empty(recruitmentNav.Navigations);
+    }
+
+    [Fact]
+    public async Task B51_hr_opening_dashboard_stays_and_does_not_redirect()
+    {
+        var (html, nav, _) = await Open("HR", "dashboard");
+        Assert.Contains("main-navigation", html);
+        Assert.Contains("href=\"/dashboard\"", html);   // logo + menu
+        Assert.Empty(nav.Navigations);
     }
 
     [Fact]
@@ -184,7 +249,7 @@ public class B28RoleUiTests
 
     [Theory]
     [InlineData("anonymous", "Đăng nhập")]
-    [InlineData("HR", "Về Tổng quan")]
+    [InlineData("HR", "Về bảng điều khiển")]
     public async Task Unknown_address_is_not_found_whether_signed_in_or_not(string state, string action)
     {
         var (html, nav, _) = await Open(state, "khong-co-trang-nay");

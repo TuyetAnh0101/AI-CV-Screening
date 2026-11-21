@@ -51,9 +51,9 @@ public class B19DashboardTests
     public void Query_round_trip_is_ISO_and_omits_empty_values()
     {
         var filter=new DashboardFilter(2,new(2024,2,29),new(2024,3,1));
-        Assert.Equal("/?jobId=2&from=2024-02-29&to=2024-03-01",filter.Url);
+        Assert.Equal("/dashboard?jobId=2&from=2024-02-29&to=2024-03-01",filter.Url);
         Assert.Equal(filter,DashboardFilter.FromUri("https://fixture.test"+filter.Url).Filter);
-        Assert.Equal("/",new DashboardFilter().Url);
+        Assert.Equal("/dashboard",new DashboardFilter().Url);
     }
 
     [Fact]
@@ -286,10 +286,10 @@ public class B19DashboardTests
     [Fact]
     public async Task Home_handles_back_forward_and_same_query_without_duplicate_requests()
     {
-        var server=new Server();var nav=new Nav();using var sp=Services(server,nav);await using var renderer=new Events(sp);await renderer.Show<Home>();
+        var server=new Server();var nav=new Nav("https://app.test/dashboard");using var sp=Services(server,nav);await using var renderer=new Events(sp);await renderer.Show<Home>();
         Assert.Single(server.Calls,p=>p.StartsWith("/api/dashboard/summary"));
-        await renderer.Navigate(nav,"/?jobId=2&from=2026-11-01");Assert.Equal("2",await renderer.Attribute("dashboard-job","value"));
-        await renderer.Navigate(nav,"/");Assert.Equal("",await renderer.Attribute("dashboard-job","value"));
+        await renderer.Navigate(nav,"/dashboard?jobId=2&from=2026-11-01");Assert.Equal("2",await renderer.Attribute("dashboard-job","value"));
+        await renderer.Navigate(nav,"/dashboard");Assert.Equal("",await renderer.Attribute("dashboard-job","value"));
         Assert.Equal(3,server.Calls.Count(p=>p.StartsWith("/api/dashboard/summary")));
     }
     [Fact]

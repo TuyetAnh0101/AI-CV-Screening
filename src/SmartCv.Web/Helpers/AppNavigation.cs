@@ -19,12 +19,14 @@ public static class AppNavigation
 {
     public const string AdminHome = "/admin/dashboard";
     public const string RecruitmentHome = "/recruitment";
-    public static string HomeFor(ClaimsPrincipal? user) => AccessRules.IsAdmin(user) ? AdminHome : "/";
+    public const string DashboardHome = "/dashboard";
+    /// <summary>B51: "trang chủ" của người đã đăng nhập — Dashboard (không phải Landing "/").</summary>
+    public static string HomeFor(ClaimsPrincipal? user) => AccessRules.IsAdmin(user) ? AdminHome : DashboardHome;
     public static IReadOnlyList<NavGroup> Groups { get; } =
     [
         new("Tổng quan",
         [
-            new("Bảng điều khiển", "", "M3 11 12 3l9 8v10h-6v-6H9v6H3z", NavLinkMatch.All),
+            new("Bảng điều khiển", "dashboard", "M3 11 12 3l9 8v10h-6v-6H9v6H3z", NavLinkMatch.All),
         ]),
         new("Tuyển dụng",
         [
@@ -56,7 +58,7 @@ public static class AppNavigation
         var admin = AccessRules.IsAdmin(user);
         return Groups
             .Select(g => new NavGroup(g.Title, g.Items.Where(i => !i.AdminOnly || admin)
-                .Select(i => i.Href.Length == 0 ? i with { Text = admin ? "Dashboard quản trị" : "Dashboard tuyển dụng", Href = admin ? "admin/dashboard" : "" } : i).ToList()))
+                .Select(i => i.Href == "dashboard" ? i with { Text = admin ? "Dashboard quản trị" : "Dashboard tuyển dụng", Href = admin ? "admin/dashboard" : "dashboard" } : i).ToList()))
             .Where(g => g.Items.Count > 0)
             .ToList();
     }

@@ -87,7 +87,7 @@ public class B28AccessRulesTests
 
     // ---------- Trang: AuthorizeRouteView ----------
 
-    private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error)];
+    private static readonly Type[] PublicPages = [typeof(Login), typeof(NotFound), typeof(Error), typeof(Landing)];   // B51: Landing "/" công khai có chủ đích
     private static readonly Type[] AdminPages = [typeof(Users), typeof(ActivityLogs), typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)];
 
     private static IEnumerable<Type> RoutablePages() => typeof(Login).Assembly.GetTypes()
@@ -199,7 +199,7 @@ public class B28AccessRulesTests
     public void Menu_groups_all_existing_business_destinations_under_recruitment_and_AI()
     {
         var hrefs = AppNavigation.For(B28Auth.Principal("HR")).SelectMany(g => g.Items).Select(i => i.Href);
-        Assert.Equal(["", "upload", "candidates", "results", "jobs", "runs", "prompts", "evaluation-sets"], hrefs);
+        Assert.Equal(["dashboard", "upload", "candidates", "results", "jobs", "runs", "prompts", "evaluation-sets"], hrefs);
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class B28AccessRulesTests
         Assert.Equal(hr.Skip(1).SelectMany(g => g.Items).Select(i => i.Href),
             admin.Skip(1).SelectMany(g => g.Items).Where(i => !i.AdminOnly).Select(i => i.Href));
         Assert.Equal("/admin/dashboard", AppNavigation.HomeFor(B28Auth.Principal("Admin")));
-        Assert.Equal("/", AppNavigation.HomeFor(B28Auth.Principal("HR")));
+        Assert.Equal("/dashboard", AppNavigation.HomeFor(B28Auth.Principal("HR")));
     }
 
     [Theory]

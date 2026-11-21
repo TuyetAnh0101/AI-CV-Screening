@@ -178,12 +178,12 @@ public class B29ChangePasswordTests
     }
 
     [Theory]
-    [InlineData(null, "change-password", "/")]
+    [InlineData(null, "change-password", "/dashboard")]
     [InlineData("/jobs?x=1", "change-password?returnUrl=%2Fjobs%3Fx%3D1", "/jobs?x=1")]
-    [InlineData("/change-password", "change-password", "/")]
-    [InlineData("/login", "change-password", "/")]
-    [InlineData("https://evil.example", "change-password", "/")]
-    [InlineData("//evil.example", "change-password", "/")]
+    [InlineData("/change-password", "change-password", "/dashboard")]
+    [InlineData("/login", "change-password", "/dashboard")]
+    [InlineData("https://evil.example", "change-password", "/dashboard")]
+    [InlineData("//evil.example", "change-password", "/dashboard")]
     public void Return_urls_stay_inside_the_app_and_never_loop(string? current, string url, string after)
     {
         Assert.Equal(url, AuthText.ChangePasswordUrl(current));

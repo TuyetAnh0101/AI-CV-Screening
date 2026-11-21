@@ -13,20 +13,20 @@ public class B27AuthSessionTests
     // ---------- AuthText ----------
 
     [Theory]
-    [InlineData(null, "/")]
-    [InlineData("", "/")]
+    [InlineData(null, "/dashboard")]
+    [InlineData("", "/dashboard")]
     [InlineData("/cvs?search=java", "/cvs?search=java")]
     [InlineData("cvs", "/cvs")]
     [InlineData("/runs/15", "/runs/15")]
-    [InlineData("https://lua-dao.vn", "/")]
-    [InlineData("http://localhost:7258/cvs", "/")]
-    [InlineData("//lua-dao.vn", "/")]
-    [InlineData("/\\lua-dao.vn", "/")]
-    [InlineData("\\\\lua-dao.vn", "/")]
-    [InlineData("javascript:alert(1)", "/")]
-    [InlineData("/login", "/")]
-    [InlineData("/LOGIN/?expired=1", "/")]
-    [InlineData("/cvs\r\nSet-Cookie: x=1", "/")]
+    [InlineData("https://lua-dao.vn", "/dashboard")]
+    [InlineData("http://localhost:7258/cvs", "/dashboard")]
+    [InlineData("//lua-dao.vn", "/dashboard")]
+    [InlineData("/\\lua-dao.vn", "/dashboard")]
+    [InlineData("\\\\lua-dao.vn", "/dashboard")]
+    [InlineData("javascript:alert(1)", "/dashboard")]
+    [InlineData("/login", "/dashboard")]
+    [InlineData("/LOGIN/?expired=1", "/dashboard")]
+    [InlineData("/cvs\r\nSet-Cookie: x=1", "/dashboard")]
     public void SafeReturnUrl_only_accepts_paths_inside_the_app(string? input, string expected) =>
         Assert.Equal(expected, AuthText.SafeReturnUrl(input));
 
@@ -36,6 +36,7 @@ public class B27AuthSessionTests
         Assert.Equal("login?returnUrl=%2Fcvs%3Fsearch%3Djava", AuthText.LoginUrl("/cvs?search=java"));
         Assert.Equal("login?returnUrl=%2Fruns&expired=1", AuthText.LoginUrl("/runs", expired: true));
         Assert.Equal("login", AuthText.LoginUrl("/"));
+        Assert.Equal("login?returnUrl=%2Fdashboard", AuthText.LoginUrl("/dashboard"));
         Assert.Equal("login?expired=1", AuthText.LoginUrl("https://lua-dao.vn", expired: true));
     }
 

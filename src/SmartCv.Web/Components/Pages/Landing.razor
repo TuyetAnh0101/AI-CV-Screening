@@ -1,0 +1,94 @@
+@page "/"
+@attribute [AllowAnonymous]
+@layout PublicLayout
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>SCApp · Sàng lọc CV ứng dụng AI</PageTitle>
+
+@if (!ready || redirecting)
+{
+    <div class="landing-state" role="status">Đang mở trang phù hợp…</div>
+}
+else
+{
+    <div class="landing">
+        <section class="landing-hero" aria-labelledby="hero-title">
+            <div class="landing-hero-inner">
+                <div class="landing-copy">
+                    <span class="landing-eyebrow"><span class="landing-dot"></span> NỀN TẢNG HỖ TRỢ TUYỂN DỤNG</span>
+                    <h1 id="hero-title">Chọn đúng ứng viên.<br /><span>Tiết kiệm thời gian sàng lọc.</span></h1>
+                    <p>SCApp hỗ trợ đọc CV, đối chiếu tiêu chí từng vị trí và tổng hợp kết quả để đội tuyển dụng đưa ra quyết định có cơ sở.</p>
+                    <div class="landing-cta">
+                        @if (canUseApp)
+                        {
+                            <a class="landing-primary" href="/dashboard">Vào bảng điều khiển <span aria-hidden="true">→</span></a>
+                        }
+                        else if (mustChangePassword)
+                        {
+                            <a class="landing-primary" href="/change-password">Hoàn tất đổi mật khẩu <span aria-hidden="true">→</span></a>
+                        }
+                        else
+                        {
+                            <a class="landing-primary" href="/login">Đăng nhập SCApp <span aria-hidden="true">→</span></a>
+                        }
+                        <a class="landing-secondary" href="#how-it-works">Xem cách hoạt động</a>
+                    </div>
+                    <p class="landing-note">AI hỗ trợ đánh giá · Quyết định tuyển dụng thuộc về con người.</p>
+                </div>
+                <div class="landing-visual" aria-hidden="true">
+                    <div class="landing-orbit orbit-one"></div><div class="landing-orbit orbit-two"></div>
+                    <div class="landing-demo">
+                        <div class="demo-heading"><span class="demo-pill">SCApp</span><span class="demo-stamp">Tổng quan quy trình</span></div>
+                        <div class="demo-title">Đối chiếu CV với tiêu chí vị trí</div>
+                        <div class="demo-item"><span class="demo-avatar"></span><span class="demo-lines"><i></i><i></i></span><span class="demo-check">✓</span></div>
+                        <div class="demo-item"><span class="demo-avatar alt"></span><span class="demo-lines"><i></i><i></i></span><span class="demo-check">✓</span></div>
+                        <div class="demo-item"><span class="demo-avatar third"></span><span class="demo-lines"><i></i><i></i></span><span class="demo-check">✓</span></div>
+                        <div class="demo-footer"><span class="demo-spark"></span> Kết quả rõ ràng, có thể xem xét</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section id="features" class="landing-section" aria-labelledby="features-title">
+            <div class="section-header"><span class="section-kicker">GIẢI PHÁP</span><h2 id="features-title">Một quy trình tuyển dụng liền mạch</h2><p>Thông tin được tổ chức theo từng vị trí và hồ sơ ứng tuyển.</p></div>
+            <div class="landing-grid">
+                <article class="landing-feature"><span class="feature-number">01</span><h3>Tập trung hồ sơ</h3><p>Quản lý CV và ứng viên gắn với vị trí tuyển dụng.</p></article>
+                <article class="landing-feature"><span class="feature-number">02</span><h3>Đánh giá có căn cứ</h3><p>Kết hợp tiêu chí tuyển dụng và phân tích AI để hỗ trợ sàng lọc.</p></article>
+                <article class="landing-feature"><span class="feature-number">03</span><h3>Theo dõi quyết định</h3><p>Quan sát kết quả, trạng thái ứng tuyển và lịch sử xử lý.</p></article>
+            </div>
+        </section>
+        <section id="how-it-works" class="landing-band" aria-labelledby="process-title">
+            <div class="landing-section-inner"><span class="section-kicker">QUY TRÌNH</span><h2 id="process-title">Từ vị trí đến hồ sơ phù hợp</h2><p>Thiết lập vị trí → Tải CV → Phân tích → Xem xét và quyết định.</p></div>
+        </section>
+        <section id="about" class="landing-about" aria-labelledby="about-title">
+            <h2 id="about-title">Công cụ hỗ trợ con người ra quyết định</h2>
+            <p>SCApp hướng tới quy trình tuyển dụng dễ hiểu, có thể kiểm tra và phù hợp với đội ngũ nhân sự.</p>
+        </section>
+    </div>
+}
+
+@code {
+    private bool ready;
+    private bool redirecting;
+    private bool canUseApp;
+    private bool mustChangePassword;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        canUseApp = AccessRules.CanUseApp(state.User);
+        mustChangePassword = AccessRules.Level(state.User) == AccessLevel.PasswordChangeRequired;
+        ready = true;
+
+        // Link Dashboard cũ: chỉ chuyển khi ĐÃ đăng nhập và có query filter Dashboard hiện hỗ trợ.
+        // Khách chưa đăng nhập vẫn thấy Landing, không gọi API nghiệp vụ.
+        var query = new Uri(Nav.Uri).Query;
+        if (!canUseApp || string.IsNullOrEmpty(query)) return;
+        var filters = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(query);
+        if (!filters.Keys.Any(k => k.Equals("jobId", StringComparison.OrdinalIgnoreCase)
+            || k.Equals("from", StringComparison.OrdinalIgnoreCase)
+            || k.Equals("to", StringComparison.OrdinalIgnoreCase))) return;
+        redirecting = true;
+        Nav.NavigateTo("/dashboard" + query, replace: true);
+    }
+}

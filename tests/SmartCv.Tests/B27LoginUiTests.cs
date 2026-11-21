@@ -110,8 +110,8 @@ public class B27LoginUiTests
 
     [Theory]
     [InlineData("https://app.test/login?returnUrl=%2Fcvs%3Fsearch%3Djava", "/cvs?search=java")]
-    [InlineData("https://app.test/login?returnUrl=https%3A%2F%2Fgoogle.com", "/")]
-    [InlineData("https://app.test/login?returnUrl=%2Flogin", "/")]
+    [InlineData("https://app.test/login?returnUrl=https%3A%2F%2Fgoogle.com", "/dashboard")]
+    [InlineData("https://app.test/login?returnUrl=%2Flogin", "/dashboard")]
     public async Task Signed_in_user_opening_login_goes_back_to_a_safe_page(string uri, string expected)
     {
         var nav = new Nav(uri);

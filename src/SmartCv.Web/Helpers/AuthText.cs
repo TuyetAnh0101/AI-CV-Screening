@@ -7,37 +7,49 @@ namespace SmartCv.Web.Helpers;
 public static class AuthText
 {
     public const string LoginPath = "login";
+    public const string ChangePasswordPath = "change-password";
+    /// <summary>B51: đích mặc định sau đăng nhập / đổi mật khẩu (Landing "/" không phải đích).</summary>
+    public const string DashboardPath = "/dashboard";
 
     /// <summary>
     /// Chỉ nhận đường dẫn TRONG ứng dụng ("/cvs?search=java", "cvs"). Địa chỉ ngoài ("https://lua-dao.vn", "//lua-dao.vn",
-    /// "/\lua-dao.vn") → "/" — tránh kẻ xấu gửi link đăng nhập rồi chuyển người dùng sang trang giả. "/login" → "/" (không vòng lặp).
+    /// "/\lua-dao.vn") → "/dashboard" — tránh kẻ xấu gửi link đăng nhập rồi chuyển người dùng sang trang giả.
+    /// B51: "/" (Landing) và "/login" cũng → "/dashboard" (không vòng lặp, đăng nhập xong vào thẳng Dashboard).
     /// </summary>
     public static string SafeReturnUrl(string? url)
     {
-        if (string.IsNullOrWhiteSpace(url)) return "/";
+        if (string.IsNullOrWhiteSpace(url)) return DashboardPath;
         var u = url.Trim();
         var rawPath = u.Split('?', '#')[0];
         // "://", "//", "\": địa chỉ ngoài; ":" trong phần đường dẫn: scheme như "javascript:" hay "mailto:"; ký tự điều khiển: chèn header.
-        if (u.Length > 2048 || u.StartsWith("//") || u.StartsWith("/\\") || u.StartsWith('\\') || rawPath.Contains(':')
-            || rawPath.Contains('\\') || u.Any(char.IsControl))
-            return "/";
+        if (u.Length > 2048 || u.StartsWith("//", StringComparison.Ordinal) || u.StartsWith("/\\", StringComparison.Ordinal)
+            || u.StartsWith('\\') || rawPath.Contains(':') || rawPath.Contains('\\') || u.Any(char.IsControl))
+            return DashboardPath;
         if (!u.StartsWith('/')) u = "/" + u;
         var path = u.Split('?', '#')[0].TrimEnd('/');
-        if (path.Equals("/login", StringComparison.OrdinalIgnoreCase)) return "/";
+        if (path.Length == 0 || path.Equals("/login", StringComparison.OrdinalIgnoreCase)) return DashboardPath;
         return u;
     }
 
-    /// <summary>"login?returnUrl=%2Fcvs%3Fsearch%3Djava" (+ "&amp;expired=1" khi phiên hết hạn giữa chừng).</summary>
+    private static bool IsExplicitDashboard(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        var path = url.Trim().Split('?', '#')[0].Trim('/');
+        return path.Equals("dashboard", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// "login?returnUrl=%2Fcvs%3Fsearch%3Djava" (+ "&amp;expired=1" khi phiên hết hạn giữa chừng).
+    /// Người xin mở /dashboard PHẢI giữ returnUrl=%2Fdashboard; Landing "/" hoặc URL không hợp lệ thì không gắn returnUrl.
+    /// </summary>
     public static string LoginUrl(string? currentRelativeUrl, bool expired = false)
     {
         var ret = SafeReturnUrl(currentRelativeUrl);
         var q = new List<string>();
-        if (ret != "/") q.Add("returnUrl=" + Uri.EscapeDataString(ret));
+        if (ret != DashboardPath || IsExplicitDashboard(currentRelativeUrl)) q.Add("returnUrl=" + Uri.EscapeDataString(ret));
         if (expired) q.Add("expired=1");
         return LoginPath + (q.Count == 0 ? "" : "?" + string.Join("&", q));
     }
-
-    public const string ChangePasswordPath = "change-password";
 
     /// <summary>
     /// B29: "change-password?returnUrl=%2Fcvs" — trang đổi mật khẩu nhớ trang đang mở (chỉ đường dẫn trong ứng dụng).
@@ -46,7 +58,7 @@ public static class AuthText
     public static string ChangePasswordUrl(string? currentRelativeUrl)
     {
         var ret = AfterPasswordChange(currentRelativeUrl);
-        return ChangePasswordPath + (ret == "/" ? "" : "?returnUrl=" + Uri.EscapeDataString(ret));
+        return ChangePasswordPath + (ret == DashboardPath && !IsExplicitDashboard(currentRelativeUrl) ? "" : "?returnUrl=" + Uri.EscapeDataString(ret));
     }
 
     /// <summary>B29: trang quay về sau khi đổi mật khẩu xong — an toàn, không phải /change-password.</summary>
@@ -54,7 +66,7 @@ public static class AuthText
     {
         var ret = SafeReturnUrl(returnUrl);
         var path = ret.Split('?', '#')[0].TrimEnd('/');
-        return path.Equals("/" + ChangePasswordPath, StringComparison.OrdinalIgnoreCase) ? "/" : ret;
+        return path.Equals("/" + ChangePasswordPath, StringComparison.OrdinalIgnoreCase) ? DashboardPath : ret;
     }
 
     /// <summary>Tên vai trò hiển thị.</summary>
