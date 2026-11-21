@@ -28,6 +28,9 @@ public sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEven
         b.Property(e => e.RequestId).HasMaxLength(64).IsUnicode(false).IsRequired();
         b.Property(e => e.SafeSummary).HasMaxLength(300).IsRequired();
         b.Property(e => e.FailureCode).HasMaxLength(64).IsUnicode(false);
+        // A51: nullable; sự kiện hệ thống và lịch sử cũ giữ NULL (bảng append-only, trigger chặn UPDATE).
+        b.HasOne<Workspace>().WithMany().HasForeignKey(e => e.WorkspaceId).OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_AuditEvents_Workspaces");
+        b.HasIndex(e => new { e.WorkspaceId, e.OccurredAtUtc }).IsDescending(false, true).HasDatabaseName("IX_AuditEvents_Workspace_Time");
         b.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.NoAction).HasConstraintName("FK_AuditEvents_Users");
         b.HasIndex(e => new { e.OccurredAtUtc, e.AuditEventId }).IsDescending(true, true).HasDatabaseName("IX_AuditEvents_Time");
         b.HasIndex(e => new { e.ActorUserId, e.OccurredAtUtc }).IsDescending(false, true).HasDatabaseName("IX_AuditEvents_Actor_Time");

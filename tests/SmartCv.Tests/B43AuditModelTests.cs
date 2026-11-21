@@ -39,8 +39,10 @@ public class B43AuditModelTests
         var audit = model.FindEntityType(typeof(AuditEvent))!;
         Assert.Equal("AuditEvents", audit.GetTableName());
         Assert.True(audit.FindProperty(nameof(AuditEvent.ActorUserId))!.IsNullable);
-        Assert.Equal(DeleteBehavior.NoAction, Assert.Single(audit.GetForeignKeys()).DeleteBehavior);
-        Assert.Equal(6, audit.GetIndexes().Count());
+        // A51 thêm FK tùy chọn tới Workspaces (WorkspaceId nullable) và chỉ mục (WorkspaceId, OccurredAtUtc).
+        Assert.Equal(2, audit.GetForeignKeys().Count());
+        Assert.All(audit.GetForeignKeys(), fk => Assert.Equal(DeleteBehavior.NoAction, fk.DeleteBehavior));
+        Assert.Equal(7, audit.GetIndexes().Count());
         Assert.Equal("SYSUTCDATETIME()", audit.FindProperty(nameof(AuditEvent.OccurredAtUtc))!.GetDefaultValueSql());
         Assert.Contains(audit.GetDeclaredTriggers(), t => t.ModelName == "TR_AuditEvents_NoChange");
         Assert.DoesNotContain(audit.GetProperties(), p => new[] { "Password", "PasswordHash", "SecurityStamp", "Token", "Email", "IpAddress", "Body", "Metadata" }.Contains(p.Name));

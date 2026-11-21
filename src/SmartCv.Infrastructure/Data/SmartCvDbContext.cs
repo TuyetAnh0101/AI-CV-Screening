@@ -19,6 +19,10 @@ public class SmartCvDbContext : DbContext
     public DbSet<Application> Applications => Set<Application>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
+    public DbSet<UserToken> UserTokens => Set<UserToken>();
+    public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<ExportLog> ExportLogs => Set<ExportLog>();
     public DbSet<PromptVersion> PromptVersions => Set<PromptVersion>();

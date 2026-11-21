@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using SmartCv.Core.Constants;
 
 namespace SmartCv.Core.Entities;
 
@@ -22,6 +23,17 @@ public class User
     public DateTime? LastLoginAt { get; set; } // UTC
     public bool MustChangePassword { get; set; }
     public string SecurityStamp { get; set; } = NewStamp();
+    /// <summary>Thời điểm xác minh email. Tài khoản cũ do Admin tạo được coi là đã xác minh lúc CreatedAt.</summary>
+    public DateTime? EmailVerifiedAt { get; set; } // UTC
+    /// <summary>Admin | Local | google | linkedin (xem SignupSources).</summary>
+    public string SignupSource { get; set; } = SignupSources.Admin;
+    public DateTime? TermsAcceptedAt { get; set; } // UTC
+
+    /// <summary>
+    /// false với tài khoản chỉ đăng nhập ngoài (PasswordHash rỗng). Không lưu cột; login phải từ chối hash rỗng,
+    /// không bao giờ so khớp mật khẩu với chuỗi rỗng.
+    /// </summary>
+    public bool HasPassword => PasswordHash.Length > 0;
 
     public static string NewStamp() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 }

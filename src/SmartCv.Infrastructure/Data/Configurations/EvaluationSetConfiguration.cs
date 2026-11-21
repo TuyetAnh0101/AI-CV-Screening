@@ -14,7 +14,12 @@ public class EvaluationSetConfiguration : IEntityTypeConfiguration<EvaluationSet
         b.Property(x => x.EvaluationSetId).UseIdentityColumn(1, 1);
 
         b.Property(x => x.Name).HasMaxLength(150).IsRequired();
-        b.HasAlternateKey(x => x.Name).HasName("UQ_EvaluationSets_Name");
+        // A51: tên bộ duy nhất trong workspace; đích khóa ngoại ghép từ EvaluationRuns.
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasAlternateKey(x => new { x.WorkspaceId, x.Name }).HasName("UQ_EvaluationSets_Workspace_Name");
+        b.HasAlternateKey(x => new { x.WorkspaceId, x.EvaluationSetId }).HasName("AK_EvaluationSets_Workspace_Set");
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_EvaluationSets_Workspaces").OnDelete(DeleteBehavior.NoAction);
 
         b.Property(x => x.Description).HasMaxLength(500);
         b.Property(x => x.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()", "DF_EvaluationSets_CreatedAt");
@@ -24,8 +29,11 @@ public class EvaluationSetConfiguration : IEntityTypeConfiguration<EvaluationSet
         b.Property(x => x.Revision).HasDefaultValue(1, "DF_EvaluationSets_Revision").ValueGeneratedNever();
         b.Property(x => x.UpdatedAt).HasColumnType("datetime2");
         b.ToTable(t => t.HasCheckConstraint("CK_EvaluationSets_Revision", "[Revision] >= 1"));
-        b.HasOne(x => x.Job).WithMany().HasForeignKey(x => x.JobId).IsRequired(false)
-            .HasConstraintName("FK_EvaluationSets_Jobs").OnDelete(DeleteBehavior.SetNull);
+        // A51: khóa ngoại ghép (WorkspaceId, JobId): bộ không thể trỏ tới Job của workspace khác. JobId null thì không kiểm tra.
+        // SET NULL không dùng được vì sẽ xóa cả WorkspaceId (NOT NULL); hiện không có chức năng xóa Job nên dùng Restrict.
+        b.HasOne(x => x.Job).WithMany().HasForeignKey(x => new { x.WorkspaceId, x.JobId })
+            .HasPrincipalKey(j => new { j.WorkspaceId, j.JobId }).IsRequired(false)
+            .HasConstraintName("FK_EvaluationSets_Jobs").OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => x.JobId).HasDatabaseName("IX_EvaluationSets_JobId");
     }
 }

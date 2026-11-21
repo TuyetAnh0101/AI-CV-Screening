@@ -32,16 +32,22 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
         b.HasIndex(x => x.JobId).HasDatabaseName("IX_Applications_JobId");
         b.HasIndex(x => new { x.JobId, x.Stage }).HasDatabaseName("IX_Applications_Job_Stage");
 
+        // A51: WorkspaceId dư thừa có chủ đích + khóa ngoại ghép, để database từ chối ghép CV/Job khác workspace.
+        b.Property(x => x.WorkspaceId).IsRequired();
         b.HasOne(x => x.Cv)
             .WithMany(c => c.Applications)
-            .HasForeignKey(x => x.CvId)
+            .HasForeignKey(x => new { x.WorkspaceId, x.CvId })
+            .HasPrincipalKey(c => new { c.WorkspaceId, c.CvId })
             .HasConstraintName("FK_Applications_Cvs")
             .OnDelete(DeleteBehavior.Restrict);
 
         b.HasOne(x => x.Job)
             .WithMany(j => j.Applications)
-            .HasForeignKey(x => x.JobId)
+            .HasForeignKey(x => new { x.WorkspaceId, x.JobId })
+            .HasPrincipalKey(j => new { j.WorkspaceId, j.JobId })
             .HasConstraintName("FK_Applications_Jobs")
             .OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_Applications_Workspaces").OnDelete(DeleteBehavior.NoAction);
     }
 }

@@ -16,6 +16,11 @@ public class CandidateConfiguration : IEntityTypeConfiguration<Candidate>
         b.HasKey(x => x.CandidateId).HasName("PK_Candidates");
         b.Property(x => x.CandidateId).UseIdentityColumn(1, 1);
 
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasAlternateKey(x => new { x.WorkspaceId, x.CandidateId }).HasName("AK_Candidates_Workspace_Candidate");
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_Candidates_Workspaces").OnDelete(DeleteBehavior.NoAction);
+
         b.Property(x => x.FullName).HasMaxLength(150).IsRequired();
         b.Property(x => x.Email).HasMaxLength(254);
         // CHAR(10): độ dài cố định, không Unicode

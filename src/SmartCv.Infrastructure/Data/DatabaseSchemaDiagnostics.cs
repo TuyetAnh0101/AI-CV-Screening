@@ -50,6 +50,38 @@ public static class DatabaseSchemaDiagnostics
                     AND parent_object_id = OBJECT_ID(N'dbo.ApplicationEvents') AND referenced_object_id = OBJECT_ID(N'dbo.Applications')
                     AND delete_referential_action = 0 AND is_disabled = 0 AND is_not_trusted = 0)
                 UNION ALL
+                SELECT N'A51 table ' + required.Name
+                FROM (VALUES (N'Workspaces'), (N'WorkspaceMembers'), (N'UserTokens'), (N'UserExternalLogins')) required(Name)
+                WHERE OBJECT_ID(N'dbo.' + required.Name, N'U') IS NULL
+                UNION ALL
+                SELECT N'A51 column ' + required.TableName + N'.' + required.Name
+                FROM (VALUES (N'Jobs', N'WorkspaceId'), (N'Cvs', N'WorkspaceId'), (N'Candidates', N'WorkspaceId'), (N'Applications', N'WorkspaceId'),
+                             (N'PromptVersions', N'WorkspaceId'), (N'EvaluationSets', N'WorkspaceId'), (N'EvaluationRuns', N'WorkspaceId'),
+                             (N'ExportLogs', N'WorkspaceId'), (N'AuditEvents', N'WorkspaceId'),
+                             (N'Users', N'EmailVerifiedAt'), (N'Users', N'SignupSource'), (N'Users', N'TermsAcceptedAt')) required(TableName, Name)
+                WHERE NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = OBJECT_ID(N'dbo.' + required.TableName) AND c.name = required.Name)
+                UNION ALL
+                SELECT N'A51 index ' + required.TableName + N'.' + required.Name
+                FROM (VALUES (N'Jobs', N'UQ_Jobs_Workspace_Title'), (N'Cvs', N'IX_Cvs_Workspace_FileHash'),
+                             (N'PromptVersions', N'UX_PromptVersions_Workspace_OneActive'), (N'AuditEvents', N'IX_AuditEvents_Workspace_Time')) required(TableName, Name)
+                WHERE NOT EXISTS (SELECT 1 FROM sys.indexes i WHERE i.name = required.Name AND i.object_id = OBJECT_ID(N'dbo.' + required.TableName) AND i.is_disabled = 0)
+                UNION ALL
+                SELECT N'A51 foreign key ' + required.Name
+                FROM (VALUES (N'FK_Applications_Jobs', N'Applications'), (N'FK_Applications_Cvs', N'Applications'),
+                             (N'FK_EvaluationRuns_PromptVersions', N'EvaluationRuns'), (N'FK_EvaluationRuns_EvaluationSets', N'EvaluationRuns'),
+                             (N'FK_EvaluationSets_Jobs', N'EvaluationSets'), (N'FK_Cvs_Candidates', N'Cvs')) required(Name, TableName)
+                WHERE NOT EXISTS (SELECT 1 FROM sys.foreign_keys f WHERE f.name = required.Name AND f.parent_object_id = OBJECT_ID(N'dbo.' + required.TableName)
+                    AND f.is_disabled = 0 AND f.is_not_trusted = 0
+                    AND (SELECT COUNT(*) FROM sys.foreign_key_columns k WHERE k.constraint_object_id = f.object_id) = 2)
+                UNION ALL
+                SELECT N'A51 legacy global constraint ' + legacy.Name
+                FROM (VALUES (N'UQ_Jobs_Title', N'Jobs'), (N'UQ_Cvs_FileHash', N'Cvs'), (N'UQ_PromptVersions_VersionName', N'PromptVersions'),
+                             (N'UQ_EvaluationSets_Name', N'EvaluationSets'), (N'UX_PromptVersions_OneActive', N'PromptVersions')) legacy(Name, TableName)
+                WHERE EXISTS (SELECT 1 FROM sys.indexes i WHERE i.name = legacy.Name AND i.object_id = OBJECT_ID(N'dbo.' + legacy.TableName))
+                UNION ALL
+                SELECT N'A51 internal workspace row' WHERE OBJECT_ID(N'dbo.Workspaces', N'U') IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM dbo.Workspaces WHERE WorkspaceId = 1 AND Kind = 'Internal')
+                UNION ALL
                 SELECT N'TR_ApplicationEvents_NoChange'
                 WHERE NOT EXISTS (SELECT 1 FROM sys.triggers t WHERE t.object_id = OBJECT_ID(N'dbo.TR_ApplicationEvents_NoChange')
                     AND t.parent_id = OBJECT_ID(N'dbo.ApplicationEvents') AND t.is_disabled = 0 AND t.is_instead_of_trigger = 1

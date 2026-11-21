@@ -4,6 +4,8 @@ namespace SmartCv.Core.Entities;
 public sealed class AuditEvent
 {
     public long AuditEventId { get; set; }
+    /// <summary>Workspace của sự kiện; null với sự kiện hệ thống và toàn bộ lịch sử trước A51 (bảng chỉ thêm, không sửa được).</summary>
+    public int? WorkspaceId { get; set; }
     public DateTime OccurredAtUtc { get; set; }
     public int? ActorUserId { get; set; }
     public string? ActorNameSnapshot { get; set; }

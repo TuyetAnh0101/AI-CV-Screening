@@ -29,8 +29,9 @@ public class JobTitleIndexTests
         Assert.Equal(150, title.GetMaxLength());
         var index = Assert.Single(job.GetIndexes(), i => i.Properties.Contains(title));
         Assert.True(index.IsUnique);
-        Assert.Equal("UQ_Jobs_Title", index.GetDatabaseName());
-        Assert.Equal(new[] { nameof(Job.Title) }, index.Properties.Select(p => p.Name));
+        // A51: tên Job duy nhất trong phạm vi workspace (thay UQ_Jobs_Title toàn cục).
+        Assert.Equal("UQ_Jobs_Workspace_Title", index.GetDatabaseName());
+        Assert.Equal(new[] { nameof(Job.WorkspaceId), nameof(Job.Title) }, index.Properties.Select(p => p.Name));
     }
 
     [Fact]

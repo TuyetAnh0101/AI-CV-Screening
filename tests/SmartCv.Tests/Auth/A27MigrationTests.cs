@@ -41,7 +41,9 @@ public class A27MigrationTests
             ("UserId", "int", false), ("Email", "nvarchar(254)", false), ("FullName", "nvarchar(150)", false),
             ("PasswordHash", "varchar(500)", false), ("Role", "nvarchar(20)", false), ("IsActive", "bit", false),
             ("CreatedAt", "datetime2", false), ("LastLoginAt", "datetime2", true),
-            ("MustChangePassword", "bit", false), ("SecurityStamp", "varchar(64)", false)
+            ("MustChangePassword", "bit", false), ("SecurityStamp", "varchar(64)", false),
+            // A51: ba cột mới (HasPassword là thuộc tính tính toán, không có cột)
+            ("EmailVerifiedAt", "datetime2", true), ("SignupSource", "varchar(20)", false), ("TermsAcceptedAt", "datetime2", true)
         };
         Assert.Equal(contract.OrderBy(c => c.Name), user.GetProperties().Select(p => (p.Name, p.GetColumnType()!, p.IsNullable)).OrderBy(c => c.Name));
         Assert.Equal("PK_Users", user.FindPrimaryKey()!.GetName());
@@ -50,8 +52,8 @@ public class A27MigrationTests
         var email = Assert.Single(user.GetIndexes());
         Assert.Equal("UQ_Users_Email", email.GetDatabaseName()); Assert.True(email.IsUnique);
         Assert.Equal("Email", Assert.Single(email.Properties).Name);
-        var check = Assert.Single(user.GetCheckConstraints());
-        Assert.Equal("CK_Users_Role", check.Name);
+        Assert.Equal(new[] { "CK_Users_Role", "CK_Users_SignupSource" }, user.GetCheckConstraints().Select(c => c.Name).Order());   // A51 thêm CK_Users_SignupSource
+        var check = Assert.Single(user.GetCheckConstraints(), c => c.Name == "CK_Users_Role");
         Assert.Contains("N'Admin', N'HR'", check.Sql);
         Assert.Contains("Latin1_General_100_BIN2", check.Sql);
         Assert.Contains("DATALENGTH", check.Sql);

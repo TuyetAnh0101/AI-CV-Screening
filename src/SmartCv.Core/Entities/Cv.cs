@@ -1,9 +1,13 @@
+using SmartCv.Core.Workspaces;
+
 namespace SmartCv.Core.Entities;
 
 /// <summary>Bảng Cvs - File và nội dung CV. CvId là GUID, cũng là tên file lưu trên ổ đĩa.</summary>
-public class Cv
+public class Cv : IWorkspaceOwned
 {
     public Guid CvId { get; set; }
+    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
     public int? CandidateId { get; set; }
     public string OriginalFileName { get; set; } = string.Empty;
     public string StoredPath { get; set; } = string.Empty;

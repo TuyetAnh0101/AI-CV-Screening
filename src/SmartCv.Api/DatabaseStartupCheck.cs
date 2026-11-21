@@ -23,7 +23,8 @@ public static class DatabaseStartupCheck
             if (pending.Count == 0) return;
             var catalog = db.Database.GetDbConnection().Database;
             logger.LogCritical("Database {Database} is missing {Count} migration(s) required by this build: {Migrations}. " +
-                "Features that write the new schema will fail (for 20261120043759_AddAuditEvents: every login returns 503). " +
+                "Features that write the new schema will fail (for 20261120043759_AddAuditEvents: every login returns 503; " +
+                "for AddWorkspaces (A51) the business tables have no WorkspaceId yet, so queries and inserts fail). " +
                 "Apply the reviewed script in database/ or `dotnet ef database update` after approval; this check never migrates.",
                 catalog, pending.Count, string.Join(", ", pending));
         }

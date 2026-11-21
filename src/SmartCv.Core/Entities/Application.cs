@@ -1,9 +1,13 @@
+using SmartCv.Core.Workspaces;
+
 namespace SmartCv.Core.Entities;
 
 /// <summary>Bảng Applications - Một CV ứng tuyển vào một job.</summary>
-public class Application
+public class Application : IWorkspaceOwned
 {
     public int ApplicationId { get; set; }
+    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
     public Guid CvId { get; set; }
     public int JobId { get; set; }
     public DateTime CreatedAt { get; set; }
