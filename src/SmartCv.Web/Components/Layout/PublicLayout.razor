@@ -1,71 +1,177 @@
+
+@using SmartCv.Web.Services
+@using SmartCv.Web.Helpers
+@using SmartCv.Web.Components.Public
+@using Microsoft.AspNetCore.Components.Authorization
+
 @inherits LayoutComponentBase
+
 @inject AuthenticationStateProvider AuthProvider
+@inject PublicSettingsClient PublicSettings
 
 <div class="public-shell">
-    <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+
+    @* Accessibility: bỏ qua menu để vào nội dung *@
+    <a class="skip-link" href="#main-content">
+        Bỏ qua điều hướng
+    </a>
+
     <header class="public-header">
         <div class="public-bar">
-            <a class="public-brand" href="/" aria-label="SCApp — Trang giới thiệu">
-                <img src="/images/brand/scapp-logo.png" alt="" width="44" height="44" />
-                <span>SC<span class="brand-accent">App</span></span>
+
+            @* Logo *@
+            <a class="public-brand"
+               href="/"
+               aria-label="SCApp — Trang giới thiệu"
+               @onclick="CloseMenu">
+
+                <img src="/images/brand/scapp-logo.png"
+                     alt=""
+                     width="40"
+                     height="40" />
+
+                <span>
+                    SC<span class="brand-accent">App</span>
+                </span>
             </a>
-            <nav class="public-nav" aria-label="Điều hướng giới thiệu">
-                <a href="/#features">Tính năng</a>
-                <a href="/#how-it-works">Quy trình</a>
-                <a href="/#about">Về SCApp</a>
+
+            @* Menu dành cho điện thoại *@
+            <button class="public-menu-toggle"
+                    type="button"
+                    aria-controls="public-navigation"
+                    aria-expanded="@menuOpen"
+                    aria-label="@(menuOpen ? "Đóng menu" : "Mở menu")"
+                    @onclick="ToggleMenu">
+
+                <span aria-hidden="true">
+                    @(menuOpen ? "✕" : "☰")
+                </span>
+
+                Menu
+            </button>
+
+            @* Điều hướng trang công khai *@
+            <nav id="public-navigation"
+                 class="public-nav @(menuOpen ? "is-open" : "")"
+                 aria-label="Điều hướng trang giới thiệu">
+
+                <a href="/#features"
+                   @onclick="CloseMenu">
+                    Tính năng
+                </a>
+
+                <a href="/#how-it-works"
+                   @onclick="CloseMenu">
+                    Cách hoạt động
+                </a>
+
+                <a href="/#faq"
+                   @onclick="CloseMenu">
+                    Câu hỏi
+                </a>
+
             </nav>
+
+            @* CTA theo quyền và cấu hình đăng ký *@
             <div class="public-actions">
+
                 @if (!ready)
                 {
-                    <span class="public-checking" role="status">Đang kiểm tra phiên…</span>
-                }
-                else if (canUseApp)
-                {
-                    <a class="public-button" href="/dashboard">Vào bảng điều khiển <span aria-hidden="true">→</span></a>
-                }
-                else if (mustChangePassword)
-                {
-                    <a class="public-button" href="/change-password">Đổi mật khẩu</a>
+                    <span class="public-checking"
+                          role="status">
+                        Đang kiểm tra phiên…
+                    </span>
                 }
                 else
                 {
-                    <a class="public-login" href="/login">Đăng nhập</a>
-                    @* Nút đăng ký thật được bật ở B53, sau khi A56 có API. Không trỏ đến route 404. *@
+                    @if (cta.Kind == PublicCtaKind.Register)
+                    {
+                        <a class="public-login"
+                           href="/login">
+                            Đăng nhập
+                        </a>
+                    }
+
+                    <a class="public-button"
+                       href="@cta.Href">
+                        @cta.Text
+                        <span aria-hidden="true">→</span>
+                    </a>
+
+                    @if (cta.Kind == PublicCtaKind.SignIn)
+                    {
+                        <span class="public-pending">
+                            Đăng ký công khai sắp mở
+                        </span>
+                    }
                 }
+
             </div>
         </div>
     </header>
 
-    <main id="main-content" class="public-main" tabindex="-1">
+    @* Nội dung trang Landing, Terms hoặc Privacy *@
+    <main id="main-content"
+          class="public-main"
+          tabindex="-1">
+
         @Body
+
     </main>
 
-    <footer class="public-footer">
-        <div class="public-footer-inner">
-            <div class="public-footer-brand">
-                <strong>SCApp</strong>
-                <span>Sàng lọc thông minh, quyết định bởi con người.</span>
-            </div>
-            <nav aria-label="Điều hướng cuối trang">
-                <a href="/#features">Tính năng</a>
-                <a href="/#how-it-works">Quy trình</a>
-                <a href="/login">Đăng nhập</a>
-            </nav>
-            <small>© @DateTime.UtcNow.Year SCApp</small>
-        </div>
-    </footer>
+    @* B52: Footer là component dùng chung *@
+    <PublicFooter />
+
 </div>
 
 @code {
     private bool ready;
-    private bool canUseApp;
-    private bool mustChangePassword;
+    private bool menuOpen;
+
+    private PublicCta cta = PublicCta.SignIn;
 
     protected override async Task OnInitializedAsync()
     {
+        // 1. Kiểm tra trạng thái xác thực hiện tại.
         var state = await AuthProvider.GetAuthenticationStateAsync();
-        canUseApp = AccessRules.CanUseApp(state.User);
-        mustChangePassword = AccessRules.Level(state.User) == AccessLevel.PasswordChangeRequired;
+
+        var canUseApp = AccessRules.CanUseApp(state.User);
+
+        var mustChangePassword =
+            AccessRules.Level(state.User)
+                == AccessLevel.PasswordChangeRequired;
+
+        // 2. Chỉ gọi API cấu hình đăng ký khi cần.
+        // PublicSettingsClient cache kết quả trong circuit.
+        // 404 hoặc lỗi API => registrationEnabled = false.
+        var registrationEnabled =
+            !canUseApp
+            && !mustChangePassword
+            && await PublicSettings.IsRegistrationEnabledAsync();
+
+        // 3. Xác định nút CTA phù hợp.
+        // Admin -> /admin/dashboard
+        // HR -> /dashboard
+        // Bắt buộc đổi mật khẩu -> /change-password
+        // Có đăng ký và route thật -> /register
+        // Còn lại -> /login
+        cta = PublicCta.Resolve(
+            canUseApp,
+            mustChangePassword,
+            registrationEnabled,
+            PublicCta.RegisterRouteAvailable,
+            AccessRules.IsAdmin(state.User));
+
         ready = true;
+    }
+
+    private void ToggleMenu()
+    {
+        menuOpen = !menuOpen;
+    }
+
+    private void CloseMenu()
+    {
+        menuOpen = false;
     }
 }

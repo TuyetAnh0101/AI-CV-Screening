@@ -1,0 +1,9 @@
+<section class="section" aria-labelledby="cta-heading">
+    <div class="container">
+        <div><p class="eyebrow">BẮT ĐẦU VỚI SCAPP</p><h2 id="cta-heading">Bắt đầu với một vị trí tuyển dụng</h2><p>Sắp xếp hồ sơ, đối chiếu tiêu chí và xem kết quả trong một luồng rõ ràng.</p></div>
+        <div class="actions"><a href="@Cta.Href" class="cta-button">@Cta.Text <span aria-hidden="true">↗</span></a>
+            @if (!string.IsNullOrWhiteSpace(Cta.Note)){<small role="status">@Cta.Note</small>}
+        </div>
+    </div>
+</section>
+@code { [Parameter, EditorRequired] public PublicCta Cta { get; set; } = PublicCta.SignIn; }

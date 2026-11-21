@@ -21,6 +21,16 @@ public static class ServiceCollectionExtensions
         // Địa chỉ gốc phải kết thúc bằng "/" thì "api/jobs" mới ghép đúng thành https://.../api/jobs
         var baseUri = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
+        // B52: public settings API. Không dùng ApiClientBase.UseSession hoặc Bearer.
+        services.AddHttpClient("SCAppPublicSettings", client =>
+        {
+            client.BaseAddress = baseUri;
+            client.Timeout = TimeSpan.FromSeconds(6);
+        }).RedactLoggedHeaders(_ => true);
+        services.AddScoped<PublicSettingsClient>(sp =>
+            new PublicSettingsClient(sp.GetRequiredService<IHttpClientFactory>()
+                .CreateClient("SCAppPublicSettings")));
+
         // B27: phiên đăng nhập của từng tab (Scoped = một circuit Blazor). Không singleton/static giữ token.
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ITokenStore, ProtectedSessionTokenStore>();

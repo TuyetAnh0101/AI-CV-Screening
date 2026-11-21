@@ -68,6 +68,9 @@ public class B28RoleUiTests
             .AddSingleton(new HealthApiClient(http, NullLogger<HealthApiClient>.Instance))
             .AddSingleton(new JobApiClient(http, NullLogger<JobApiClient>.Instance))
             .AddSingleton(new DashboardApiClient(http, NullLogger<DashboardApiClient>.Instance))
+            .AddSingleton(new PublicSettingsClient(http))
+            .AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
+                new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build())
             .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
         services.AddSupplyValueFromQueryProvider();
         services.AddSmartCvWebAuth();   // đúng chính sách, provider, navigator của Web
@@ -104,8 +107,20 @@ public class B28RoleUiTests
         return (await Html<Routes>(sp), nav, api);
     }
 
-    private static IEnumerable<string> BusinessCalls(B27CaptureHandler api) =>
-        api.Calls.Select(c => c.Method + " " + c.PathAndQuery).Where(c => !c.EndsWith("/api/health"));
+    private static IEnumerable<string> BusinessCalls(
+        B27CaptureHandler api)
+    {
+        return api.Calls
+            .Select(c => $"{c.Method} {c.PathAndQuery}")
+            .Where(call =>
+                !call.Equals(
+                    "GET /api/health",
+                    StringComparison.OrdinalIgnoreCase)
+                &&
+                !call.Equals(
+                    "GET /api/auth/registration-settings",
+                    StringComparison.OrdinalIgnoreCase));
+    }
 
     // ---------- Chặn trang ----------
 
@@ -154,12 +169,36 @@ public class B28RoleUiTests
     public async Task B51_anonymous_root_shows_landing_without_menu_redirect_or_api_calls()
     {
         var (html, nav, api) = await Open("anonymous", "");
+
+        // Người chưa đăng nhập vẫn truy cập Landing.
         Assert.Contains("href=\"/login\"", html);
         Assert.Contains("id=\"main-content\"", html);
+
+        // Không hiển thị menu của hệ thống nội bộ.
         Assert.DoesNotContain("main-navigation", html);
         Assert.DoesNotContain("Vào bảng điều khiển", html);
+
+        // Không tự chuyển hướng.
         Assert.Empty(nav.Navigations);
-        Assert.Empty(api.Calls);
+
+        // B52: Không gọi API nghiệp vụ khi chưa đăng nhập.
+        Assert.Empty(BusinessCalls(api));
+
+        // B52: Chỉ cho phép gọi API cấu hình đăng ký công khai.
+        Assert.Contains(
+            api.Calls,
+            call => string.Equals(call.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                && call.PathAndQuery
+                    == "/api/auth/registration-settings");
+
+        // Không được phát sinh request ngoài danh sách cho phép.
+        Assert.All(
+            api.Calls,
+            call => Assert.True(
+                string.Equals(call.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                && call.PathAndQuery
+                    == "/api/auth/registration-settings",
+                $"Unexpected public API call: {call.Method} {call.PathAndQuery}"));
     }
 
     [Fact]
@@ -186,12 +225,30 @@ public class B28RoleUiTests
     [InlineData("HR", "?utm_source=mail")]
     [InlineData("HR", "?returnUrl=%2Fjobs")]
     [InlineData("anonymous", "?jobId=3")]
-    public async Task B51_root_keeps_landing_for_foreign_query_or_anonymous(string state, string query)
+    public async Task B51_root_keeps_landing_for_foreign_query_or_anonymous(
+        string state,
+        string query)
     {
         var (html, nav, api) = await Open(state, query);
+
+        // Không tự động chuyển sang Dashboard.
         Assert.Empty(nav.Navigations);
+
+        // Vẫn hiển thị trang Landing.
         Assert.Contains("id=\"main-content\"", html);
+
+        // Không được gọi API nghiệp vụ.
         Assert.Empty(BusinessCalls(api));
+
+        // B52: người chưa đăng nhập có thể đọc cấu hình đăng ký.
+        if (state == "anonymous")
+        {
+            Assert.Contains(
+                api.Calls,
+                call => string.Equals(call.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                    && call.PathAndQuery
+                        == "/api/auth/registration-settings");
+        }
     }
 
     [Fact]
