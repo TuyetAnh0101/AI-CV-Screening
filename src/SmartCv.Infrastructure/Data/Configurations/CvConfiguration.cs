@@ -25,7 +25,13 @@ public class CvConfiguration : IEntityTypeConfiguration<Cv>
         b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
         // CHAR(64) cho mã SHA-256
         b.Property(x => x.FileHash).HasMaxLength(64).IsFixedLength().IsUnicode(false).IsRequired();
-        b.HasAlternateKey(x => x.FileHash).HasName("UQ_Cvs_FileHash");
+        // A51: SHA-256 chỉ duy nhất trong workspace (thay UQ_Cvs_FileHash toàn cục). Giữ UNIQUE để hai lần tải
+        // đồng thời cùng một file vẫn chỉ cho một bản vào database (CvUploadService dựa vào lỗi 2601/2627).
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasIndex(x => new { x.WorkspaceId, x.FileHash }).IsUnique().HasDatabaseName("IX_Cvs_Workspace_FileHash");
+        b.HasAlternateKey(x => new { x.WorkspaceId, x.CvId }).HasName("AK_Cvs_Workspace_Cv");
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_Cvs_Workspaces").OnDelete(DeleteBehavior.NoAction);
 
         b.Property(x => x.ExtractedText);                     // NVARCHAR(MAX) NULL
         b.Property(x => x.ExtractionMethod).HasMaxLength(20);
@@ -42,7 +48,8 @@ public class CvConfiguration : IEntityTypeConfiguration<Cv>
 
         b.HasOne(x => x.Candidate)
             .WithMany(c => c.Cvs)
-            .HasForeignKey(x => x.CandidateId)
+            .HasForeignKey(x => new { x.WorkspaceId, x.CandidateId })
+            .HasPrincipalKey(c => new { c.WorkspaceId, c.CandidateId })
             .IsRequired(false)
             .HasConstraintName("FK_Cvs_Candidates")
             .OnDelete(DeleteBehavior.Restrict);

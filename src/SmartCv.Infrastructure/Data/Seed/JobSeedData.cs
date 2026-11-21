@@ -15,11 +15,11 @@ public static class JobSeedData
     // Dùng object ẩn danh (new { ... }) thay vì new Job { ... } để không dính navigation property.
     public static readonly object[] Jobs =
     {
-        new { JobId = 1, Title = "Backend Developer (.NET)", Description = "Phát triển Web API bằng ASP.NET Core, làm việc với SQL Server và Entity Framework Core.", MinGpa = (decimal?)2.50m, MinYearsExperience = 0.5m, IsActive = true, CreatedAt = SeedDate },
-        new { JobId = 2, Title = "Frontend Developer (Blazor)", Description = "Xây dựng giao diện Blazor, kết nối API, đảm bảo giao diện thân thiện và responsive.", MinGpa = (decimal?)2.50m, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
-        new { JobId = 3, Title = "AI Engineer Intern", Description = "Tích hợp mô hình ngôn ngữ lớn (Gemini), viết prompt và đánh giá chất lượng đầu ra.", MinGpa = (decimal?)3.00m, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
-        new { JobId = 4, Title = "Tester (QA)", Description = "Thiết kế test case, kiểm thử chức năng và API, ghi nhận và theo dõi lỗi.", MinGpa = (decimal?)null, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
-        new { JobId = 5, Title = "Business Analyst", Description = "Thu thập, phân tích yêu cầu, mô hình hóa nghiệp vụ và làm cầu nối giữa khách hàng với đội phát triển.", MinGpa = (decimal?)2.80m, MinYearsExperience = 1.0m, IsActive = true, CreatedAt = SeedDate },
+        new { JobId = 1, WorkspaceId = SmartCv.Core.Workspaces.WorkspaceKinds.InternalWorkspaceId, Title = "Backend Developer (.NET)", Description = "Phát triển Web API bằng ASP.NET Core, làm việc với SQL Server và Entity Framework Core.", MinGpa = (decimal?)2.50m, MinYearsExperience = 0.5m, IsActive = true, CreatedAt = SeedDate },
+        new { JobId = 2, WorkspaceId = SmartCv.Core.Workspaces.WorkspaceKinds.InternalWorkspaceId, Title = "Frontend Developer (Blazor)", Description = "Xây dựng giao diện Blazor, kết nối API, đảm bảo giao diện thân thiện và responsive.", MinGpa = (decimal?)2.50m, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
+        new { JobId = 3, WorkspaceId = SmartCv.Core.Workspaces.WorkspaceKinds.InternalWorkspaceId, Title = "AI Engineer Intern", Description = "Tích hợp mô hình ngôn ngữ lớn (Gemini), viết prompt và đánh giá chất lượng đầu ra.", MinGpa = (decimal?)3.00m, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
+        new { JobId = 4, WorkspaceId = SmartCv.Core.Workspaces.WorkspaceKinds.InternalWorkspaceId, Title = "Tester (QA)", Description = "Thiết kế test case, kiểm thử chức năng và API, ghi nhận và theo dõi lỗi.", MinGpa = (decimal?)null, MinYearsExperience = 0.0m, IsActive = true, CreatedAt = SeedDate },
+        new { JobId = 5, WorkspaceId = SmartCv.Core.Workspaces.WorkspaceKinds.InternalWorkspaceId, Title = "Business Analyst", Description = "Thu thập, phân tích yêu cầu, mô hình hóa nghiệp vụ và làm cầu nối giữa khách hàng với đội phát triển.", MinGpa = (decimal?)2.80m, MinYearsExperience = 1.0m, IsActive = true, CreatedAt = SeedDate },
     };
 
     public static readonly object[] JobSkills =

@@ -63,6 +63,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasDefaultValueSql("NEWID()");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("ApplicationId")
                         .HasName("PK_Applications");
 
@@ -74,6 +77,10 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     b.HasIndex("JobId", "Stage")
                         .HasDatabaseName("IX_Applications_Job_Stage");
+
+                    b.HasIndex("WorkspaceId", "CvId");
+
+                    b.HasIndex("WorkspaceId", "JobId");
 
                     b.ToTable("Applications", null, t =>
                         {
@@ -344,6 +351,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("AuditEventId")
                         .HasName("PK_AuditEvents");
 
@@ -361,6 +371,10 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasIndex("OccurredAtUtc", "AuditEventId")
                         .IsDescending()
                         .HasDatabaseName("IX_AuditEvents_Time");
+
+                    b.HasIndex("WorkspaceId", "OccurredAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_AuditEvents_Workspace_Time");
 
                     b.HasIndex("Category", "Outcome", "OccurredAtUtc")
                         .IsDescending(false, false, true)
@@ -410,8 +424,14 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("char(10)")
                         .IsFixedLength();
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("CandidateId")
                         .HasName("PK_Candidates");
+
+                    b.HasAlternateKey("WorkspaceId", "CandidateId")
+                        .HasName("AK_Candidates_Workspace_Candidate");
 
                     b.ToTable("Candidates", null, t =>
                         {
@@ -536,11 +556,14 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasColumnType("datetime2")
                         .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Cvs_UploadedAt");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("CvId")
                         .HasName("PK_Cvs");
 
-                    b.HasAlternateKey("FileHash")
-                        .HasName("UQ_Cvs_FileHash");
+                    b.HasAlternateKey("WorkspaceId", "CvId")
+                        .HasName("AK_Cvs_Workspace_Cv");
 
                     b.HasIndex("CandidateId")
                         .HasDatabaseName("IX_Cvs_CandidateId");
@@ -548,6 +571,12 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasIndex("RetainUntil")
                         .HasDatabaseName("IX_Cvs_RetainUntil")
                         .HasFilter("[AnonymizedAt] IS NULL AND [RetainUntil] IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "CandidateId");
+
+                    b.HasIndex("WorkspaceId", "FileHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Cvs_Workspace_FileHash");
 
                     b.ToTable("Cvs", null, t =>
                         {
@@ -725,6 +754,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Property<int>("TotalItems")
                         .HasColumnType("int");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("RunId")
                         .HasName("PK_EvaluationRuns");
 
@@ -733,6 +765,10 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     b.HasIndex("PromptVersionId")
                         .HasDatabaseName("IX_EvaluationRuns_PromptVersionId");
+
+                    b.HasIndex("WorkspaceId", "EvaluationSetId");
+
+                    b.HasIndex("WorkspaceId", "PromptVersionId");
 
                     b.ToTable("EvaluationRuns", null, t =>
                         {
@@ -798,14 +834,22 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("EvaluationSetId")
                         .HasName("PK_EvaluationSets");
 
-                    b.HasAlternateKey("Name")
-                        .HasName("UQ_EvaluationSets_Name");
+                    b.HasAlternateKey("WorkspaceId", "EvaluationSetId")
+                        .HasName("AK_EvaluationSets_Workspace_Set");
+
+                    b.HasAlternateKey("WorkspaceId", "Name")
+                        .HasName("UQ_EvaluationSets_Workspace_Name");
 
                     b.HasIndex("JobId")
                         .HasDatabaseName("IX_EvaluationSets_JobId");
+
+                    b.HasIndex("WorkspaceId", "JobId");
 
                     b.ToTable("EvaluationSets", null, t =>
                         {
@@ -918,6 +962,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("ExportId");
 
                     b.HasIndex("AuditEventId")
@@ -928,6 +975,10 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                     b.HasIndex("RunId", "ExportId")
                         .IsDescending(false, true);
+
+                    b.HasIndex("WorkspaceId", "ExportId")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_ExportLogs_Workspace_Export");
 
                     b.ToTable("ExportLogs", null, t =>
                         {
@@ -1019,12 +1070,18 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("JobId")
                         .HasName("PK_Jobs");
 
-                    b.HasIndex("Title")
+                    b.HasAlternateKey("WorkspaceId", "JobId")
+                        .HasName("AK_Jobs_Workspace_Job");
+
+                    b.HasIndex("WorkspaceId", "Title")
                         .IsUnique()
-                        .HasDatabaseName("UQ_Jobs_Title");
+                        .HasDatabaseName("UQ_Jobs_Workspace_Title");
 
                     b.ToTable("Jobs", null, t =>
                         {
@@ -1044,7 +1101,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             IsActive = true,
                             MinGpa = 2.50m,
                             MinYearsExperience = 0.5m,
-                            Title = "Backend Developer (.NET)"
+                            Title = "Backend Developer (.NET)",
+                            WorkspaceId = 1
                         },
                         new
                         {
@@ -1054,7 +1112,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             IsActive = true,
                             MinGpa = 2.50m,
                             MinYearsExperience = 0.0m,
-                            Title = "Frontend Developer (Blazor)"
+                            Title = "Frontend Developer (Blazor)",
+                            WorkspaceId = 1
                         },
                         new
                         {
@@ -1064,7 +1123,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             IsActive = true,
                             MinGpa = 3.00m,
                             MinYearsExperience = 0.0m,
-                            Title = "AI Engineer Intern"
+                            Title = "AI Engineer Intern",
+                            WorkspaceId = 1
                         },
                         new
                         {
@@ -1073,7 +1133,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             Description = "Thiết kế test case, kiểm thử chức năng và API, ghi nhận và theo dõi lỗi.",
                             IsActive = true,
                             MinYearsExperience = 0.0m,
-                            Title = "Tester (QA)"
+                            Title = "Tester (QA)",
+                            WorkspaceId = 1
                         },
                         new
                         {
@@ -1083,7 +1144,8 @@ namespace SmartCv.Infrastructure.Data.Migrations
                             IsActive = true,
                             MinGpa = 2.80m,
                             MinYearsExperience = 1.0m,
-                            Title = "Business Analyst"
+                            Title = "Business Analyst",
+                            WorkspaceId = 1
                         });
                 });
 
@@ -1683,15 +1745,21 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
                     b.HasKey("PromptVersionId")
                         .HasName("PK_PromptVersions");
 
-                    b.HasAlternateKey("VersionName")
-                        .HasName("UQ_PromptVersions_VersionName");
+                    b.HasAlternateKey("WorkspaceId", "PromptVersionId")
+                        .HasName("AK_PromptVersions_Workspace_Prompt");
 
-                    b.HasIndex("IsActive")
+                    b.HasAlternateKey("WorkspaceId", "VersionName")
+                        .HasName("UQ_PromptVersions_Workspace_VersionName");
+
+                    b.HasIndex("WorkspaceId")
                         .IsUnique()
-                        .HasDatabaseName("UX_PromptVersions_OneActive")
+                        .HasDatabaseName("UX_PromptVersions_Workspace_OneActive")
                         .HasFilter("[IsActive] = 1");
 
                     b.ToTable("PromptVersions", (string)null);
@@ -1714,6 +1782,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(254)
                         .HasColumnType("nvarchar(254)");
+
+                    b.Property<DateTime?>("EmailVerifiedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -1746,6 +1817,16 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(64)");
 
+                    b.Property<string>("SignupSource")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Admin", "DF_Users_SignupSource");
+
+                    b.Property<DateTime?>("TermsAcceptedAt")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("UserId")
                         .HasName("PK_Users");
 
@@ -1756,21 +1837,236 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.ToTable("Users", null, t =>
                         {
                             t.HasCheckConstraint("CK_Users_Role", "[Role] COLLATE Latin1_General_100_BIN2 IN (N'Admin', N'HR') AND DATALENGTH([Role]) = CASE WHEN [Role] = N'Admin' THEN 10 ELSE 4 END");
+
+                            t.HasCheckConstraint("CK_Users_SignupSource", "[SignupSource] COLLATE Latin1_General_100_BIN2 IN (N'Admin', N'Local', N'google', N'linkedin')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.UserExternalLogin", b =>
+                {
+                    b.Property<int>("UserExternalLoginId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserExternalLoginId"));
+
+                    b.Property<string>("EmailAtLink")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LinkedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()", "DF_UserExternalLogins_LinkedAt");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("ProviderKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserExternalLoginId")
+                        .HasName("PK_UserExternalLogins");
+
+                    b.HasIndex("Provider", "ProviderKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_UserExternalLogins_Provider_Key");
+
+                    b.HasIndex("UserId", "Provider")
+                        .IsUnique()
+                        .HasDatabaseName("UX_UserExternalLogins_User_Provider");
+
+                    b.ToTable("UserExternalLogins", (string)null);
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.UserToken", b =>
+                {
+                    b.Property<long>("UserTokenId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("UserTokenId"));
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()", "DF_UserTokens_CreatedAt");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Payload")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserTokenId")
+                        .HasName("PK_UserTokens");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("UX_UserTokens_TokenHash");
+
+                    b.HasIndex("UserId", "Purpose", "CreatedAt")
+                        .HasDatabaseName("IX_UserTokens_User_Purpose_CreatedAt");
+
+                    b.ToTable("UserTokens", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserTokens_TokenHash", "LEN([TokenHash]) = 64");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.Workspace", b =>
+                {
+                    b.Property<int>("WorkspaceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("WorkspaceId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()", "DF_Workspaces_CreatedAt");
+
+                    b.Property<int?>("DailyAiEvaluationLimit")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true, "DF_Workspaces_IsActive");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int?>("MaxCvCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("OwnerUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("WorkspaceId")
+                        .HasName("PK_Workspaces");
+
+                    b.HasIndex("OwnerUserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Workspaces_PersonalOwner")
+                        .HasFilter("[Kind] = 'Personal'");
+
+                    b.ToTable("Workspaces", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Workspaces_DailyAiEvaluationLimit", "[DailyAiEvaluationLimit] IS NULL OR [DailyAiEvaluationLimit] >= 0");
+
+                            t.HasCheckConstraint("CK_Workspaces_Kind", "[Kind] COLLATE Latin1_General_100_BIN2 IN ('Internal', 'Personal')");
+
+                            t.HasCheckConstraint("CK_Workspaces_MaxCvCount", "[MaxCvCount] IS NULL OR [MaxCvCount] >= 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            WorkspaceId = 1,
+                            CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Kind = "Internal",
+                            Name = "SCApp nội bộ"
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.WorkspaceMember", b =>
+                {
+                    b.Property<int>("WorkspaceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()", "DF_WorkspaceMembers_JoinedAt");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.HasKey("WorkspaceId", "UserId")
+                        .HasName("PK_WorkspaceMembers");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_WorkspaceMembers_UserId");
+
+                    b.HasIndex("WorkspaceId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WorkspaceMembers_OneOwner")
+                        .HasFilter("[Role] = 'Owner'");
+
+                    b.ToTable("WorkspaceMembers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WorkspaceMembers_Role", "[Role] COLLATE Latin1_General_100_BIN2 IN ('Owner', 'Member')");
                         });
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>
                 {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Applications_Workspaces");
+
                     b.HasOne("SmartCv.Core.Entities.Cv", "Cv")
                         .WithMany("Applications")
-                        .HasForeignKey("CvId")
+                        .HasForeignKey("WorkspaceId", "CvId")
+                        .HasPrincipalKey("WorkspaceId", "CvId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_Applications_Cvs");
 
                     b.HasOne("SmartCv.Core.Entities.Job", "Job")
                         .WithMany("Applications")
-                        .HasForeignKey("JobId")
+                        .HasForeignKey("WorkspaceId", "JobId")
+                        .HasPrincipalKey("WorkspaceId", "JobId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_Applications_Jobs");
@@ -1831,13 +2127,37 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasForeignKey("ActorUserId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("FK_AuditEvents_Users");
+
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_AuditEvents_Workspaces");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.Candidate", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Candidates_Workspaces");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Cv", b =>
                 {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Cvs_Workspaces");
+
                     b.HasOne("SmartCv.Core.Entities.Candidate", "Candidate")
                         .WithMany("Cvs")
-                        .HasForeignKey("CandidateId")
+                        .HasForeignKey("WorkspaceId", "CandidateId")
+                        .HasPrincipalKey("WorkspaceId", "CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_Cvs_Candidates");
 
@@ -1867,15 +2187,24 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("SmartCv.Core.Entities.EvaluationRun", b =>
                 {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_EvaluationRuns_Workspaces");
+
                     b.HasOne("SmartCv.Core.Entities.EvaluationSet", "EvaluationSet")
                         .WithMany("EvaluationRuns")
-                        .HasForeignKey("EvaluationSetId")
+                        .HasForeignKey("WorkspaceId", "EvaluationSetId")
+                        .HasPrincipalKey("WorkspaceId", "EvaluationSetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_EvaluationRuns_EvaluationSets");
 
                     b.HasOne("SmartCv.Core.Entities.PromptVersion", "PromptVersion")
                         .WithMany("EvaluationRuns")
-                        .HasForeignKey("PromptVersionId")
+                        .HasForeignKey("WorkspaceId", "PromptVersionId")
+                        .HasPrincipalKey("WorkspaceId", "PromptVersionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_EvaluationRuns_PromptVersions");
@@ -1887,10 +2216,18 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("SmartCv.Core.Entities.EvaluationSet", b =>
                 {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_EvaluationSets_Workspaces");
+
                     b.HasOne("SmartCv.Core.Entities.Job", "Job")
                         .WithMany()
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasForeignKey("WorkspaceId", "JobId")
+                        .HasPrincipalKey("WorkspaceId", "JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_EvaluationSets_Jobs");
 
                     b.Navigation("Job");
@@ -1958,6 +2295,13 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_ExportLogs_Workspaces");
+
                     b.Navigation("AuditEvent");
                 });
 
@@ -1982,6 +2326,16 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.Navigation("EvaluationSet");
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.Job", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_Jobs_Workspaces");
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.JobSkill", b =>
                 {
                     b.HasOne("SmartCv.Core.Entities.Job", "Job")
@@ -2004,6 +2358,72 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasConstraintName("FK_JobSkillAliases_JobSkills");
 
                     b.Navigation("JobSkill");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.PromptVersion", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_PromptVersions_Workspaces");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.UserExternalLogin", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UserExternalLogins_Users");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.UserToken", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UserTokens_Users");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.Workspace", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .HasConstraintName("FK_Workspaces_Users_Owner");
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.WorkspaceMember", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkspaceMembers_Users");
+
+                    b.HasOne("SmartCv.Core.Entities.Workspace", "Workspace")
+                        .WithMany("Members")
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkspaceMembers_Workspaces");
+
+                    b.Navigation("User");
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>
@@ -2070,6 +2490,11 @@ namespace SmartCv.Infrastructure.Data.Migrations
             modelBuilder.Entity("SmartCv.Core.Entities.PromptVersion", b =>
                 {
                     b.Navigation("EvaluationRuns");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.Workspace", b =>
+                {
+                    b.Navigation("Members");
                 });
 #pragma warning restore 612, 618
         }

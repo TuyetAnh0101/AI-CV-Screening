@@ -45,17 +45,22 @@ public class EvaluationRunConfiguration : IEntityTypeConfiguration<EvaluationRun
 
         b.HasOne(x => x.PromptVersion)
             .WithMany(p => p.EvaluationRuns)
-            .HasForeignKey(x => x.PromptVersionId)
+            .HasForeignKey(x => new { x.WorkspaceId, x.PromptVersionId })
+            .HasPrincipalKey(p => new { p.WorkspaceId, p.PromptVersionId })
             .HasConstraintName("FK_EvaluationRuns_PromptVersions")
             .OnDelete(DeleteBehavior.Restrict);
 
         b.HasOne(x => x.EvaluationSet)
             .WithMany(s => s.EvaluationRuns)
-            .HasForeignKey(x => x.EvaluationSetId)
+            .HasForeignKey(x => new { x.WorkspaceId, x.EvaluationSetId })
+            .HasPrincipalKey(s => new { s.WorkspaceId, s.EvaluationSetId })
             .IsRequired(false)
             .HasConstraintName("FK_EvaluationRuns_EvaluationSets")
             .OnDelete(DeleteBehavior.Restrict);
 
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_EvaluationRuns_Workspaces").OnDelete(DeleteBehavior.NoAction);
         b.HasIndex(x => x.PromptVersionId).HasDatabaseName("IX_EvaluationRuns_PromptVersionId");
         b.HasIndex(x => x.EvaluationSetId).HasDatabaseName("IX_EvaluationRuns_EvaluationSetId");
     }

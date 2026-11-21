@@ -20,7 +20,13 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
         b.Property(x => x.JobId).UseIdentityColumn(1, 1);
 
         b.Property(x => x.Title).HasMaxLength(150).IsRequired();
-        b.HasIndex(x => x.Title).IsUnique().HasDatabaseName("UQ_Jobs_Title");
+        // A51: tên vị trí duy nhất trong phạm vi workspace (thay UQ_Jobs_Title toàn cục).
+        b.Property(x => x.WorkspaceId).IsRequired();
+        b.HasIndex(x => new { x.WorkspaceId, x.Title }).IsUnique().HasDatabaseName("UQ_Jobs_Workspace_Title");
+        // Đích của khóa ngoại ghép từ Applications / EvaluationSets.
+        b.HasAlternateKey(x => new { x.WorkspaceId, x.JobId }).HasName("AK_Jobs_Workspace_Job");
+        b.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId)
+            .HasConstraintName("FK_Jobs_Workspaces").OnDelete(DeleteBehavior.NoAction);
 
         b.Property(x => x.Description);                    // NVARCHAR(MAX) NULL
         b.Property(x => x.MinGpa).HasPrecision(3, 2);

@@ -1,9 +1,13 @@
+using SmartCv.Core.Workspaces;
+
 namespace SmartCv.Core.Entities;
 
 /// <summary>Bảng EvaluationSets - Bộ CV dùng để đánh giá prompt.</summary>
-public class EvaluationSet
+public class EvaluationSet : IWorkspaceOwned
 {
     public int EvaluationSetId { get; set; }
+    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }

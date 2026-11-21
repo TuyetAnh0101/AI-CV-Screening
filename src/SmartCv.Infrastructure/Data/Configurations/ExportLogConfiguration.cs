@@ -17,6 +17,10 @@ public sealed class ExportLogConfiguration : IEntityTypeConfiguration<ExportLog>
             t.HasCheckConstraint("CK_ExportLogs_Fit", "[Fit] COLLATE Latin1_General_100_BIN2 IN ('all','pass','notpass','unscored','excellent','good','potential','poor','issue')");
         });
         b.HasKey(e => e.ExportId);
+        b.Property(e => e.WorkspaceId).IsRequired();
+        b.HasOne<Workspace>().WithMany().HasForeignKey(e => e.WorkspaceId).OnDelete(DeleteBehavior.NoAction)
+            .HasConstraintName("FK_ExportLogs_Workspaces");
+        b.HasIndex(e => new { e.WorkspaceId, e.ExportId }).IsDescending(false, true).HasDatabaseName("IX_ExportLogs_Workspace_Export");
         b.Property(e => e.ExportId).UseIdentityColumn();
         b.Property(e => e.Format).HasMaxLength(8).IsUnicode(false).IsRequired();
         b.Property(e => e.Stage).HasMaxLength(20).IsUnicode(false).IsRequired();

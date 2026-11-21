@@ -228,7 +228,7 @@ public static class JobEndpoints
 
     private static DateOnly Today(TimeProvider clock) => VietnamTime.Today(clock.GetUtcNow().UtcDateTime);
     private static bool TitleConflict(DbUpdateException ex) => ex.InnerException is SqlException sql
-        && sql.Errors.Cast<SqlError>().Any(e => e.Number is 2601 or 2627 && e.Message.Contains("UQ_Jobs_Title", StringComparison.Ordinal));
+        && sql.Errors.Cast<SqlError>().Any(e => e.Number is 2601 or 2627 && e.Message.Contains("UQ_Jobs_Workspace_Title", StringComparison.Ordinal));
     private static ProblemHttpResult Missing(int id) => TypedResults.Problem(statusCode: 404, title: "Không tìm thấy Job", detail: $"Không có Job #{id}.");
     private static ProblemHttpResult DuplicateTitle() => TypedResults.Problem(statusCode: 409, title: "Trùng tên Job",
         detail: "Tên vị trí đã được sử dụng. Hãy chọn tên khác.", extensions: new Dictionary<string, object?> { ["errors"] = new Dictionary<string, string[]> { ["title"] = ["Tên vị trí đã được sử dụng."] } });

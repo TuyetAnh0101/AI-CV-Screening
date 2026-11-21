@@ -1,9 +1,13 @@
+using SmartCv.Core.Workspaces;
+
 namespace SmartCv.Core.Entities;
 
 /// <summary>Bảng EvaluationRuns - Một lượt chấm (Screening hoặc PromptTest).</summary>
-public class EvaluationRun
+public class EvaluationRun : IWorkspaceOwned
 {
     public int RunId { get; set; }
+    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
     public string RunType { get; set; } = string.Empty;   // Screening | PromptTest
     public int PromptVersionId { get; set; }
     public int? EvaluationSetId { get; set; }             // PromptTest: bắt buộc; Screening: để null
