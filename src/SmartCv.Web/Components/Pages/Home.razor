@@ -1,4 +1,4 @@
-@page "/"
+@page "/dashboard"
 @page "/recruitment"
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.WebUtilities
@@ -108,10 +108,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         workspace = new(DashboardApi, JobApi);
+        // B51: /dashboard là Dashboard tuyển dụng; Admin mở /dashboard → /admin/dashboard (như "/" trước đây).
+        // /recruitment vẫn mở Dashboard tuyển dụng cho Admin. /admin/dashboard không chuyển ngược lại → không vòng lặp.
         var admin = AccessRules.IsAdmin(await AccessRules.ResolveAsync(AuthState));
-        recruitmentRoute = admin || Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/') == "recruitment";
-        if (admin
-            && Nav.ToBaseRelativePath(Nav.Uri).Trim('/') is "")
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+        recruitmentRoute = admin || path.Equals("recruitment", StringComparison.OrdinalIgnoreCase);
+        if (admin && path.Equals("dashboard", StringComparison.OrdinalIgnoreCase))
         {
             redirecting = true;
             Nav.NavigateTo(AppNavigation.AdminHome, replace: true);
@@ -126,7 +128,7 @@ else
     {
         var path = new Uri(args.Location).AbsolutePath.TrimEnd('/');
         var root = new Uri(Nav.BaseUri).AbsolutePath.TrimEnd('/');
-        if (path != root && path != root + "/recruitment") return;
+        if (path != root + "/dashboard" && path != root + "/recruitment") return;
         _ = InvokeAsync(() => SynchronizeAsync());
     }
     private async Task SynchronizeAsync(bool force = false)

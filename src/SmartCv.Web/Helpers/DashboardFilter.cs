@@ -22,7 +22,8 @@ public sealed record DashboardFilter(int? JobId = null, DateOnly? From = null, D
         }
     }
 
-    public string Url => "/" + Query;
+    //public string Url => "/" + Query;
+    public string Url => "/dashboard" + Query;
 
     public static (DashboardFilter? Filter, string? Error) Parse(string? job, string? from, string? to)
     {

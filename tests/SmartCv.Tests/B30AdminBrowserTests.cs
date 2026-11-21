@@ -95,7 +95,7 @@ public class B30AdminBrowserTests
                 if (role != "anonymous") await Login(tab, root, role);
                 if (role == "hr")
                 {
-                    await tab.Locator(".dashboard[data-interactive=true]").WaitForAsync(); Assert.Equal(root, tab.Url);
+                    await tab.Locator(".dashboard[data-interactive=true]").WaitForAsync(); Assert.Equal(root + "dashboard", tab.Url);
                     await tab.ScreenshotAsync(new() { Path = Path.Combine(artifacts, "hr-390.png"), FullPage = true });
                     await tab.GotoAsync(root + "upload"); await tab.Locator("#upload-title").WaitForAsync();
                 }

@@ -15,7 +15,7 @@
     <p>Đường dẫn này không tồn tại hoặc đã được chuyển đi. Kiểm tra lại địa chỉ, hoặc quay về trang chính.</p>
     @if (AccessRules.CanUseApp(AccessRules.Current(AuthState)))
     {
-        <a class="btn sc-btn-primary" href="">Về Tổng quan</a>
+        <a class="btn sc-btn-primary" href="/dashboard">Về bảng điều khiển</a>
     }
     else if (AccessRules.Level(AccessRules.Current(AuthState)) == AccessLevel.PasswordChangeRequired)
     {
@@ -24,7 +24,8 @@
     }
     else
     {
-        <a class="btn sc-btn-primary" href="login">Đăng nhập</a>
+        <a class="btn sc-btn-primary" href="/">Về trang giới thiệu</a>
+        <a class="btn sc-btn-secondary" href="/login">Đăng nhập</a>
     }
 </section>
 

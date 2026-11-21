@@ -1,0 +1,71 @@
+@inherits LayoutComponentBase
+@inject AuthenticationStateProvider AuthProvider
+
+<div class="public-shell">
+    <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+    <header class="public-header">
+        <div class="public-bar">
+            <a class="public-brand" href="/" aria-label="SCApp — Trang giới thiệu">
+                <img src="/images/brand/scapp-logo.png" alt="" width="44" height="44" />
+                <span>SC<span class="brand-accent">App</span></span>
+            </a>
+            <nav class="public-nav" aria-label="Điều hướng giới thiệu">
+                <a href="/#features">Tính năng</a>
+                <a href="/#how-it-works">Quy trình</a>
+                <a href="/#about">Về SCApp</a>
+            </nav>
+            <div class="public-actions">
+                @if (!ready)
+                {
+                    <span class="public-checking" role="status">Đang kiểm tra phiên…</span>
+                }
+                else if (canUseApp)
+                {
+                    <a class="public-button" href="/dashboard">Vào bảng điều khiển <span aria-hidden="true">→</span></a>
+                }
+                else if (mustChangePassword)
+                {
+                    <a class="public-button" href="/change-password">Đổi mật khẩu</a>
+                }
+                else
+                {
+                    <a class="public-login" href="/login">Đăng nhập</a>
+                    @* Nút đăng ký thật được bật ở B53, sau khi A56 có API. Không trỏ đến route 404. *@
+                }
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content" class="public-main" tabindex="-1">
+        @Body
+    </main>
+
+    <footer class="public-footer">
+        <div class="public-footer-inner">
+            <div class="public-footer-brand">
+                <strong>SCApp</strong>
+                <span>Sàng lọc thông minh, quyết định bởi con người.</span>
+            </div>
+            <nav aria-label="Điều hướng cuối trang">
+                <a href="/#features">Tính năng</a>
+                <a href="/#how-it-works">Quy trình</a>
+                <a href="/login">Đăng nhập</a>
+            </nav>
+            <small>© @DateTime.UtcNow.Year SCApp</small>
+        </div>
+    </footer>
+</div>
+
+@code {
+    private bool ready;
+    private bool canUseApp;
+    private bool mustChangePassword;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        canUseApp = AccessRules.CanUseApp(state.User);
+        mustChangePassword = AccessRules.Level(state.User) == AccessLevel.PasswordChangeRequired;
+        ready = true;
+    }
+}
