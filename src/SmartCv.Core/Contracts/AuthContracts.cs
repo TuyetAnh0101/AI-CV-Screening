@@ -21,6 +21,17 @@ public sealed class MeDto
     public string Role { get; init; } = string.Empty;
     public bool MustChangePassword { get; init; }
     public DateTime? LastLoginAt { get; init; }
+    /// <summary>A52: workspace hiện hành của phiên; null nếu token chưa có workspace (token cũ) hoặc tài khoản chưa có workspace.</summary>
+    public MeWorkspaceDto? Workspace { get; init; }
+}
+
+public sealed class MeWorkspaceDto
+{
+    public int Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    /// <summary>Owner | Member (quyền trong workspace, không phải quyền hệ thống Admin/HR).</summary>
+    public string Role { get; init; } = string.Empty;
 }
 
 public sealed class ChangePasswordRequest

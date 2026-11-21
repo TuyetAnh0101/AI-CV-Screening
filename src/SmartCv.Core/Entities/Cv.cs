@@ -6,8 +6,8 @@ namespace SmartCv.Core.Entities;
 public class Cv : IWorkspaceOwned
 {
     public Guid CvId { get; set; }
-    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
-    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
+    /// <summary>Workspace sở hữu. Mặc định chưa gán (UnassignedWorkspaceId = -1); SmartCvDbContext (A52) tự đóng dấu workspace hiện hành khi lưu.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.UnassignedWorkspaceId;
     public int? CandidateId { get; set; }
     public string OriginalFileName { get; set; } = string.Empty;
     public string StoredPath { get; set; } = string.Empty;

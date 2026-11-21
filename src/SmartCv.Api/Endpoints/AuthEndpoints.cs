@@ -69,6 +69,8 @@ public static class AuthEndpoints
             var expectedStamp = user.SecurityStamp;
             var newHash = verified == PasswordVerificationResult.SuccessRehashNeeded ? hasher.HashPassword(user, request.Password!) : expectedHash;
             var loggedInAt = time.GetUtcNow().UtcDateTime;
+            // A52: chọn workspace từ membership còn hiệu lực (ưu tiên Internal). Không tự tạo/gán membership.
+            var workspace = await WorkspaceSelection.ResolveAsync(db, user.UserId, ct);
             await using var transaction = db.Database.IsSqlServer() ? await db.Database.BeginTransactionAsync(ct) : null;
             if (db.Database.IsSqlServer())
             {
@@ -84,13 +86,13 @@ public static class AuthEndpoints
             // The conditional SQL update above already holds its write lock. Do not repeat it as a tracked update.
             if (db.Database.IsSqlServer()) db.Entry(user).State = EntityState.Unchanged;
             var audit = http.HttpContext.RequestServices.GetRequiredService<SmartCv.Api.Auditing.AuditTrail>();
-            audit.Stage(db, "auth.login", user.UserId.ToString(), credentialVerifiedUser: user);
+            audit.Stage(db, "auth.login", user.UserId.ToString(), credentialVerifiedUser: user, workspaceId: workspace?.Id);
             await db.SaveChangesAsync(ct);
             if (transaction is not null) await transaction.CommitAsync(ct);
             audit.ConfirmCommitted();
-            var (token, expires) = tokens.Create(user);
+            var (token, expires) = tokens.Create(user, workspace?.Id);
             logger.LogInformation("Tài khoản #{UserId} đăng nhập.", user.UserId);
-            return TypedResults.Ok(new LoginResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user) });
+            return TypedResults.Ok(new LoginResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user, workspace) });
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
         {
@@ -106,7 +108,7 @@ public static class AuthEndpoints
         }
     }
 
-    private static async Task<IResult> MeAsync(ClaimsPrincipal principal, SmartCvDbContext db, CancellationToken ct)
+    private static async Task<IResult> MeAsync(HttpContext http, ClaimsPrincipal principal, SmartCvDbContext db, CancellationToken ct)
     {
         try
         {
@@ -114,7 +116,8 @@ public static class AuthEndpoints
             var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.UserId == id, ct);
             if (user is null || SessionRules.Check(new(user.IsActive, user.SecurityStamp), principal.FindFirstValue(SmartCvClaims.Stamp)) is not null)
                 return AuthProblems.Problem(401, "authentication_required", "Chưa đăng nhập", "Tài khoản hoặc phiên đăng nhập không còn hoạt động.");
-            return TypedResults.Ok(AuthMapping.ToMe(user));
+            // Workspace chỉ có khi token mang claim smartcv_ws đã được xác nhận với database; token cũ -> null.
+            return TypedResults.Ok(AuthMapping.ToMe(user, HttpWorkspaceContext.Get(http)));
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error)) { return AuthProblems.Unavailable(); }
     }

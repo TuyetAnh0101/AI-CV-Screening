@@ -10,7 +10,17 @@ namespace SmartCv.Infrastructure.Privacy;
 
 public sealed class RetentionProcessor(SmartCvDbContext db, CvAnonymizer anonymizer, IOptions<RetentionOptions> options, ICvFileStorage storage)
 {
+    /// <summary>
+    /// Quét hạn lưu cho CV của MỌI workspace (Admin endpoint hoặc RetentionWorker): chỉ ở system scope, có lý do, được liệt kê trong
+    /// allowlist của test A52. Chỉ ẩn danh hóa CV đến hạn; không đọc hay trả nội dung CV.
+    /// </summary>
     public async Task<RetentionRunResultDto> RunOnceAsync(DateTime nowUtc, bool dryRun, CancellationToken ct)
+    {
+        using var system = SmartCv.Infrastructure.Workspaces.WorkspaceScope.BeginSystem("RetentionProcessor.run-once");
+        return await RunOnceCoreAsync(nowUtc, dryRun, ct);
+    }
+
+    private async Task<RetentionRunResultDto> RunOnceCoreAsync(DateTime nowUtc, bool dryRun, CancellationToken ct)
     {
         if (nowUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("Thời điểm phải là UTC.", nameof(nowUtc));

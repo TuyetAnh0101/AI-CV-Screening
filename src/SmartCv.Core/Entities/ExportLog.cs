@@ -6,8 +6,8 @@ namespace SmartCv.Core.Entities;
 public sealed class ExportLog : IWorkspaceOwned
 {
     public long ExportId { get; set; }
-    /// <summary>Workspace sở hữu. Mặc định là workspace nội bộ cho tới khi A52 đóng dấu tự động.</summary>
-    public int WorkspaceId { get; set; } = WorkspaceKinds.InternalWorkspaceId;
+    /// <summary>Workspace sở hữu. Mặc định chưa gán (UnassignedWorkspaceId = -1); SmartCvDbContext (A52) tự đóng dấu workspace hiện hành khi lưu.</summary>
+    public int WorkspaceId { get; set; } = WorkspaceKinds.UnassignedWorkspaceId;
     public long AuditEventId { get; set; }
     public AuditEvent AuditEvent { get; set; } = null!;
     public int RunId { get; set; }

@@ -118,7 +118,11 @@ public sealed class RunScoringWorker(
 
         var didWork = false;
         Exception? firstError = null;
-        foreach (var runId in await coordinator.FindActiveRunsAsync(ct))
+        List<int> activeRuns;
+        // Hàng đợi nằm trong database và chứa lượt của mọi workspace: chỉ bước LIỆT KÊ ID chạy ở system scope (allowlist có test).
+        using (SmartCv.Infrastructure.Workspaces.WorkspaceScope.BeginSystem("RunScoringWorker.find-active-runs"))
+            activeRuns = await coordinator.FindActiveRunsAsync(ct);
+        foreach (var runId in activeRuns)
         {
             try
             {
@@ -126,6 +130,10 @@ public sealed class RunScoringWorker(
                 // Xét MỌI lượt: lượt đang chờ CV đọc chữ không chặn lượt khác.
                 using var runScope = scopeFactory.CreateScope();
                 var processor = runScope.ServiceProvider.GetRequiredService<RunScoringProcessor>();
+                var runDb = runScope.ServiceProvider.GetRequiredService<SmartCv.Infrastructure.Data.SmartCvDbContext>();
+                if (await SmartCv.Infrastructure.Workspaces.WorkerWorkspaces.OfRunAsync(runDb, runId, ct) is not { } workspaceId) continue;
+                // Mỗi lượt được xử lý trong workspace của chính nó (A54 sẽ bổ sung kiểm tra prompt/CV cùng workspace).
+                using var workspaceScope = SmartCv.Infrastructure.Workspaces.WorkspaceScope.Begin(workspaceId);
                 if (await processor.ProcessRunAsync(runId, ct) > 0) didWork = true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)

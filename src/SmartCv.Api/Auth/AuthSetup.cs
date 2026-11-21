@@ -33,6 +33,7 @@ public static class AuthSetup
         services.AddHttpContextAccessor();
         services.AddScoped<SmartCv.Api.Auditing.AuditTrail>();
         services.AddScoped<SmartCv.Api.Auditing.AuditEndpointFilter>();
+        services.AddScoped<SmartCv.Core.Workspaces.IWorkspaceContext, HttpWorkspaceContext>();
         services.AddScoped<ISessionStateStore, DbSessionStateStore>();
         services.AddScoped<UserSessionValidator>();
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -48,7 +49,10 @@ public static class AuthSetup
                     try
                     {
                         var validator = context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();
-                        if (await validator.ValidateAsync(context.Principal!, context.HttpContext.RequestAborted, requireFresh: true) is { } reason) context.Fail(reason);
+                        var session = await validator.ValidateSessionAsync(context.Principal!, context.HttpContext.RequestAborted, requireFresh: true);
+                        if (session.Error is { } reason) context.Fail(reason);
+                        // A52: chỉ workspace đã xác nhận với database mới được đưa vào ngữ cảnh request.
+                        else if (session.Workspace is { } workspace) context.HttpContext.Items[HttpWorkspaceContext.ItemKey] = workspace;
                     }
                     catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
                     {
@@ -63,7 +67,9 @@ public static class AuthSetup
         {
             // Fail closed for newly mapped endpoints, including controllers and routes outside the main group.
             var business = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr)
-                .RequireAssertion(c => !c.User.HasClaim(SmartCvClaims.MustChangePassword, "true")).Build();
+                .RequireAssertion(c => !c.User.HasClaim(SmartCvClaims.MustChangePassword, "true"))
+                // A52: nghiệp vụ cần workspace đã được UserSessionValidator xác nhận với database (token cũ không có claim -> 401).
+                .RequireAssertion(c => c.Resource is HttpContext http && HttpWorkspaceContext.HasValidatedWorkspace(http)).Build();
             o.DefaultPolicy = business;
             o.FallbackPolicy = business;
             o.AddPolicy(AuthPolicies.Admin, new AuthorizationPolicyBuilder(business).RequireRole(UserRoles.Admin).Build());
@@ -86,6 +92,7 @@ public static class AuthSetup
             if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
             await next(context);
         });
+        SmartCv.Infrastructure.Workspaces.WorkspaceScope.UseLogger(app.Services.GetRequiredService<ILoggerFactory>());
         app.UseMiddleware<SmartCv.Api.Auditing.AuditRejectionMiddleware>();
         app.UseAuthentication(); app.UseAuthorization(); app.UseRateLimiter();
         return app;

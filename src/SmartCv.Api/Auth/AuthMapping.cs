@@ -5,11 +5,12 @@ namespace SmartCv.Api.Auth;
 
 public static class AuthMapping
 {
-    public static MeDto ToMe(User user) => new()
+    public static MeDto ToMe(User user, SmartCv.Core.Workspaces.WorkspaceSessionInfo? workspace = null) => new()
     {
         UserId = user.UserId, Email = user.Email, FullName = user.FullName, Role = user.Role,
         MustChangePassword = user.MustChangePassword,
-        LastLoginAt = user.LastLoginAt is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : null
+        LastLoginAt = user.LastLoginAt is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : null,
+        Workspace = workspace is null ? null : new MeWorkspaceDto { Id = workspace.Id, Name = workspace.Name, Kind = workspace.Kind, Role = workspace.Role }
     };
     public static UserDto ToDto(User user) => new()
     {

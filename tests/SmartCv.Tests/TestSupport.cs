@@ -49,11 +49,18 @@ internal static class TestSupport
             RegressionIdentity.ValidateTarget(db);
             // Tạo identity của fixture ngoài các interceptor lỗi/cancellation đang kiểm tra nghiệp vụ CV.
             await using var identityDb = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>().UseSqlServer(db.Database.GetConnectionString()).Options);
-            identityDb.Add(user); await identityDb.SaveChangesAsync();
+            identityDb.Add(user); identityDb.Add(new SmartCv.Core.Entities.WorkspaceMember { WorkspaceId = 1, User = user, Role = "Member", JoinedAt = DateTime.UtcNow });
+            await identityDb.SaveChangesAsync();
         }
-        else { db.Add(user); await db.SaveChangesAsync(); }
+        else
+        {
+            await db.EnsureInternalWorkspaceAsync();
+            db.Add(user); db.Add(new SmartCv.Core.Entities.WorkspaceMember { WorkspaceId = 1, User = user, Role = "Member", JoinedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
         // Clock của các fixture job/privacy có thể là ngày lịch sử; JWT luôn cần thời gian hiện tại.
-        var token = new SmartCv.Api.Auth.JwtTokenService(scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SmartCv.Core.Options.JwtOptions>>(), TimeProvider.System).Create(user).Token;
+        // A52: fixture nghiệp vụ là thành viên workspace nội bộ (WorkspaceId = 1) nên token mang claim smartcv_ws.
+        var token = new SmartCv.Api.Auth.JwtTokenService(scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SmartCv.Core.Options.JwtOptions>>(), TimeProvider.System).Create(user, 1).Token;
         var client = factory.CreateClient(); client.DefaultRequestHeaders.Authorization = new("Bearer", token);
         return client;
     }
@@ -174,6 +181,8 @@ internal class StartupGatedApiFactory : WebApplicationFactory<Program>
             ["Jwt:Key"] = JwtTestKey,
             ["Auth:SeedAdmin:Email"] = null, ["Auth:SeedAdmin:FullName"] = null, ["Auth:SeedAdmin:Password"] = null
         }));
+        // A52: code test ngoài request (gieo/đọc dữ liệu qua factory.Services) làm việc trong workspace nội bộ; request thật vẫn fail-closed.
+        builder.ConfigureTestServices(services => { services.RemoveAll<SmartCv.Core.Workspaces.IWorkspaceContext>(); services.AddScoped<SmartCv.Core.Workspaces.IWorkspaceContext, TestHostWorkspaceContext>(); });
         base.ConfigureWebHost(builder);
     }
 
