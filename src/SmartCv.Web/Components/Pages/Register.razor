@@ -1,0 +1,190 @@
+@page "/register"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@implements IDisposable
+@inject IRegistrationApi RegistrationApi
+@inject RegistrationFlowState Flow
+@inject AuthSession Session
+@inject NavigationManager Nav
+@inject TimeProvider Clock
+
+<PageTitle>Tạo tài khoản · SCApp</PageTitle>
+
+<div class="b53-register">
+    <div class="b53-topline"><span class="b53-step">01 / 02</span><span>Tạo tài khoản cá nhân</span></div>
+    <section class="b53-card" aria-labelledby="b53-register-title">
+        @if (!loaded)
+        {
+            <div class="b53-loading" role="status"><span class="b53-spinner"></span> Đang kiểm tra trạng thái đăng ký…</div>
+        }
+        else if (!enabled || form.RegistrationDisabled)
+        {
+            <div class="b53-empty">
+                <span class="b53-emblem" aria-hidden="true">↗</span>
+                <h1 id="b53-register-title">Đăng ký công khai chưa mở</h1>
+                <p>Hiện SCApp chưa nhận tài khoản đăng ký mới. Bạn vẫn có thể đăng nhập bằng tài khoản được cấp trước đó.</p>
+                <a class="btn sc-btn-primary b53-primary" href="/login">Đến trang đăng nhập</a>
+                <a class="b53-text-link" href="/">Về trang giới thiệu</a>
+            </div>
+        }
+        else
+        {
+            <div class="b53-heading">
+                <span class="b53-emblem" aria-hidden="true">✦</span>
+                <div><p class="b53-overline">Bắt đầu với SCApp</p><h1 id="b53-register-title">Tạo tài khoản</h1></div>
+                <p class="b53-lead">Đăng ký bằng email công việc hoặc email cá nhân để tạo không gian tuyển dụng của riêng bạn.</p>
+            </div>
+
+            @if (form.FormError is { } error)
+            {
+                <div class="b53-alert" role="alert" tabindex="-1" @ref="errorRef">@error</div>
+            }
+
+            <form @onsubmit="SubmitAsync" @onsubmit:preventDefault novalidate aria-busy="@(form.Submitting ? "true" : "false")" class="b53-form">
+                <div class="b53-field">
+                    <label for="b53-name">Họ và tên <span aria-hidden="true">*</span></label>
+                    <input id="b53-name" @ref="nameRef" class="sc-input" type="text" autocomplete="name" maxlength="100"
+                           placeholder="Nguyễn Thị Anh" readonly="@form.Submitting"
+                           @bind="form.FullName" @bind:event="oninput" aria-invalid="@(form.FullNameError is null ? "false" : "true")"
+                           aria-describedby="@(form.FullNameError is null ? null : "b53-name-error")" />
+                    @if (form.FullNameError is { } nameError) { <span class="b53-field-error" role="alert" id="b53-name-error">@nameError</span> }
+                </div>
+                <div class="b53-field">
+                    <label for="b53-email">Địa chỉ email <span aria-hidden="true">*</span></label>
+                    <input id="b53-email" @ref="emailRef" class="sc-input" type="email" autocomplete="email" inputmode="email"
+                           autocapitalize="none" spellcheck="false" maxlength="254" placeholder="ban@congty.com"
+                           readonly="@form.Submitting" @bind="form.Email" @bind:event="oninput"
+                           aria-invalid="@(form.EmailError is null ? "false" : "true")"
+                           aria-describedby="@(form.EmailError is null ? null : "b53-email-error")" />
+                    @if (form.EmailError is { } emailError) { <span class="b53-field-error" role="alert" id="b53-email-error">@emailError</span> }
+                </div>
+                <div class="b53-field">
+                    <PasswordInput @ref="passwordRef" Id="b53-password" Label="Mật khẩu" Autocomplete="new-password"
+                                   Value="@form.Password" ValueChanged="@(v => form.Password = v)"
+                                   Show="@form.ShowPassword" ShowChanged="@(v => form.ShowPassword = v)"
+                                   Error="@form.PasswordError" ReadOnly="@form.Submitting"
+                                   ExtraDescribedBy="b53-password-rules" />
+                    <div class="b53-rules" id="b53-password-rules" aria-label="Các điều kiện mật khẩu">
+                        @foreach (var rule in form.PasswordChecklist(settings?.PasswordRules))
+                        {
+                            <div class="b53-rule @(rule.Met ? "met" : "")"><span aria-hidden="true">@(rule.Met ? "✓" : "○")</span>@rule.Label</div>
+                        }
+                    </div>
+                </div>
+                <div class="b53-field">
+                    <PasswordInput @ref="confirmRef" Id="b53-confirm" Label="Nhập lại mật khẩu" Autocomplete="new-password"
+                                   Value="@form.ConfirmPassword" ValueChanged="@(v => form.ConfirmPassword = v)"
+                                   Show="@form.ShowConfirmPassword" ShowChanged="@(v => form.ShowConfirmPassword = v)"
+                                   Error="@form.ConfirmPasswordError" ReadOnly="@form.Submitting" />
+                </div>
+                <div class="b53-agreement">
+                    <label class="b53-agree-label" for="b53-terms">
+                        <input id="b53-terms" @ref="termsRef" type="checkbox" checked="@form.AcceptTerms"
+                               @onchange="@(args => form.AcceptTerms = args.Value is true)"
+                               disabled="@form.Submitting" aria-invalid="@(form.AcceptTermsError is null ? "false" : "true")"
+                               aria-describedby="@(form.AcceptTermsError is null ? null : "b53-terms-error")" />
+                        <span>Tôi đã đọc và đồng ý với <a href="/terms" target="_blank" rel="noopener noreferrer">Điều khoản sử dụng</a> và <a href="/privacy" target="_blank" rel="noopener noreferrer">Chính sách dữ liệu</a>.</span>
+                    </label>
+                    @if (form.AcceptTermsError is { } termsError) { <span class="b53-field-error" role="alert" id="b53-terms-error">@termsError</span> }
+                    @if (!string.IsNullOrWhiteSpace(settings?.TermsVersion)) { <span class="b53-terms-version">Phiên bản điều khoản @settings.TermsVersion</span> }
+                </div>
+                <button class="btn sc-btn-primary b53-primary" type="submit" disabled="@(!form.CanSubmit)">
+                    @if (form.Submitting) { <span class="b53-spinner" aria-hidden="true"></span><span>Đang tạo tài khoản…</span> }
+                    else if (form.IsRateLimited) { <span>Thử lại sau @form.RetrySecondsLeft giây</span> }
+                    else { <span>Tạo tài khoản</span><span aria-hidden="true">→</span> }
+                </button>
+            </form>
+            <div class="b53-bottom">Đã có tài khoản? <a href="/login">Đăng nhập</a></div>
+        }
+    </section>
+    <p class="b53-footnote">Tiếp theo: xác minh địa chỉ email của bạn. SCApp không tự gửi CV hoặc chạy AI khi chưa có yêu cầu.</p>
+</div>
+
+@code {
+    private RegisterForm form = default!;
+    private RegistrationSettingsResponse? settings;
+    private bool loaded;
+    private bool enabled;
+    private bool focusNameOnReady = true;
+    private ElementReference nameRef, emailRef, termsRef, errorRef;
+    private PasswordInput? passwordRef, confirmRef;
+    private Timer? ticker;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        form = new RegisterForm(Clock);
+        await Session.EnsureRestoredAsync();
+        if (Session.IsSignedIn)
+        {
+            Nav.NavigateTo(Session.MustChangePassword ? "/change-password" : "/dashboard", replace: true);
+            return;
+        }
+        var response = await RegistrationApi.GetRegistrationSettingsAsync(lifetime.Token);
+        settings = response.IsSuccess ? response.Data : null;
+        enabled = settings is { RegistrationEnabled: true, EmailPasswordEnabled: true };
+        loaded = true;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (!enabled || !form.CanSubmit) return;
+        RegisterOutcome outcome;
+        try { outcome = await form.SubmitAsync(RegistrationApi, lifetime.Token); }
+        catch (OperationCanceledException) { return; }
+        if (outcome == RegisterOutcome.Accepted)
+        {
+            Flow.Remember(form.NormalizedEmail);
+            Flow.StartCooldown(TimeSpan.FromSeconds(60));
+            Nav.NavigateTo("/verify-email/sent?email=" + Uri.EscapeDataString(Flow.MaskedEmail));
+            return;
+        }
+        if (outcome == RegisterOutcome.RateLimited) StartTicker();
+    }
+
+    private void StartTicker()
+    {
+        ticker?.Dispose();
+        ticker = new Timer(_ => _ = InvokeAsync(() =>
+        {
+            form.ClearExpiredRateLimit(); StateHasChanged();
+            if (!form.IsRateLimited) { ticker?.Dispose(); ticker = null; }
+        }), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!loaded || !enabled || form.RegistrationDisabled) return;
+        try
+        {
+            var target = form.FocusTarget;
+            if (target == RegisterField.None)
+            {
+                if (focusNameOnReady)
+                {
+                    focusNameOnReady = false;
+                    await nameRef.FocusAsync();
+                }
+                return;
+            }
+            form.ClearFocusTarget();
+            switch (target)
+            {
+                case RegisterField.FullName: await nameRef.FocusAsync(); break;
+                case RegisterField.Email: await emailRef.FocusAsync(); break;
+                case RegisterField.Password: if (passwordRef is not null) await passwordRef.FocusAsync(); break;
+                case RegisterField.ConfirmPassword: if (confirmRef is not null) await confirmRef.FocusAsync(); break;
+                case RegisterField.AcceptTerms: await termsRef.FocusAsync(); break;
+                default: if (form.FormError is not null) await errorRef.FocusAsync(); break;
+            }
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        ticker?.Dispose();
+        lifetime.Cancel(); lifetime.Dispose();
+        form?.ClearPasswords();
+    }
+}

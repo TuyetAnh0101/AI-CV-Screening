@@ -169,3 +169,10 @@
 @media (prefers-reduced-motion: reduce) {
     .spinner { animation-duration: 2.4s; }
 }
+
+/* B53: lời mời đăng ký và trạng thái xác minh không làm phình form đăng nhập */
+.b53-login-verify{margin:0 0 18px;padding:14px;border:1px solid var(--sc-info-line);border-radius:12px;background:var(--sc-info-bg);color:var(--sc-ink-900)}
+.b53-login-verify strong{font-size:13px}.b53-login-verify p{font-size:12px;line-height:1.6;margin:5px 0 10px;color:var(--sc-ink-700)}
+.b53-login-verify .b53-login-feedback{color:var(--sc-danger)}.b53-login-resend{min-height:38px;border-radius:9px;font-size:12px}
+.b53-login-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:22px 0 0;padding:14px;border:1px solid var(--sc-line-200);border-radius:12px;background:var(--sc-surface-50)}
+.b53-login-footer p{font-size:12px;line-height:1.6;margin:0;color:var(--sc-ink-700)}.b53-login-footer a{font-weight:750;color:var(--sc-brand-700);text-underline-offset:3px}.b53-login-future{font-size:11px;color:var(--sc-ink-400)}

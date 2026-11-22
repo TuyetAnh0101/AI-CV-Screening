@@ -14,7 +14,8 @@ public sealed class SqlEmailOutboxStore(SmartCvDbContext db) : IEmailOutboxStore
         if (batchSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(batchSize));
         const string sql = """
             ;WITH due AS (
-                SELECT TOP (@batch) EmailOutboxId FROM dbo.EmailOutbox WITH (UPDLOCK, READPAST, ROWLOCK)
+                SELECT TOP (@batch) EmailOutboxId
+                FROM dbo.EmailOutbox WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)
                 WHERE [Status] = 'Pending' AND NextAttemptAt <= @now
                   AND (LeaseUntilUtc IS NULL OR LeaseUntilUtc <= @now)
                 ORDER BY NextAttemptAt, EmailOutboxId
