@@ -19,6 +19,10 @@
         </span>
         <span class="visually-hidden">Đang đăng nhập: @name, @role.</span>
         @* B29: đổi mật khẩu tự nguyện; quay lại trang đang mở sau khi đổi. *@
+        <a class="user-account-link" href="/account" title="Tài khoản của tôi" aria-label="Tài khoản của tôi">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 10c5.5 0 9 3.2 9 7v1H3v-1c0-3.8 3.5-7 9-7zm0 2c-3.7 0-6 1.6-6.8 4h13.6c-.8-2.4-3.1-4-6.8-4z"/></svg>
+            <span>Tài khoản</span>
+        </a>
         <button type="button" class="pw-change" @onclick="OpenChangePassword" disabled="@Navigator.IsLeaving" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14a5 5 0 1 1 4.6-7H22v4h-2v3h-3v-3h-5.4A5 5 0 0 1 7 14zm0-3a2 2 0 1 0 0-4a2 2 0 0 0 0 4z" /></svg>
         </button>

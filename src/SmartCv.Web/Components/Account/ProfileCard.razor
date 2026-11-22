@@ -1,0 +1,82 @@
+@inject AccountApiClient Api
+@implements IDisposable
+
+<section class="b55-card" aria-labelledby="b55-profile-heading">
+    <div class="b55-card-top">
+        <div><p class="b55-overline">01 / HỒ SƠ</p><h2 id="b55-profile-heading">Thông tin cá nhân</h2><p class="b55-subtitle">Thông tin hiển thị trong không gian SCApp.</p></div>
+        <span class="b55-card-symbol" aria-hidden="true">◉</span>
+    </div>
+    <form class="b55-profile-form" @onsubmit="SaveAsync" @onsubmit:preventDefault novalidate>
+        <div class="b55-control">
+            <label for="b55-fullname">Họ và tên</label>
+            <input id="b55-fullname" class="sc-input" type="text" autocomplete="name" maxlength="150"
+                @bind="draftName" @bind:event="oninput" disabled="@saving"
+                aria-invalid="@(fieldError is null ? "false" : "true")" aria-describedby="@(fieldError is null ? null : "b55-name-error")" />
+            @if (fieldError is not null) { <span id="b55-name-error" class="b55-field-error" role="alert">@fieldError</span> }
+        </div>
+        <div class="b55-control">
+            <label for="b55-email">Email đăng nhập</label>
+            <div class="b55-locked-field">
+                <input id="b55-email" class="sc-input" type="email" value="@Profile.Email" disabled readonly />
+                <span class="@(Profile.EmailVerified ? "b55-verified" : "b55-unverified")">@(Profile.EmailVerified ? "✓ Đã xác minh" : "Chưa xác minh")</span>
+            </div>
+            <small>Email không thể thay đổi tại trang này.</small>
+        </div>
+        <div class="b55-profile-facts">
+            <div><span>Vai trò</span><strong>@AccountProfileRules.DisplayRole(Profile.Role)</strong></div>
+            <div><span>Ngày tạo</span><strong>@Profile.CreatedAt.ToString("dd/MM/yyyy")</strong></div>
+            <div><span>Lần đăng nhập gần nhất</span><strong>@(Profile.LastLoginAt?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa ghi nhận")</strong></div>
+        </div>
+        @if (formError is not null) { <p class="b55-field-error" role="alert">@formError</p> }
+        <div class="b55-card-actions">
+            <span class="b55-muted">Chỉ họ tên có thể chỉnh sửa.</span>
+            <button class="btn sc-btn-primary" type="submit" disabled="@saving">@(saving ? "Đang lưu…" : "Lưu thay đổi")</button>
+        </div>
+    </form>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ProfileDto Profile { get; set; } = default!;
+    [Parameter] public EventCallback<ProfileDto> OnSaved { get; set; }
+    private string draftName = "";
+    private string? fieldError, formError;
+    private bool saving, initialized;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override void OnParametersSet()
+    {
+        if (!initialized) { draftName = Profile.FullName; initialized = true; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (saving) return;
+        fieldError = formError = null;
+        var value = AccountProfileRules.Normalize(draftName);
+        if (AccountProfileRules.Validate(draftName) is { } validation)
+        {
+            fieldError = validation;
+            return;
+        }
+        if (value == Profile.FullName) { formError = "Họ tên chưa thay đổi."; return; }
+        saving = true;
+        try
+        {
+            var result = await Api.UpdateProfileAsync(value, lifetime.Token);
+            if (result.IsSuccess && result.Data is not null)
+            {
+                draftName = result.Data.FullName;
+                await OnSaved.InvokeAsync(result.Data);
+            }
+            else if (result.ValidationErrors.TryGetValue("fullName", out var messages) && messages.Length > 0)
+                fieldError = messages[0];
+            else if (result.StatusCode == 409) formError = "Hồ sơ đã thay đổi ở nơi khác. Tải lại trang để kiểm tra.";
+            else if (result.StatusCode == 429) formError = "Có quá nhiều yêu cầu. Vui lòng thử lại sau.";
+            else formError = "Không lưu được họ tên. Nội dung bạn nhập vẫn được giữ nguyên.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { saving = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

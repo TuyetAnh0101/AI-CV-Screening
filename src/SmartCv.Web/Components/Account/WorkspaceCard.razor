@@ -1,0 +1,71 @@
+@using SmartCv.Core.Workspaces
+@inject WorkspaceApiClient Api
+@implements IDisposable
+
+<section class="b55-card" aria-labelledby="b55-workspace-heading">
+    <div class="b55-card-top">
+        <div><p class="b55-overline">03 / WORKSPACE</p><h2 id="b55-workspace-heading">Không gian làm việc</h2><p class="b55-subtitle">Hạn mức sử dụng hiện tại của bạn.</p></div>
+        <span class="b55-card-symbol" aria-hidden="true">▦</span>
+    </div>
+    @if (loading)
+    {
+        <p class="b55-muted" role="status">Đang tải hạn mức…</p>
+    }
+    else if (workspace is null)
+    {
+        <div class="b55-workspace-unavailable">
+            <strong>Chưa có dữ liệu workspace</strong>
+            <p>@(status == 403 ? "Tài khoản này không sử dụng workspace cá nhân hoặc không được phép xem hạn mức." : "Dịch vụ hạn mức đang tạm không khả dụng.")</p>
+            <button class="btn sc-btn-secondary" type="button" @onclick="LoadAsync">Thử lại</button>
+        </div>
+    }
+    else
+    {
+        <div class="b55-ws-identity"><span class="b55-ws-avatar" aria-hidden="true">W</span><div><strong>@workspace.Name</strong><span>@(workspace.Kind == "Personal" ? "Cá nhân" : "Nội bộ") · @workspace.Role</span></div></div>
+        <div class="b55-meter-list">
+            <div class="b55-meter-block">
+                <div class="b55-meter-header"><span>Đánh giá AI hôm nay</span><strong>@workspace.AiUsedToday / @(workspace.DailyAiLimit?.ToString() ?? "Không giới hạn")</strong></div>
+                @if (workspace.DailyAiLimit is > 0)
+                {
+                    <div class="b55-meter" role="progressbar" aria-label="Lượt đánh giá AI đã sử dụng" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent(workspace.AiUsedToday, workspace.DailyAiLimit)">
+                        <span style="width:@(Percent(workspace.AiUsedToday, workspace.DailyAiLimit))%"></span>
+                    </div>
+                }
+            </div>
+            <div class="b55-meter-block">
+                <div class="b55-meter-header"><span>Hồ sơ CV</span><strong>@workspace.CvCount / @(workspace.MaxCvCount?.ToString() ?? "Không giới hạn")</strong></div>
+                @if (workspace.MaxCvCount is > 0)
+                {
+                    <div class="b55-meter b55-meter-blue" role="progressbar" aria-label="Số CV đã lưu" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent(workspace.CvCount, workspace.MaxCvCount)">
+                        <span style="width:@(Percent(workspace.CvCount, workspace.MaxCvCount))%"></span>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="b55-ws-stats"><div><strong>@workspace.JobCount</strong><span>Vị trí tuyển dụng</span></div><div><strong>@(workspace.HasActivePrompt ? "Sẵn sàng" : "Chưa có")</strong><span>System Prompt</span></div></div>
+        <p class="b55-muted b55-ws-footnote">Giới hạn AI được tính theo ngày và làm mới theo hệ thống.</p>
+    }
+</section>
+
+@code {
+    private WorkspaceDto? workspace;
+    private bool loading = true;
+    private int? status;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            var result = await Api.GetWorkspaceAsync(lifetime.Token);
+            workspace = result.IsSuccess ? result.Data : null;
+            status = result.StatusCode;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { loading = false; }
+    }
+    private static int Percent(int current, int? max) => max is > 0 ? Math.Clamp((int)Math.Round((double)current / max.Value * 100), 0, 100) : 0;
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

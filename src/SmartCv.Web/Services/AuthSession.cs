@@ -153,6 +153,26 @@ public sealed class AuthSession(ITokenStore store, IAuthApi authApi, TimeProvide
         Changed?.Invoke();
     }
 
+    /// <summary>B55: tải /me sau khi cập nhật hồ sơ; báo Changed để UserMenu đổi tên trong cùng circuit.</summary>
+    public async Task<bool> RefreshMeAsync()
+    {
+        await EnsureRestoredAsync();
+        var token = Token;
+        if (token is null || !IsSignedIn) return false;
+        var result = await authApi.GetMeAsync(token);
+        if (Token != token) return IsVerified;
+        if (result.IsSuccess && result.Data is { } user)
+        {
+            User = user;
+            IsVerified = true;
+            await SafeSaveAsync();
+            Changed?.Invoke();
+            return true;
+        }
+        if (result.StatusCode == 401) await EndAsync(token);
+        return false;
+    }
+
     public async Task SignOutAsync()
     {
         var was = Token is not null;
