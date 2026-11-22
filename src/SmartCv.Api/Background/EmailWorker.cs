@@ -24,10 +24,21 @@ public sealed class EmailWorker(IServiceScopeFactory factory, IOptions<EmailOpti
                 await processor.RunOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+
+            catch (Microsoft.Data.SqlClient.SqlException error)
+            {
+                logger.LogWarning(
+                    "EmailWorker SQL FAILED: Number={Number}, State={State}, Class={Class}, Line={Line}",
+                    error.Number,
+                    error.State,
+                    error.Class,
+                    error.LineNumber);
+            }
             catch (Exception error)
             {
-                // Không ghi nội dung exception: SMTP error có thể chứa email/URL.
-                logger.LogWarning("EmailWorker cycle failed. ErrorType={ErrorType}", error.GetType().Name);
+                logger.LogWarning(
+                    "EmailWorker cycle failed. ErrorType={ErrorType}",
+                    error.GetType().Name);
             }
             try { await Task.Delay(poll, clock, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
