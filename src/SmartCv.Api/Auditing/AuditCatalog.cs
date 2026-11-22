@@ -19,6 +19,10 @@ public static class AuditCatalog
         Add("POST /api/auth/resend-verification", "auth.resend_verification", "Authentication", "User", "Yêu cầu gửi lại xác minh", null);
         Add("POST /api/admin/email/test", "email.test_requested", "Email", "EmailOutbox", "Gửi email kiểm tra", null);
         Add("POST /api/auth/change-password", "auth.password_changed", "Authentication", "User", "Đổi mật khẩu cá nhân", null);
+        Add("POST /api/auth/forgot-password", "auth.forgot_password", "Authentication", "User", "Yêu cầu khôi phục mật khẩu", null);
+        Add("POST /api/auth/reset-password", "auth.reset_password", "Authentication", "User", "Đặt lại mật khẩu bằng liên kết", null);
+        Add("PUT /api/auth/me/profile", "account.profile_updated", "Accounts", "User", "Cập nhật họ tên cá nhân", null);
+        Add("POST /api/auth/me/password-setup", "auth.password_setup", "Authentication", "User", "Yêu cầu đặt mật khẩu lần đầu", null);
         Add("POST /api/users", "accounts.created", "Accounts", "User", "Tạo tài khoản", null);
         Add("PUT /api/users/{id:int}", "accounts.updated", "Accounts", "User", "Cập nhật tài khoản");
         Add("POST /api/users/{id:int}/lock", "accounts.locked", "Accounts", "User", "Khóa tài khoản");

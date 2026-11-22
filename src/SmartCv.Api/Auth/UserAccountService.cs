@@ -144,10 +144,12 @@ public sealed class UserAccountService(SmartCvDbContext db, AccountWriteCoordina
 
     public async Task<User> ChangePasswordAsync(ChangePasswordRequest request, ClaimsPrincipal principal, string? version, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > PasswordRules.MaxLength)
-            throw AccountFailure.Invalid(new() { ["currentPassword"] = ["Mật khẩu hiện tại là bắt buộc và tối đa 128 ký tự."] });
         return await MutateAsync(principal.GetUserId() ?? throw SessionEnded(), principal, false, version, "change-password", current =>
         {
+            if (!current.HasPassword)
+                throw new AccountFailure(409, "no_password_set", "Tài khoản chưa có mật khẩu. Hãy dùng Đặt mật khẩu qua email.");
+            if (string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > PasswordRules.MaxLength)
+                throw AccountFailure.Invalid(new() { ["currentPassword"] = ["Mật khẩu hiện tại là bắt buộc và tối đa 128 ký tự."] });
             if (PasswordRules.Validate(request.NewPassword, current.Email) is { } error)
                 throw AccountFailure.Invalid(new() { ["newPassword"] = [error] });
             PasswordVerificationResult verified;

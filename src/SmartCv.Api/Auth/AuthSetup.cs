@@ -22,6 +22,7 @@ public static class AuthSetup
     public const string PublicRegisterLimit = "public-register";
     public const string PublicVerifyLimit = "public-verify";
     public const string PublicResendLimit = "public-resend";
+    public const string ForgotPasswordRateLimit = "forgot-password";
     public static IServiceCollection AddSmartCvAuth(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<JwtOptions>().Bind(configuration.GetSection(JwtOptions.SectionName)).ValidateOnStart();
@@ -36,6 +37,7 @@ public static class AuthSetup
         services.AddScoped<UserAccountService>();
         services.AddScoped<UserTokenService>();
         services.AddScoped<RegistrationService>();
+        services.AddScoped<AccountSelfServiceService>();
         services.AddHttpContextAccessor();
         services.AddScoped<SmartCv.Api.Auditing.AuditTrail>();
         services.AddScoped<SmartCv.Api.Auditing.AuditEndpointFilter>();
@@ -90,6 +92,7 @@ public static class AuthSetup
             o.AddPolicy<string, RegisterRateLimitPolicy>(PublicRegisterLimit);
             o.AddPolicy<string, VerifyEmailRateLimitPolicy>(PublicVerifyLimit);
             o.AddPolicy<string, ResendVerificationRateLimitPolicy>(PublicResendLimit);
+            o.AddPolicy<string, ForgotPasswordRateLimitPolicy>(ForgotPasswordRateLimit);
         });
         return services;
     }
