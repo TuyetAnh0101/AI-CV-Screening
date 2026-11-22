@@ -647,6 +647,83 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.EmailOutboxItem", b =>
+                {
+                    b.Property<long>("EmailOutboxId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("EmailOutboxId"));
+
+                    b.Property<byte>("Attempts")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid?>("ClaimId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("LeaseUntilUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProtectedPayload")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("ToAddress")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("EmailOutboxId");
+
+                    b.HasIndex("ClaimId", "EmailOutboxId")
+                        .HasDatabaseName("IX_EmailOutbox_Claim");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("IX_EmailOutbox_Status_NextAttemptAt");
+
+                    b.HasIndex("UserId", "Template", "CreatedAt")
+                        .HasDatabaseName("IX_EmailOutbox_User_Template_Created");
+
+                    b.ToTable("EmailOutbox", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_EmailOutbox_Attempts", "[Attempts] BETWEEN 0 AND 3");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_Claim", "([ClaimId] IS NULL AND [LeaseUntilUtc] IS NULL) OR ([ClaimId] IS NOT NULL AND [LeaseUntilUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_Payload", "([Status] = 'Pending' AND [ProtectedPayload] IS NOT NULL) OR ([Status] <> 'Pending' AND [ProtectedPayload] IS NULL)");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_Status", "[Status] IN ('Pending','Sent','Failed')");
+                        });
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Evaluation", b =>
                 {
                     b.Property<int>("EvaluationId")
@@ -2245,6 +2322,17 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasConstraintName("FK_Cvs_Candidates");
 
                     b.Navigation("Candidate");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.EmailOutboxItem", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_EmailOutbox_Users");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Evaluation", b =>
