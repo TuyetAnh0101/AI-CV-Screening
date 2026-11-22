@@ -36,6 +36,7 @@ public class SmartCvDbContext : DbContext
     public DbSet<Application> Applications => Set<Application>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<EmailOutboxItem> EmailOutbox => Set<EmailOutboxItem>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<UserToken> UserTokens => Set<UserToken>();
