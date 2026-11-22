@@ -36,6 +36,11 @@ builder.Services.AddOptions<EmailOptions>()
     .ValidateOnStart();
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+// A56: public signup OFF by default, must opt in. No secrets in appsettings.
+builder.Services.AddOptions<RegistrationOptions>()
+    .Bind(builder.Configuration.GetSection(RegistrationOptions.SectionName))
+    .Validate(o => o.IsValid(), "Registration:TermsVersion invalid.")
+    .ValidateOnStart();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSmartCvAuth(builder.Configuration);
 builder.Services.AddOptions<ExportOptions>().Bind(builder.Configuration.GetSection(ExportOptions.SectionName))

@@ -1,3 +1,4 @@
+using SmartCv.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -18,6 +19,9 @@ public static class AuthSetup
 {
     public const string LoginRateLimit = "login";
     public const string AccountCredentialRateLimit = "account-credentials";
+    public const string PublicRegisterLimit = "public-register";
+    public const string PublicVerifyLimit = "public-verify";
+    public const string PublicResendLimit = "public-resend";
     public static IServiceCollection AddSmartCvAuth(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<JwtOptions>().Bind(configuration.GetSection(JwtOptions.SectionName)).ValidateOnStart();
@@ -30,6 +34,8 @@ public static class AuthSetup
         services.AddSingleton<LoginDummyHash>();
         services.AddSingleton<AccountWriteCoordinator>();
         services.AddScoped<UserAccountService>();
+        services.AddScoped<UserTokenService>();
+        services.AddScoped<RegistrationService>();
         services.AddHttpContextAccessor();
         services.AddScoped<SmartCv.Api.Auditing.AuditTrail>();
         services.AddScoped<SmartCv.Api.Auditing.AuditEndpointFilter>();
@@ -81,6 +87,9 @@ public static class AuthSetup
         {
             o.AddPolicy<string, LoginRateLimitPolicy>(LoginRateLimit);
             o.AddPolicy<string, AccountCredentialRateLimitPolicy>(AccountCredentialRateLimit);
+            o.AddPolicy<string, RegisterRateLimitPolicy>(PublicRegisterLimit);
+            o.AddPolicy<string, VerifyEmailRateLimitPolicy>(PublicVerifyLimit);
+            o.AddPolicy<string, ResendVerificationRateLimitPolicy>(PublicResendLimit);
         });
         return services;
     }

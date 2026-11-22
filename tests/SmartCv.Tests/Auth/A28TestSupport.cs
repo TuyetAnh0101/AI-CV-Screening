@@ -53,7 +53,7 @@ internal static class A28TestSupport
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
-        var user = new User { Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Tài khoản tổng hợp", Role = role, IsActive = active, MustChangePassword = mustChange, CreatedAt = DateTime.UtcNow };
+        var user = new User { Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = "Tài khoản tổng hợp", Role = role, IsActive = active, MustChangePassword = mustChange, CreatedAt = DateTime.UtcNow, EmailVerifiedAt = DateTime.UtcNow };
         var hasher = oldHash ? new PasswordHasher<User>(Options.Create(new PasswordHasherOptions { IterationCount = 10000 })) : new PasswordHasher<User>();
         user.PasswordHash = hasher.HashPassword(user, password);
         await db.EnsureInternalWorkspaceAsync();

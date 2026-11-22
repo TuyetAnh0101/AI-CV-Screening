@@ -19,7 +19,8 @@ public sealed class WorkspaceProvisioner(SmartCvDbContext db, IOptions<Workspace
     {
         ArgumentNullException.ThrowIfNull(user);
         if (user.UserId <= 0) throw new ArgumentException("Người dùng chưa được lưu.", nameof(user));
-        await using var tx = db.Database.IsSqlServer()
+        // A56: nếu verify-email đã mở transaction thì tham gia, không tạo nested transaction.
+        await using var tx = db.Database.IsSqlServer() && db.Database.CurrentTransaction is null
             ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct) : null;
 
         // Khóa người dùng, không cho 2 luồng đăng ký tạo 2 workspace cùng lúc.

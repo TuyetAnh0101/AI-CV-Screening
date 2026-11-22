@@ -109,5 +109,26 @@ public static class ProductionSetup
                     "App:WebBaseUrl phải là URL HTTPS Production.");
             }
         }
+
+        // A56: đăng ký công khai Production chỉ hoạt động với SMTP thật và keyring bền vững.
+        if (config.GetValue<bool>("Registration:Enabled"))
+        {
+            var registrationNeeded = new[]
+            {
+                "Email:Smtp:UserName", "Email:Smtp:Password", "Email:FromAddress",
+                "App:WebBaseUrl", "DataProtection:KeysPath"
+            };
+            var registrationMissing = registrationNeeded
+                .Where(key => string.IsNullOrWhiteSpace(config[key]))
+                .Select(key => key.Replace(":", "__")).ToArray();
+            if (registrationMissing.Length > 0)
+                throw new InvalidOperationException("Registration production missing: " + string.Join(", ", registrationMissing));
+            if (!string.Equals(config["Email:Mode"], "Smtp", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Registration requires Email:Mode=Smtp in Production.");
+            if (!config.GetValue<bool>("Email:WorkerEnabled"))
+                throw new InvalidOperationException("Registration requires Email:WorkerEnabled=true in Production.");
+            if (!Uri.TryCreate(config["App:WebBaseUrl"], UriKind.Absolute, out var webRoot) || webRoot.Scheme != Uri.UriSchemeHttps)
+                throw new InvalidOperationException("Registration requires HTTPS App:WebBaseUrl.");
+        }
     }
 }

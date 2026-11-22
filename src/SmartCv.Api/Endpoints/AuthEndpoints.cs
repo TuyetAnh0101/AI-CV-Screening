@@ -1,3 +1,5 @@
+using SmartCv.Infrastructure.Workspaces;
+using SmartCv.Core.Constants;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Features;
@@ -27,11 +29,12 @@ public static class AuthEndpoints
         group.MapGet("/me", MeAsync).RequireAuthorization(AuthPolicies.SignedIn)
             .WithName("Me").WithSummary("Thông tin tài khoản hiện tại");
         AuthPasswordEndpoints.Map(group);
+        RegistrationEndpoints.Map(group);
         return app;
     }
 
     private static async Task<IResult> LoginAsync(HttpRequest http, SmartCvDbContext db, IPasswordHasher<User> hasher,
-        LoginDummyHash dummy, JwtTokenService tokens, TimeProvider time, ILogger<LoginRequest> logger, CancellationToken ct)
+        LoginDummyHash dummy, JwtTokenService tokens, WorkspaceProvisioner provisioner, TimeProvider time, ILogger<LoginRequest> logger, CancellationToken ct)
     {
         if (!http.HasJsonContentType()) return AuthProblems.Problem(415, "invalid_content_type", "Định dạng không hỗ trợ", "Gửi thông tin đăng nhập bằng application/json.");
         if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(http.ContentType, out var contentType)
@@ -63,6 +66,10 @@ public static class AuthEndpoints
                 logger.LogWarning("Đăng nhập không thành công.");
                 return AuthProblems.Problem(401, "invalid_credentials", "Đăng nhập không thành công", InvalidCredentials);
             }
+            // Chỉ tiết lộ trạng thái chưa xác minh sau khi mật khẩu đã đúng.
+            if (user.EmailVerifiedAt is null)
+                return AuthProblems.Problem(403, "email_not_verified", "Email chưa xác minh",
+                    "Vui lòng xác minh email trước khi đăng nhập.");
             if (!user.IsActive) return AuthProblems.Problem(403, "account_locked", "Tài khoản đã bị khóa", "Tài khoản này đã bị khóa. Liên hệ Admin nếu cần mở lại.");
             if (!UserRoles.IsValid(user.Role) || string.IsNullOrWhiteSpace(user.SecurityStamp)) return AuthProblems.Unavailable();
             var expectedHash = user.PasswordHash;
@@ -71,6 +78,25 @@ public static class AuthEndpoints
             var loggedInAt = time.GetUtcNow().UtcDateTime;
             // A52: chọn workspace từ membership còn hiệu lực (ưu tiên Internal). Không tự tạo/gán membership.
             var workspace = await WorkspaceSelection.ResolveAsync(db, user.UserId, ct);
+            var isNewWorkspace = false;
+            if (workspace is null && RegistrationRules.CanProvisionOnLogin(user.SignupSource, user.EmailVerifiedAt, user.IsActive))
+            {
+                try
+                {
+                    // Chỉ tạo Personal cho user tự đăng ký hoặc OAuth, KHÔNG cấp workspace cho Admin tự động.
+                    await provisioner.EnsurePersonalAsync(user, ct);
+                    workspace = await WorkspaceSelection.ResolveAsync(db, user.UserId, ct);
+                    if (workspace is null) throw new InvalidOperationException("missing_membership_after_provision");
+                    isNewWorkspace = true;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception failure)
+                {
+                    logger.LogWarning("Workspace provisioning on login unavailable ({FailureType}).", failure.GetType().Name);
+                    return AuthProblems.Problem(503, "workspace_unavailable", "Không gian làm việc chưa sẵn sàng",
+                        "Vui lòng thử đăng nhập lại sau.");
+                }
+            }
             await using var transaction = db.Database.IsSqlServer() ? await db.Database.BeginTransactionAsync(ct) : null;
             if (db.Database.IsSqlServer())
             {
@@ -92,7 +118,7 @@ public static class AuthEndpoints
             audit.ConfirmCommitted();
             var (token, expires) = tokens.Create(user, workspace?.Id);
             logger.LogInformation("Tài khoản #{UserId} đăng nhập.", user.UserId);
-            return TypedResults.Ok(new LoginResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user, workspace) });
+            return TypedResults.Ok(new LoginResponse { Token = token, ExpiresAt = expires, User = AuthMapping.ToMe(user, workspace), IsNewWorkspace = isNewWorkspace });
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
         {
