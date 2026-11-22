@@ -14,6 +14,7 @@ public static class AuditCatalog
         void Add(string route, string code, string category, string resource, string summary, string? key = "id", bool required = false) =>
             entries.Add(route, new(code, category, resource, summary, key, required));
         Add("POST /api/auth/login", "auth.login", "Authentication", "Session", "Đăng nhập", null);
+        Add("POST /api/admin/email/test", "email.test_requested", "Email", "EmailOutbox", "Gửi email kiểm tra", null);
         Add("POST /api/auth/change-password", "auth.password_changed", "Authentication", "User", "Đổi mật khẩu cá nhân", null);
         Add("POST /api/users", "accounts.created", "Accounts", "User", "Tạo tài khoản", null);
         Add("PUT /api/users/{id:int}", "accounts.updated", "Accounts", "User", "Cập nhật tài khoản");

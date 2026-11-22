@@ -32,6 +32,7 @@ public static class SmartCvApi
         api.MapPromptTestEndpoints();
         api.MapUserEndpoints();
         api.MapAuditEndpoints();
+        api.MapAdminEmailEndpoints();
         api.MapWorkspaceEndpoints();
         
         return app;
