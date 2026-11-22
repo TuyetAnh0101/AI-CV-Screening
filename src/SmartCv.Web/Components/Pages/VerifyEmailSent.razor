@@ -1,0 +1,78 @@
+@page "/verify-email/sent"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@implements IDisposable
+@inject IRegistrationApi RegistrationApi
+@inject RegistrationFlowState Flow
+@inject TimeProvider Clock
+
+<PageTitle>Kiểm tra hộp thư · SCApp</PageTitle>
+
+<section class="b53-sent-card" aria-labelledby="b53-sent-title">
+    <div class="b53-sent-step">02 / 02 · Xác minh email</div>
+    <div class="b53-sent-art" aria-hidden="true"><span>✉</span><span class="b53-art-check">✓</span></div>
+    <p class="b53-sent-eyebrow">Sắp hoàn tất</p>
+    <h1 id="b53-sent-title">Kiểm tra hộp thư của bạn</h1>
+    <p class="b53-sent-lead">Chúng tôi đã tiếp nhận yêu cầu. Nếu email đủ điều kiện, bạn sẽ nhận được liên kết xác minh có hiệu lực trong <strong>24 giờ</strong>.</p>
+    @if (!string.IsNullOrWhiteSpace(DisplayMaskedEmail))
+    {
+        <div class="b53-sent-address" aria-label="Địa chỉ email đã che">@DisplayMaskedEmail</div>
+    }
+    <div class="b53-sent-instruction">
+        <p><span class="b53-n">1</span> Mở email mới nhất của SCApp.</p>
+        <p><span class="b53-n">2</span> Bấm liên kết xác minh trong email.</p>
+        <p><span class="b53-n">3</span> Hệ thống sẽ mở không gian làm việc cá nhân.</p>
+    </div>
+    <div class="b53-sent-divider"></div>
+    <h2>Chưa nhận được email?</h2>
+    <p class="b53-sent-tip">Kiểm tra mục Thư rác / Spam và đợi một vài phút trước khi gửi lại.</p>
+    @if (string.IsNullOrWhiteSpace(Flow.Email))
+    {
+        <div class="b53-sent-field">
+            <label for="b53-sent-email">Nhập lại email để gửi liên kết mới</label>
+            <input class="sc-input" type="email" id="b53-sent-email" autocomplete="email" maxlength="254"
+                   @bind="resend.EmailInput" @bind:event="oninput" aria-invalid="@(resend.EmailError is null ? "false" : "true")"
+                   aria-describedby="@(resend.EmailError is null ? null : "b53-sent-email-error")" />
+            @if (resend.EmailError is { } emailError) { <span role="alert" id="b53-sent-email-error" class="b53-sent-error">@emailError</span> }
+        </div>
+    }
+    @if (resend.Message is { } notice)
+    {
+        <div class="b53-sent-notice @(resend.IsError ? "is-error" : "")" role="@(resend.IsError ? "alert" : "status")">@notice</div>
+    }
+    <button type="button" class="btn sc-btn-primary b53-sent-submit" disabled="@(!resend.CanSubmit)" @onclick="ResendAsync">
+        @if (resend.Submitting) { <span>Đang gửi yêu cầu…</span> }
+        else if (Flow.CooldownSeconds > 0) { <span>Gửi lại sau @Flow.CooldownSeconds giây</span> }
+        else { <span>Gửi lại email xác minh</span> }
+    </button>
+    <div class="b53-sent-actions"><a href="/register">Sai email? Đăng ký lại</a><a href="/login">Đăng nhập</a></div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "email")] public string? MaskedEmailQuery { get; set; }
+    private ResendVerificationFlow resend = default!;
+    private Timer? ticker;
+    private readonly CancellationTokenSource lifetime = new();
+
+    private string DisplayMaskedEmail => !string.IsNullOrWhiteSpace(Flow.MaskedEmail)
+        ? Flow.MaskedEmail : RegistrationFlowState.SafeMaskedDisplay(MaskedEmailQuery);
+
+    protected override void OnInitialized()
+    {
+        resend = new ResendVerificationFlow(Clock, Flow);
+        ticker = new Timer(state => { _ = InvokeAsync(StateHasChanged); }, null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private async Task ResendAsync()
+    {
+        try { await resend.SubmitAsync(RegistrationApi, lifetime.Token); }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        ticker?.Dispose();
+        lifetime.Cancel(); lifetime.Dispose();
+    }
+}

@@ -3,6 +3,15 @@ using SmartCv.Core.Contracts;
 namespace SmartCv.Web.Services;
 
 /// <summary>Các lời gọi xác thực mà AuthSession và trang đăng nhập cần. Tách interface để test thay bằng bản giả.</summary>
+/// <summary>Giao diện B53 độc lập, không làm thay đổi test doubles của IAuthApi cũ.</summary>
+public interface IRegistrationApi
+{
+    Task<ApiResult<RegistrationSettingsResponse>> GetRegistrationSettingsAsync(CancellationToken ct = default);
+    Task<ApiResult<RegistrationNotice>> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
+    Task<ApiResult<RegistrationNotice>> ResendVerificationAsync(string email, CancellationToken ct = default);
+    Task<ApiResult<LoginResponse>> VerifyEmailAsync(string token, CancellationToken ct = default);
+}
+
 public interface IAuthApi
 {
     /// <summary>POST /api/auth/login — không gửi Bearer.</summary>
@@ -23,8 +32,21 @@ public interface IAuthApi
 /// đăng nhập sai không bị hiểu là "phiên hết hạn"). B29: đổi mật khẩu (A30) — người gọi tự quyết xử lý 401.
 /// Không ghi log email, mật khẩu hay token; log của ApiClientBase chỉ có đường dẫn và mã trạng thái.
 /// </summary>
-public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi
+public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi, IRegistrationApi
 {
+    // B53: tất cả endpoint công khai, không gắn Bearer; giữ tên đường dẫn cố định, không log token.
+    public Task<ApiResult<RegistrationSettingsResponse>> GetRegistrationSettingsAsync(CancellationToken ct = default) =>
+        GetAsync<RegistrationSettingsResponse>("api/auth/registration-settings", ct);
+
+    public Task<ApiResult<RegistrationNotice>> RegisterAsync(RegisterRequest request, CancellationToken ct = default) =>
+        PostJsonAsync<RegistrationNotice>("api/auth/register", request, ct);
+
+    public Task<ApiResult<RegistrationNotice>> ResendVerificationAsync(string email, CancellationToken ct = default) =>
+        PostJsonAsync<RegistrationNotice>("api/auth/resend-verification", new ResendVerificationRequest { Email = email }, ct);
+
+    public Task<ApiResult<LoginResponse>> VerifyEmailAsync(string token, CancellationToken ct = default) =>
+        PostJsonAsync<LoginResponse>("api/auth/verify-email", new VerifyEmailRequest { Token = token }, ct);
+
     public Task<ApiResult<LoginResponse>> LoginAsync(string email, string password, CancellationToken ct = default) =>
         PostJsonAsync<LoginResponse>("api/auth/login", new LoginRequest { Email = email, Password = password }, ct);
 

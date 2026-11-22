@@ -12,6 +12,9 @@
 @implements IDisposable
 @inject AuthSession Session
 @inject IAuthApi AuthApi
+@inject IRegistrationApi RegistrationApi
+@inject RegistrationFlowState Flow
+@inject PublicSettingsClient PublicSettings
 @inject NavigationManager Nav
 @inject TimeProvider Time
 
@@ -32,7 +35,7 @@ else
                 <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm0 9.5a1.8 1.8 0 0 0-1 3.3V19h2v-2.2a1.8 1.8 0 0 0-1-3.3z" /></svg>
             </span>
             <h1 id="login-title">Đăng nhập</h1>
-            <p class="login-lead">Dùng tài khoản SCApp do quản trị viên cấp để tiếp tục.</p>
+            <p class="login-lead">Đăng nhập để quản lý không gian làm việc và đánh giá hồ sơ tuyển dụng.</p>
         </header>
 
         @if (notice is not null && form.FormError is null)
@@ -48,6 +51,18 @@ else
             <div class="login-notice is-danger" role="alert" id="login-error" tabindex="-1" @ref="errorRef">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="@AlertIcon" /></svg>
                 <span>@error</span>
+            </div>
+        }
+
+        @if (form.NeedsEmailVerification)
+        {
+            <div class="b53-login-verify" role="status">
+                <strong>Email chưa xác minh</strong>
+                <p>Sau khi mở liên kết xác minh, bạn sẽ có thể đăng nhập và sử dụng không gian làm việc riêng.</p>
+                @if (resendNotice is { } msg) { <p class="b53-login-feedback" role="alert">@msg</p> }
+                <button class="btn sc-btn-secondary b53-login-resend" type="button" disabled="@resending" @onclick="ResendFromLoginAsync">
+                    @(resending ? "Đang gửi yêu cầu…" : "Gửi lại email xác minh")
+                </button>
             </div>
         }
 
@@ -104,9 +119,16 @@ else
             </button>
         </form>
 
-        <div class="login-help">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="@InfoIcon" /></svg>
-            <p>Quên mật khẩu hoặc chưa có tài khoản? Liên hệ <strong>quản trị viên (Admin)</strong> của hệ thống để được cấp hoặc đặt lại.</p>
+        <div class="b53-login-footer">
+            @if (registrationOpen)
+            {
+                <p>Chưa có tài khoản? <a href="/register">Tạo tài khoản miễn phí</a></p>
+            }
+            else
+            {
+                <p>Chưa có tài khoản? Liên hệ quản trị viên SCApp để được cấp quyền.</p>
+            }
+            <span class="b53-login-future" title="B54 sẽ triển khai khôi phục mật khẩu">Quên mật khẩu? (sắp hỗ trợ)</span>
         </div>
 
         <p class="login-security">
@@ -127,6 +149,9 @@ else
     [SupplyParameterFromQuery(Name = "expired")] public string? Expired { get; set; }
     [SupplyParameterFromQuery(Name = "signedOut")] public string? SignedOut { get; set; }
 
+    private bool registrationOpen;
+    private bool resending;
+    private string? resendNotice;
     private LoginForm form = default!;
     private bool ready;
     private string? notice;
@@ -148,7 +173,8 @@ else
 
         if (Expired == "1" || Session.EndReason == AuthEndReason.Expired) notice = AuthText.SessionExpired;
         else if (SignedOut == "1") (notice, noticeIsSuccess) = (AuthText.SignedOut, true);
-        ready = true;
+        ready = true; // Form đăng nhập không phải đợi CTA đăng ký.
+        registrationOpen = await PublicSettings.IsRegistrationEnabledAsync();
     }
 
     private void TogglePassword() => form.ShowPassword = !form.ShowPassword;
@@ -170,6 +196,33 @@ else
             return;
         }
         if (form.IsRateLimited) StartRetryTimer();
+    }
+
+    private async Task ResendFromLoginAsync()
+    {
+        if (resending || !form.NeedsEmailVerification) return;
+        var email = SmartCv.Core.Auth.RegistrationRules.NormalizeResendEmail(form.Email);
+        if (email is null) { resendNotice = "Email không hợp lệ."; return; }
+        resending = true;
+        resendNotice = null;
+        try
+        {
+            var result = await RegistrationApi.ResendVerificationAsync(email, cts.Token);
+            if (result.IsSuccess)
+            {
+                Flow.Remember(email);
+                Flow.StartCooldown(TimeSpan.FromSeconds(60));
+                Nav.NavigateTo("/verify-email/sent?email=" + Uri.EscapeDataString(Flow.MaskedEmail));
+            }
+            else if (result.StatusCode == 429)
+                resendNotice = "Đã đạt giới hạn gửi email. Vui lòng thử lại sau.";
+            else if (result.StatusCode == 404 && result.ErrorCode == "registration_disabled")
+                resendNotice = "Gửi lại đang tạm tắt. Liên kết đã gửi trước đó vẫn có thể sử dụng.";
+            else
+                resendNotice = "Chưa thể gửi yêu cầu. Hãy kiểm tra hộp thư hoặc thử lại sau.";
+        }
+        catch (OperationCanceledException) { }
+        finally { resending = false; }
     }
 
     private void StartRetryTimer()

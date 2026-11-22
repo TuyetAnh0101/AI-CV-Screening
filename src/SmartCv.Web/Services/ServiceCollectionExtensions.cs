@@ -35,7 +35,9 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ITokenStore, ProtectedSessionTokenStore>();
         services.AddScoped<AuthSession>();
+        services.AddScoped<RegistrationFlowState>(); // B53: chi luu email trong circuit
         services.AddScoped<IAuthApi>(sp => sp.GetRequiredService<AuthApiClient>());
+        services.AddScoped<IRegistrationApi>(sp => sp.GetRequiredService<AuthApiClient>());
         // B28: vai trò cho AuthorizeRouteView / quyền thao tác, đọc từ AuthSession ở trên (không phải phiên thứ hai).
         services.AddSmartCvWebAuth();
 

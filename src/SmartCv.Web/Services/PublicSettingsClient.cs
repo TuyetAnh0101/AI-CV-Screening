@@ -24,9 +24,13 @@ public sealed class PublicSettingsClient(HttpClient http)
             if (!response.IsSuccessStatusCode) return false; // 404 (chưa có A56), 503, 429...
             await using var stream = await response.Content.ReadAsStreamAsync();
             using var json = await JsonDocument.ParseAsync(stream);
-            return json.RootElement.ValueKind == JsonValueKind.Object
-                && json.RootElement.TryGetProperty("registrationEnabled", out var enabled)
-                && enabled.ValueKind == JsonValueKind.True;
+            if (json.RootElement.ValueKind != JsonValueKind.Object ||
+                !json.RootElement.TryGetProperty("registrationEnabled", out var enabled) ||
+                enabled.ValueKind != JsonValueKind.True) return false;
+            // B53: API A56 có thể bật feature nhưng tắt đăng ký bằng mật khẩu.
+            // JSON cũ trong các bộ test B52 không có field này: vẫn giữ tương thích.
+            return !json.RootElement.TryGetProperty("emailPasswordEnabled", out var password)
+                || password.ValueKind == JsonValueKind.True;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
             or OperationCanceledException or JsonException or InvalidOperationException)

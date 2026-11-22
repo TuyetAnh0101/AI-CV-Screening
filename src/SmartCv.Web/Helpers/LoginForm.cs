@@ -23,6 +23,7 @@ public sealed class LoginForm(TimeProvider time)
     public bool ShowPassword { get; set; }
 
     public bool Submitting { get; private set; }
+    public bool NeedsEmailVerification { get; private set; }
     public string? EmailError { get; private set; }
     public string? PasswordError { get; private set; }
     public string? FormError { get; private set; }
@@ -53,6 +54,7 @@ public sealed class LoginForm(TimeProvider time)
     {
         if (!CanSubmit) return null;
         FormError = null;
+        NeedsEmailVerification = false;
         var email = Validate();
         if (email is null) return null;
 
@@ -68,6 +70,7 @@ public sealed class LoginForm(TimeProvider time)
             return ok;
         }
 
+        NeedsEmailVerification = result.StatusCode == 403 && result.ErrorCode == "email_not_verified";
         FormError = result.IsSuccess
             ? "Máy chủ trả về dữ liệu không hợp lệ. Vui lòng thử lại sau."
             : AuthText.LoginError(result);

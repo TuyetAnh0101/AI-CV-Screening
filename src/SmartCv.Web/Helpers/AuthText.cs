@@ -106,6 +106,7 @@ public static class AuthText
         {
             (400, _) => "Thông tin đăng nhập chưa hợp lệ. Kiểm tra lại email và mật khẩu.",
             (401, _) => InvalidCredentials,
+            (403, "email_not_verified") => "Tài khoản chưa xác minh email. Hãy mở liên kết trong hộp thư hoặc yêu cầu gửi lại.",
             (403, "account_locked") => "Tài khoản này đã bị khóa. Liên hệ quản trị viên (Admin) nếu cần mở lại.",
             (403, _) => "Tài khoản này hiện không được phép đăng nhập. Liên hệ quản trị viên (Admin).",
             (429, _) => "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi rồi thử lại.",

@@ -1,0 +1,152 @@
+@page "/verify-email"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@implements IDisposable
+@inject IRegistrationApi RegistrationApi
+@inject RegistrationFlowState Flow
+@inject AuthSession Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject TimeProvider Clock
+
+<PageTitle>Xác minh email · SCApp</PageTitle>
+
+<section class="b53-verify-card" aria-labelledby="b53-verify-title">
+    <span class="b53-verify-emblem" aria-hidden="true">✦</span>
+    <p class="b53-verify-label">Bảo vệ tài khoản</p>
+    <h1 id="b53-verify-title">Xác minh email</h1>
+
+    @if (processing)
+    {
+        <div class="b53-verify-progress" role="status"><span class="b53-verify-spinner" aria-hidden="true"></span><div><strong>Đang kích hoạt tài khoản…</strong><p>Chúng tôi đang xác minh liên kết và chuẩn bị workspace của bạn.</p></div></div>
+    }
+    else if (outcome == VerifyOutcome.Expired)
+    {
+        <div class="b53-verify-notice warn" role="alert">Liên kết xác minh đã hết hạn. Bạn có thể yêu cầu gửi một liên kết mới.</div>
+        <div class="b53-verify-field"><label for="b53-expired-email">Email đăng ký</label>
+            <input id="b53-expired-email" class="sc-input" type="email" maxlength="254" autocomplete="email"
+                   @bind="resend.EmailInput" @bind:event="oninput" aria-invalid="@(resend.EmailError is null ? "false" : "true")"
+                   aria-describedby="@(resend.EmailError is null ? null : "b53-expired-email-error")" />
+            @if (resend.EmailError is { } error) { <span id="b53-expired-email-error" role="alert" class="b53-verify-error">@error</span> }
+        </div>
+        @if (resend.Message is { } message) { <div role="@(resend.IsError ? "alert" : "status")" class="b53-verify-notice">@message</div> }
+        <button class="btn sc-btn-primary b53-verify-submit" type="button" disabled="@(!resend.CanSubmit)" @onclick="ResendAsync">
+            @(resend.Submitting ? "Đang yêu cầu…" : Flow.CooldownSeconds > 0 ? $"Gửi lại sau {Flow.CooldownSeconds} giây" : "Gửi liên kết mới")
+        </button>
+        <a class="b53-verify-link" href="/login">Đến trang đăng nhập</a>
+    }
+    else if (outcome == VerifyOutcome.Invalid || string.IsNullOrEmpty(verificationToken))
+    {
+        <div class="b53-verify-notice warn" role="alert">Liên kết không hợp lệ hoặc đã được sử dụng. Nếu đã xác minh trước đó, bạn có thể đăng nhập bằng email và mật khẩu.</div>
+        <a class="btn sc-btn-primary b53-verify-submit" href="/login">Đăng nhập</a>
+        <a class="b53-verify-link" href="/verify-email/sent">Yêu cầu gửi lại email</a>
+    }
+    else
+    {
+        <div class="b53-verify-notice warn" role="alert">
+            @(outcome == VerifyOutcome.RateLimited
+                ? "Đã có quá nhiều yêu cầu xác minh. Vui lòng đợi trước khi thử lại."
+                : "Chưa thể hoàn tất kích hoạt workspace. Liên kết chưa được xác nhận; bạn có thể thử lại.")
+        </div>
+        <button type="button" class="btn sc-btn-primary b53-verify-submit" @onclick="VerifyAsync" disabled="@(processing || RetrySeconds > 0)">
+            @(RetrySeconds > 0 ? $"Thử lại sau {RetrySeconds} giây" : "Thử xác minh lại")
+        </button>
+        <a class="b53-verify-link" href="/login">Đăng nhập nếu bạn đã xác minh thành công</a>
+    }
+    <p class="b53-verify-foot">SCApp không yêu cầu bạn cung cấp mật khẩu qua email.</p>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")] public string? Token { get; set; }
+
+    private string? verificationToken;
+    private bool started;
+    private bool inFlight;
+    private bool tokenScrubbed;
+    private bool processing = true;
+    private VerifyOutcome? outcome;
+    private DateTimeOffset? retryAt;
+    private ResendVerificationFlow resend = default!;
+    private Timer? ticker;
+    private readonly CancellationTokenSource lifetime = new();
+    private int RetrySeconds => retryAt is { } at && at > Clock.GetUtcNow()
+        ? (int)Math.Ceiling((at - Clock.GetUtcNow()).TotalSeconds) : 0;
+
+    protected override void OnInitialized()
+    {
+        resend = new ResendVerificationFlow(Clock, Flow);
+        resend.EmailInput = Flow.Email ?? "";
+        ticker = new Timer(state => { _ = InvokeAsync(StateHasChanged); }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || started) return;
+        started = true;
+        // Chỉ cất token vào bộ nhớ circuit, tuyệt đối không gắn vào request GET tiếp theo.
+        verificationToken = Token;
+        if (string.IsNullOrWhiteSpace(verificationToken) || verificationToken.Length > 512)
+        {
+            verificationToken = null;
+            processing = false;
+            outcome = VerifyOutcome.Invalid;
+            StateHasChanged();
+            return;
+        }
+        await VerifyAsync();
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (inFlight || string.IsNullOrWhiteSpace(verificationToken) || RetrySeconds > 0) return;
+        inFlight = true;
+        processing = true;
+        outcome = null;
+        StateHasChanged();
+        try
+        {
+            if (!tokenScrubbed)
+            {
+                // Xóa token khỏi thanh địa chỉ trước request; nếu JS thất bại thì không gửi API.
+                await JS.InvokeVoidAsync("history.replaceState", null, "", Nav.ToAbsoluteUri("/verify-email").AbsoluteUri);
+                tokenScrubbed = true;
+            }
+            var result = await RegistrationApi.VerifyEmailAsync(verificationToken, lifetime.Token);
+            outcome = VerificationResultRules.Classify(result);
+            if (outcome == VerifyOutcome.Verified && result.Data is { } login)
+            {
+                verificationToken = null;
+                await Session.SignInAsync(login);
+                Nav.NavigateTo("/dashboard?welcome=1", replace: true);
+                return;
+            }
+            if (outcome == VerifyOutcome.RateLimited)
+                retryAt = Clock.GetUtcNow().Add(result.RetryAfter is { } d && d > TimeSpan.Zero ? d : TimeSpan.FromMinutes(10));
+            if (outcome is VerifyOutcome.Invalid or VerifyOutcome.Expired) verificationToken = null;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException)
+        {
+            outcome = VerifyOutcome.Retryable;
+        }
+        finally
+        {
+            processing = false;
+            inFlight = false;
+            // OnAfterRenderAsync không tự render lại khi Task hoàn tất; cập nhật trạng thái sau API.
+            if (!lifetime.IsCancellationRequested) StateHasChanged();
+        }
+    }
+
+    private async Task ResendAsync()
+    {
+        try { await resend.SubmitAsync(RegistrationApi, lifetime.Token); }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        ticker?.Dispose(); lifetime.Cancel(); lifetime.Dispose();
+        verificationToken = null;
+    }
+}
