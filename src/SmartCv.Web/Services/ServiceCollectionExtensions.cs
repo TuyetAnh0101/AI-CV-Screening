@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RegistrationFlowState>(); // B53: chi luu email trong circuit
         services.AddScoped<IAuthApi>(sp => sp.GetRequiredService<AuthApiClient>());
         services.AddScoped<IRegistrationApi>(sp => sp.GetRequiredService<AuthApiClient>());
+        services.AddScoped<IAuthRecoveryApi>(sp => sp.GetRequiredService<AuthApiClient>()); // B54 public recovery
         // B28: vai trò cho AuthorizeRouteView / quyền thao tác, đọc từ AuthSession ở trên (không phải phiên thứ hai).
         services.AddSmartCvWebAuth();
 

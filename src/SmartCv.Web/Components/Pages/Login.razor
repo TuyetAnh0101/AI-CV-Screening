@@ -128,7 +128,7 @@ else
             {
                 <p>Chưa có tài khoản? Liên hệ quản trị viên SCApp để được cấp quyền.</p>
             }
-            <span class="b53-login-future" title="B54 sẽ triển khai khôi phục mật khẩu">Quên mật khẩu? (sắp hỗ trợ)</span>
+            <a class="b54-login-recovery" href="/forgot-password">Quên mật khẩu?</a>
         </div>
 
         <p class="login-security">
@@ -148,6 +148,7 @@ else
     [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
     [SupplyParameterFromQuery(Name = "expired")] public string? Expired { get; set; }
     [SupplyParameterFromQuery(Name = "signedOut")] public string? SignedOut { get; set; }
+    [SupplyParameterFromQuery(Name = "reset")] public string? Reset { get; set; }
 
     private bool registrationOpen;
     private bool resending;
@@ -171,7 +172,8 @@ else
             return;
         }
 
-        if (Expired == "1" || Session.EndReason == AuthEndReason.Expired) notice = AuthText.SessionExpired;
+        if (Reset == "1") (notice, noticeIsSuccess) = ("Đã đặt mật khẩu mới. Hãy đăng nhập bằng mật khẩu vừa tạo.", true);
+        else if (Expired == "1" || Session.EndReason == AuthEndReason.Expired) notice = AuthText.SessionExpired;
         else if (SignedOut == "1") (notice, noticeIsSuccess) = (AuthText.SignedOut, true);
         ready = true; // Form đăng nhập không phải đợi CTA đăng ký.
         registrationOpen = await PublicSettings.IsRegistrationEnabledAsync();

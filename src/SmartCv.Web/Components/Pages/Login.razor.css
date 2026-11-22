@@ -176,3 +176,7 @@
 .b53-login-verify .b53-login-feedback{color:var(--sc-danger)}.b53-login-resend{min-height:38px;border-radius:9px;font-size:12px}
 .b53-login-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:22px 0 0;padding:14px;border:1px solid var(--sc-line-200);border-radius:12px;background:var(--sc-surface-50)}
 .b53-login-footer p{font-size:12px;line-height:1.6;margin:0;color:var(--sc-ink-700)}.b53-login-footer a{font-weight:750;color:var(--sc-brand-700);text-underline-offset:3px}.b53-login-future{font-size:11px;color:var(--sc-ink-400)}
+
+/* B54: thay placeholder bang lien ket khoi phuc that. */
+.b53-login-footer .b54-login-recovery { color:var(--sc-brand-700); font-size:12px; font-weight:750; text-underline-offset:3px; white-space:nowrap; }
+.b53-login-footer .b54-login-recovery:focus-visible { outline:3px solid var(--sc-focus);outline-offset:3px;border-radius:3px; }
