@@ -31,6 +31,7 @@ public static class AuthEndpoints
         AuthPasswordEndpoints.Map(group);
         RegistrationEndpoints.Map(group);
         AccountSelfServiceEndpoints.Map(group);
+        ExternalAuthEndpoints.Map(group);
         return app;
     }
 

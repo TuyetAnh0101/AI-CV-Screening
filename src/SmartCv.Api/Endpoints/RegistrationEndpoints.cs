@@ -26,13 +26,13 @@ public static class RegistrationEndpoints
             .WithName("ResendVerification").Produces(202);
     }
 
-    private static IResult SettingsAsync(HttpContext http, IOptions<RegistrationOptions> opts)
+    private static IResult SettingsAsync(HttpContext http, IOptions<RegistrationOptions> opts, IConfiguration config)
     {
         http.Response.Headers.CacheControl = "public, max-age=60";
         var o = opts.Value;
         return Results.Ok(new RegistrationSettingsResponse(o.Enabled,
             o.Enabled && o.EmailPasswordEnabled,
-            [new PublicProviderSetting("google", false)],
+            [new PublicProviderSetting("google", config.GetValue<bool>("Authentication:Google:Enabled"))],
             new PublicPasswordRules(PasswordRules.MinLength, PasswordRules.MaxLength, true, true),
             o.TermsVersion));
     }

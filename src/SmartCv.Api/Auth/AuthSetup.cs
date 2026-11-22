@@ -23,6 +23,8 @@ public static class AuthSetup
     public const string PublicVerifyLimit = "public-verify";
     public const string PublicResendLimit = "public-resend";
     public const string ForgotPasswordRateLimit = "forgot-password";
+    public const string ExternalStartRateLimit = "external-start";
+    public const string ExternalExchangeRateLimit = "external-exchange";
     public static IServiceCollection AddSmartCvAuth(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<JwtOptions>().Bind(configuration.GetSection(JwtOptions.SectionName)).ValidateOnStart();
@@ -38,6 +40,7 @@ public static class AuthSetup
         services.AddScoped<UserTokenService>();
         services.AddScoped<RegistrationService>();
         services.AddScoped<AccountSelfServiceService>();
+        services.AddScoped<ExternalLoginService>();
         services.AddHttpContextAccessor();
         services.AddScoped<SmartCv.Api.Auditing.AuditTrail>();
         services.AddScoped<SmartCv.Api.Auditing.AuditEndpointFilter>();
@@ -93,6 +96,8 @@ public static class AuthSetup
             o.AddPolicy<string, VerifyEmailRateLimitPolicy>(PublicVerifyLimit);
             o.AddPolicy<string, ResendVerificationRateLimitPolicy>(PublicResendLimit);
             o.AddPolicy<string, ForgotPasswordRateLimitPolicy>(ForgotPasswordRateLimit);
+            o.AddPolicy<string, ExternalStartRateLimitPolicy>(ExternalStartRateLimit);
+            o.AddPolicy<string, ExternalExchangeRateLimitPolicy>(ExternalExchangeRateLimit);
         });
         return services;
     }
