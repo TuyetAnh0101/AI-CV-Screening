@@ -45,8 +45,14 @@ public sealed class EmailTemplates(IConfiguration configuration)
                 break;
             case EmailTemplate.ResetPassword:
                 subject = "SCApp - Đặt lại mật khẩu";
-                htmlBody = $"<p>Xin chào {cleanName},</p><p>Nếu bạn đã yêu cầu đặt lại mật khẩu, dùng liên kết dưới đây trong vòng 30 phút.</p>{action}<p>Nếu không yêu cầu, hãy bỏ qua email này.</p>";
-                textBody = $"Xin chào {name},\nNếu bạn yêu cầu đặt lại mật khẩu, dùng liên kết trong 30 phút.{plainAction}\nNếu không yêu cầu, hãy bỏ qua.";
+                var providerHelpHtml = model.Provider is not null
+                    ? "<p>Tài khoản đăng nhập qua nhà cung cấp bên ngoài cũng có thể đặt mật khẩu SCApp bằng liên kết này.</p>"
+                    : "";
+                var providerHelpText = model.Provider is not null
+                    ? "\nTài khoản đăng nhập qua nhà cung cấp bên ngoài cũng có thể đặt mật khẩu SCApp bằng liên kết này."
+                    : "";
+                htmlBody = $"<p>Xin chào {cleanName},</p><p>Nếu bạn đã yêu cầu đặt lại mật khẩu, dùng liên kết dưới đây trong vòng 30 phút.</p>{providerHelpHtml}{action}<p>Nếu không yêu cầu, hãy bỏ qua email này.</p>";
+                textBody = $"Xin chào {name},\nNếu bạn yêu cầu đặt lại mật khẩu, dùng liên kết trong 30 phút.{providerHelpText}{plainAction}\nNếu không yêu cầu, hãy bỏ qua.";
                 break;
             case EmailTemplate.PasswordChanged:
                 subject = "SCApp - Mật khẩu đã được thay đổi";
