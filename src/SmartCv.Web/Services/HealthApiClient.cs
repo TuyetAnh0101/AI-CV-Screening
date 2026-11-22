@@ -25,8 +25,12 @@ public sealed class HealthApiClient(HttpClient http, ILogger<HealthApiClient> lo
             if (response?.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.ServiceUnavailable))
                 return ApiResult<HealthReportDto>.Failure("Chưa kiểm tra được trạng thái máy chủ.", (int?)response?.StatusCode);
             var report = await response.Content.ReadFromJsonAsync<HealthReportDto>(ct);
-            if (report?.Checks is null || report.Checks.Count != 3 || report.Checks.Any(c => c is null)
-                || !report.Checks.Select(c => c.Name).ToHashSet().SetEquals(["database", "uploads", "ocr"])
+            // if (report?.Checks is null || report.Checks.Count != 3 || report.Checks.Any(c => c is null)
+            //     || !report.Checks.Select(c => c.Name).ToHashSet().SetEquals(["database", "uploads", "ocr"])
+            //     || report.Status != (report.Checks.All(c => c.Ok) ? "ok" : "error")
+            //     || (response.StatusCode == HttpStatusCode.OK) != (report.Status == "ok"))
+            if (report?.Checks is null || report.Checks.Count != 4 || report.Checks.Any(c => c is null)
+                || !report.Checks.Select(c => c.Name).ToHashSet().SetEquals(["database", "uploads", "ocr", "email"])
                 || report.Status != (report.Checks.All(c => c.Ok) ? "ok" : "error")
                 || (response.StatusCode == HttpStatusCode.OK) != (report.Status == "ok"))
                 return ApiResult<HealthReportDto>.LocalFailure("Máy chủ chưa cung cấp thông tin kiểm tra hợp lệ.", ApiFailureKind.InvalidData);
