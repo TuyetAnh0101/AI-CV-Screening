@@ -12,6 +12,13 @@ public interface IRegistrationApi
     Task<ApiResult<LoginResponse>> VerifyEmailAsync(string token, CancellationToken ct = default);
 }
 
+/// <summary>B54: public recovery API, separate interface so legacy IAuthApi test doubles remain compatible.</summary>
+public interface IAuthRecoveryApi
+{
+    Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> ForgotPasswordAsync(string email, CancellationToken ct = default);
+    Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default);
+}
+
 public interface IAuthApi
 {
     /// <summary>POST /api/auth/login — không gửi Bearer.</summary>
@@ -32,7 +39,7 @@ public interface IAuthApi
 /// đăng nhập sai không bị hiểu là "phiên hết hạn"). B29: đổi mật khẩu (A30) — người gọi tự quyết xử lý 401.
 /// Không ghi log email, mật khẩu hay token; log của ApiClientBase chỉ có đường dẫn và mã trạng thái.
 /// </summary>
-public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi, IRegistrationApi
+public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi, IRegistrationApi, IAuthRecoveryApi
 {
     // B53: tất cả endpoint công khai, không gắn Bearer; giữ tên đường dẫn cố định, không log token.
     public Task<ApiResult<RegistrationSettingsResponse>> GetRegistrationSettingsAsync(CancellationToken ct = default) =>
@@ -46,6 +53,13 @@ public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger
 
     public Task<ApiResult<LoginResponse>> VerifyEmailAsync(string token, CancellationToken ct = default) =>
         PostJsonAsync<LoginResponse>("api/auth/verify-email", new VerifyEmailRequest { Token = token }, ct);
+
+    // B54: token va mat khau chi nam trong JSON body; KHONG dua vao URL hay log.
+    public Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> ForgotPasswordAsync(string email, CancellationToken ct = default) =>
+        PostJsonAsync<SmartCv.Core.Contracts.AccountNotice>("api/auth/forgot-password", new ForgotPasswordRequest { Email = email }, ct);
+
+    public Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default) =>
+        PostJsonAsync<SmartCv.Core.Contracts.AccountNotice>("api/auth/reset-password", new ResetPasswordRequest { Token = token, NewPassword = newPassword }, ct);
 
     public Task<ApiResult<LoginResponse>> LoginAsync(string email, string password, CancellationToken ct = default) =>
         PostJsonAsync<LoginResponse>("api/auth/login", new LoginRequest { Email = email, Password = password }, ct);
