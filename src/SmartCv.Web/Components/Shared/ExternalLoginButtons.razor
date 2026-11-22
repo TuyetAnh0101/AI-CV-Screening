@@ -1,0 +1,69 @@
+@inject IRegistrationApi RegistrationApi
+@inject NavigationManager Nav
+@inject IConfiguration Config
+@implements IDisposable
+
+@if (googleEnabled || githubEnabled)
+{
+    <div class="b55-external-signin" aria-label="Phương thức đăng nhập khác">
+        <div class="b55-social-divider"><span>hoặc tiếp tục với</span></div>
+        @if (googleEnabled)
+        {
+            <button type="button" class="b55-social-button" disabled="@busy" @onclick='() => Start("google")'>
+                <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" class="b55-google-g">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.3 5.48-4.87 7.18l7.73 6C44.31 38.02 46.98 31.88 46.98 24.55z" />
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.44-.76-2.97-.76-4.59s.27-3.15.76-4.59l-7.98-6.2C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z" />
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.15 1.44-4.92 2.3-8.17 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+                <span>Tiếp tục với Google</span>
+            </button>
+        }
+        @if (githubEnabled)
+        {
+            <button type="button" class="b55-social-button b55-github-button" disabled="@busy" @onclick='() => Start("github")'>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.57.11.78-.25.78-.55v-2.15c-3.19.69-3.86-1.35-3.86-1.35-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.95.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.2-3.1-.12-.3-.52-1.47.12-3.07 0 0 .98-.32 3.17 1.18a11.02 11.02 0 0 1 5.76 0c2.19-1.5 3.17-1.18 3.17-1.18.64 1.6.24 2.77.12 3.06.75.82 1.2 1.85 1.2 3.11 0 4.43-2.68 5.4-5.24 5.69.42.37.79 1.07.79 2.16v3.62c0 .3.2.67.79.55A11.5 11.5 0 0 0 12 .5z"/></svg>
+                <span>Tiếp tục với GitHub</span>
+            </button>
+        }
+        @if (error is not null) { <p class="b55-field-error" role="alert">@error</p> }
+    </div>
+}
+
+@code {
+    [Parameter] public string? ReturnUrl { get; set; }
+    private bool googleEnabled, githubEnabled, busy;
+    private string? error;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await RegistrationApi.GetRegistrationSettingsAsync(lifetime.Token);
+            var providers = result.Data?.Providers;
+            // Không dự đoán GitHub đã được A59 làm xong. API phải thực sự quảng bá enabled=true.
+            googleEnabled = providers?.Any(p => p.Name == "google" && p.Enabled) == true;
+            githubEnabled = providers?.Any(p => p.Name == "github" && p.Enabled) == true;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    private void Start(string provider)
+    {
+        if (busy || !(provider == "google" && googleEnabled || provider == "github" && githubEnabled)) return;
+        try
+        {
+            busy = true;
+            var next = ExternalAuthUiRules.LoginStartUrl(Config["ApiBaseUrl"], provider, ReturnUrl);
+            Nav.NavigateTo(next, forceLoad: true);
+        }
+        catch (InvalidOperationException)
+        {
+            busy = false;
+            error = "Cấu hình kết nối đăng nhập ngoài chưa hợp lệ. Vui lòng báo quản trị viên.";
+        }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

@@ -39,7 +39,7 @@ public interface IAuthApi
 /// đăng nhập sai không bị hiểu là "phiên hết hạn"). B29: đổi mật khẩu (A30) — người gọi tự quyết xử lý 401.
 /// Không ghi log email, mật khẩu hay token; log của ApiClientBase chỉ có đường dẫn và mã trạng thái.
 /// </summary>
-public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi, IRegistrationApi, IAuthRecoveryApi
+public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger) : ApiClientBase(http, logger), IAuthApi, IRegistrationApi, IAuthRecoveryApi, IExternalAuthApi
 {
     // B53: tất cả endpoint công khai, không gắn Bearer; giữ tên đường dẫn cố định, không log token.
     public Task<ApiResult<RegistrationSettingsResponse>> GetRegistrationSettingsAsync(CancellationToken ct = default) =>
@@ -60,6 +60,10 @@ public sealed class AuthApiClient(HttpClient http, ILogger<AuthApiClient> logger
 
     public Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default) =>
         PostJsonAsync<SmartCv.Core.Contracts.AccountNotice>("api/auth/reset-password", new ResetPasswordRequest { Token = token, NewPassword = newPassword }, ct);
+
+    // B55: public exchange. Code ONLY in JSON body; NEVER query string or session bearer.
+    public Task<ApiResult<ExternalExchangeDto>> ExchangeExternalCodeAsync(string code, CancellationToken ct = default) =>
+        PostJsonAsync<ExternalExchangeDto>("api/auth/external/exchange", new { Code = code }, ct);
 
     public Task<ApiResult<LoginResponse>> LoginAsync(string email, string password, CancellationToken ct = default) =>
         PostJsonAsync<LoginResponse>("api/auth/login", new LoginRequest { Email = email, Password = password }, ct);

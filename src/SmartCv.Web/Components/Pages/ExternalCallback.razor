@@ -1,0 +1,105 @@
+@page "/auth/callback"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@inject IJSRuntime JS
+@inject IExternalAuthApi ExternalApi
+@inject AuthSession Session
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<PageTitle>Hoàn tất đăng nhập · SCApp</PageTitle>
+
+<section class="b55-callback" aria-labelledby="b55-callback-heading">
+    <div class="b55-callback-icon" aria-hidden="true">✦</div>
+    <h1 id="b55-callback-heading">@title</h1>
+    <p role="status">@message</p>
+    @if (working)
+    {
+        <div class="b55-callback-loader" aria-label="Đang xác thực"></div>
+        <small>Đang tạo phiên bảo mật riêng cho tab này…</small>
+    }
+    else
+    {
+        <a class="btn sc-btn-primary" href="/login">Quay lại đăng nhập</a>
+        <p class="b55-callback-hint">Mã đăng nhập chỉ dùng một lần. Tải lại trang không thể dùng lại mã đã tiêu thụ.</p>
+    }
+</section>
+
+@code {
+    private string title = "Đang kết nối tài khoản";
+    private string message = "SCApp đang kiểm tra mã đăng nhập từ nhà cung cấp.";
+    private bool working = true;
+    private IJSObjectReference? module;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        string? raw = null;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth-callback.js");
+            // JS xóa fragment bằng history.replaceState trước khi mã rời trình duyệt để gửi POST.
+            raw = await module.InvokeAsync<string>("readAndClearFragment");
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or InvalidOperationException or TaskCanceledException)
+        {
+            Fail("Trình duyệt chưa thể xử lý liên kết đăng nhập. Vui lòng quay lại và thử lại.");
+            return;
+        }
+        var parsed = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(raw ?? "");
+        var code = parsed.TryGetValue("code", out var candidates) && candidates.Count == 1
+            ? candidates.ToString() : null;
+        raw = null;
+        if (!ExternalAuthUiRules.IsValidCode(code))
+        {
+            Fail("Không tìm thấy mã hợp lệ, hoặc liên kết đã được sử dụng. Hãy đăng nhập lại bằng Google.");
+            return;
+        }
+        try
+        {
+            var result = await ExternalApi.ExchangeExternalCodeAsync(code!, lifetime.Token);
+            code = null; // không giữ credential sau khi gửi
+            if (result.IsSuccess && result.Data is { Token.Length: > 0 } response)
+            {
+                var sessionResponse = new LoginResponse
+                {
+                    Token = response.Token,
+                    ExpiresAt = response.ExpiresAt,
+                    User = response.User,
+                    IsNewWorkspace = response.IsNewWorkspace
+                };
+                await Session.SignInAsync(sessionResponse);
+                Nav.NavigateTo(ExternalAuthUiRules.SafeDestination(response.ReturnUrl), replace: true);
+                return;
+            }
+            Fail(ExternalAuthUiRules.ExchangeError(result.ErrorCode) ?? (result.StatusCode == 429
+                ? "Đang có quá nhiều yêu cầu đăng nhập. Vui lòng thử lại sau." :
+                  "Không thể hoàn tất đăng nhập. Mã có thể đã hết hạn hoặc phiên tạm thời không khả dụng."));
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            // Không hiển thị/ghi mã đăng nhập hoặc token trong lỗi.
+            Fail("Đã xảy ra lỗi khi tạo phiên đăng nhập. Vui lòng thử lại.");
+        }
+    }
+
+    private void Fail(string value)
+    {
+        title = "Chưa thể hoàn tất đăng nhập";
+        message = value;
+        working = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        lifetime.Cancel(); lifetime.Dispose();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

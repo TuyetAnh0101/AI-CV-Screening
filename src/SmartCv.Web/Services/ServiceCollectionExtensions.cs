@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthApi>(sp => sp.GetRequiredService<AuthApiClient>());
         services.AddScoped<IRegistrationApi>(sp => sp.GetRequiredService<AuthApiClient>());
         services.AddScoped<IAuthRecoveryApi>(sp => sp.GetRequiredService<AuthApiClient>()); // B54 public recovery
+        services.AddScoped<IExternalAuthApi>(sp => sp.GetRequiredService<AuthApiClient>()); // B55 public one-time code exchange
         // B28: vai trò cho AuthorizeRouteView / quyền thao tác, đọc từ AuthSession ở trên (không phải phiên thứ hai).
         services.AddSmartCvWebAuth();
 

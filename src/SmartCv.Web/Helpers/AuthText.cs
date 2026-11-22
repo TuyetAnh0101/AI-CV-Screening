@@ -97,6 +97,23 @@ public static class AuthText
     /// Câu thông báo cho một lần đăng nhập thất bại, dựa vào mã trạng thái / mã lỗi (code) của A28 và loại lỗi phía Web —
     /// không dựa vào câu chữ của API. Sai email và sai mật khẩu luôn cùng một câu (không lộ email có tồn tại hay không).
     /// </summary>
+    /// <summary>B55: A58/A59 provider errors; no email, token or raw server detail is exposed.</summary>
+    public static string ExternalLoginError(string? code) => code switch
+    {
+        "cancelled" => "Bạn đã hủy đăng nhập bằng tài khoản ngoài. Bạn có thể thử lại hoặc dùng mật khẩu.",
+        "provider_error" => "Không thể kết nối với nhà cung cấp đăng nhập. Vui lòng thử lại.",
+        "email_unverified" => "Email tại nhà cung cấp chưa được xác minh. Hãy xác minh email trước khi đăng nhập.",
+        "link_required" => "Email này đã có tài khoản SCApp. Hãy đăng nhập bằng mật khẩu, sau đó vào Tài khoản → Liên kết Google.",
+        "account_locked" => "Tài khoản SCApp đã bị khóa. Vui lòng liên hệ quản trị viên.",
+        "admin_not_allowed" => "Tài khoản Admin chỉ được đăng nhập bằng mật khẩu SCApp.",
+        "registration_disabled" => "Đăng ký tài khoản mới đang tắt. Hãy dùng một tài khoản đã được liên kết hoặc liên hệ quản trị viên.",
+        "already_linked" => "Tài khoản ngoài này đã liên kết với một tài khoản SCApp khác.",
+        "token_invalid" => "Phiên liên kết hoặc mã đăng nhập không hợp lệ. Vui lòng thử lại.",
+        "token_expired" => "Liên kết đã hết hạn. Vui lòng bắt đầu lại.",
+        "last_login_method" => "Không thể hủy phương thức đăng nhập cuối cùng. Hãy thiết lập mật khẩu trước.",
+        _ => "Không thể đăng nhập bằng nhà cung cấp ngoài. Vui lòng thử lại."
+    };
+
     public static string LoginError<T>(ApiResult<T> result) => result.FailureKind switch
     {
         ApiFailureKind.Network => "Không kết nối được máy chủ SCApp. Kiểm tra kết nối mạng hoặc thử lại sau ít phút.",

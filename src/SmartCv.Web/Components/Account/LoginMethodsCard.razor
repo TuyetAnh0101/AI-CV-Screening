@@ -1,0 +1,169 @@
+@inject AccountApiClient Api
+@inject IRegistrationApi RegistrationApi
+@inject IConfiguration Config
+@inject NavigationManager Nav
+@implements IDisposable
+
+<section class="b55-card" aria-labelledby="b55-methods-heading">
+    <div class="b55-card-top">
+        <div><p class="b55-overline">04 / ĐĂNG NHẬP</p><h2 id="b55-methods-heading">Phương thức đăng nhập</h2>
+            <p class="b55-subtitle">Liên kết thêm tài khoản mà không thay đổi email SCApp.</p></div>
+        <span class="b55-card-symbol" aria-hidden="true">⌁</span>
+    </div>
+    @if (loading)
+    {
+        <p class="b55-muted" role="status">Đang kiểm tra các phương thức…</p>
+    }
+    else
+    {
+        <div class="b55-method-row">
+            <div class="b55-method-icon" aria-hidden="true">@@</div>
+            <div class="b55-method-info"><strong>Email và mật khẩu</strong><small>@(Profile.HasPassword ? "Đã thiết lập" : "Chưa thiết lập — có thể đặt qua email")</small></div>
+            <span class="b55-method-pill @(Profile.HasPassword ? "b55-pill-linked" : "")">@(Profile.HasPassword ? "Sẵn sàng" : "Chưa có")</span>
+        </div>
+        @foreach (var provider in providers)
+        {
+            var linked = logins.FirstOrDefault(x => x.Provider == provider);
+            <div class="b55-method-row" @key="provider">
+                <div class="b55-method-icon" aria-hidden="true">@(provider == "google" ? "G" : "⌘")</div>
+                <div class="b55-method-info">
+                    <strong>@(provider == "google" ? "Google" : "GitHub")</strong>
+                    @if (linked is not null)
+                    {
+                        <small>Đã liên kết @(linked.EmailAtLink ?? "tài khoản ngoài")</small>
+                        <small>Lần dùng gần nhất: @(linked.LastUsedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa ghi nhận")</small>
+                    }
+                    else { <small>Chưa kết nối</small> }
+                </div>
+                @if (Profile.Role == "Admin")
+                {
+                    <span class="b55-method-pill">Chỉ nội bộ</span>
+                }
+                else if (linked is null)
+                {
+                    <button type="button" class="btn sc-btn-secondary b55-method-action" disabled="@busy" @onclick="() => LinkAsync(provider)">Liên kết</button>
+                }
+                else
+                {
+                    <button type="button" class="btn sc-btn-secondary b55-method-action b55-unlink" id="@($"b55-unlink-{provider}")" disabled="@busy" @onclick="() => AskUnlink(provider)">Hủy liên kết</button>
+                }
+            </div>
+        }
+        @if (Profile.Role == "Admin")
+        {
+            <p class="b55-muted">Tài khoản Admin chỉ được đăng nhập bằng phương thức nội bộ.</p>
+        }
+        @if (providers.Count == 0)
+        {
+            <p class="b55-muted">Hiện chưa có phương thức đăng nhập ngoài được bật. Bạn vẫn có thể dùng mật khẩu SCApp.</p>
+        }
+    }
+    @if (error is not null) { <p class="b55-field-error" role="alert">@error</p> }
+    @if (notice is not null) { <p class="b55-success-text" role="status">@notice</p> }
+    @if (confirmProvider is not null)
+    {
+        <ConfirmDialog Title="Hủy liên kết đăng nhập?"
+                       Text="Sau khi hủy, bạn không thể dùng phương thức này để đăng nhập SCApp cho đến khi liên kết lại."
+                       ConfirmText="Hủy liên kết" Danger="true" Busy="@busy"
+                       ReturnFocusId="@($"b55-unlink-{confirmProvider}")"
+                       OnConfirm="UnlinkAsync" OnCancel="CloseConfirm" />
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ProfileDto Profile { get; set; } = default!;
+    private List<LinkedLoginDto> logins = [];
+    private List<string> providers = [];
+    private bool loading = true, busy;
+    private string? confirmProvider, notice, error;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            var settings = await RegistrationApi.GetRegistrationSettingsAsync(lifetime.Token);
+            // Ẩn provider tắt kể cả khi user từng liên kết. Có thể thêm nhãn tĩnh sau nếu API có hỗ trợ.
+            providers = settings.Data?.Providers.Where(x => x.Enabled && ExternalAuthUiRules.SupportedProvider(x.Name))
+                .Select(x => x.Name).Distinct(StringComparer.Ordinal).ToList() ?? [];
+            var result = await Api.GetLoginsAsync(lifetime.Token);
+            logins = result.IsSuccess ? result.Data ?? [] : [];
+            if (!result.IsSuccess) error = "Chưa tải được các phương thức liên kết. Hãy tải lại trang.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { loading = false; }
+    }
+
+    private async Task LinkAsync(string provider)
+    {
+        if (busy || Profile.Role == "Admin" || !providers.Contains(provider)) return;
+        busy = true; error = notice = null;
+        try
+        {
+            var result = await Api.CreateLinkTicketAsync(provider, lifetime.Token);
+            if (result.IsSuccess && result.Data is { StartUrl: { Length: > 0 } start })
+            {
+                // Backend A58 trả root-relative /api/...; B55 ghép origin API, không phải origin Web.
+                var url = ExternalAuthUiRules.LinkStartUrl(Config["ApiBaseUrl"], provider, start);
+                Nav.NavigateTo(url, forceLoad: true);
+                return;
+            }
+            error = result.ErrorCode switch
+            {
+                "already_linked" => "Tài khoản này đã liên kết phương thức đăng nhập đó.",
+                "admin_not_allowed" => "Tài khoản Admin không được liên kết đăng nhập ngoài.",
+                "provider_disabled" => "Phương thức đăng nhập hiện không khả dụng.",
+                _ when result.StatusCode == 429 => "Bạn thao tác quá nhanh. Hãy thử lại sau.",
+                _ => "Chưa thể bắt đầu liên kết. Vui lòng thử lại."
+            };
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (InvalidOperationException) { error = "API trả về đường dẫn liên kết không hợp lệ."; }
+        finally { busy = false; }
+    }
+
+    private void AskUnlink(string provider)
+    {
+        if (busy || !logins.Any(x => x.Provider == provider)) return;
+        confirmProvider = provider;
+    }
+    private void CloseConfirm() => confirmProvider = null;
+
+    private async Task UnlinkAsync()
+    {
+        var provider = confirmProvider;
+        if (busy || provider is null) return;
+        busy = true; error = notice = null;
+        try
+        {
+            var result = await Api.UnlinkAsync(provider, lifetime.Token);
+            if (result.IsSuccess)
+            {
+                confirmProvider = null;
+                logins.RemoveAll(x => x.Provider == provider);
+                notice = "Đã hủy liên kết thành công. Phiên hiện tại vẫn hoạt động.";
+            }
+            else
+            {
+                confirmProvider = null;
+                error = result.ErrorCode switch
+                {
+                    "last_login_method" => "Đây là cách đăng nhập duy nhất. Hãy đặt mật khẩu qua email trước khi hủy liên kết.",
+                    "provider_disabled" => "Phương thức đăng nhập không khả dụng.",
+                    _ when result.StatusCode == 429 => "Có quá nhiều yêu cầu. Vui lòng thử lại sau.",
+                    _ => "Không hủy được liên kết. Vui lòng thử lại."
+                };
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}
