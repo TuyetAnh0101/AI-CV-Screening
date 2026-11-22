@@ -18,4 +18,13 @@ public sealed class AccountApiClient(HttpClient http, ILogger<AccountApiClient> 
     /// <summary>Đường dẫn backend A57 thực tế là /me/password-setup, không phải /password-setup-email.</summary>
     public Task<ApiResult<SmartCv.Core.Contracts.AccountNotice>> RequestPasswordSetupEmailAsync(CancellationToken ct = default) =>
         PostJsonAsync<SmartCv.Core.Contracts.AccountNotice>("api/auth/me/password-setup", new { }, ct);
+    // B55 part2: three authenticated A58 endpoints; DeleteAsync handles HTTP 204.
+    public Task<ApiResult<List<LinkedLoginDto>>> GetLoginsAsync(CancellationToken ct = default) =>
+        GetAsync<List<LinkedLoginDto>>("api/auth/me/logins", ct);
+
+    public Task<ApiResult<ExternalLinkStartDto>> CreateLinkTicketAsync(string provider, CancellationToken ct = default) =>
+        PostJsonAsync<ExternalLinkStartDto>("api/auth/external/link-ticket", new { Provider = provider }, ct);
+
+    public Task<ApiResult<bool>> UnlinkAsync(string provider, CancellationToken ct = default) =>
+        DeleteAsync("api/auth/me/logins/" + Uri.EscapeDataString(provider), ct);
 }

@@ -40,7 +40,7 @@ else
 
         @if (notice is not null && form.FormError is null)
         {
-            <div class="login-notice @(noticeIsSuccess ? "is-success" : "is-info")" role="status">
+            <div class="login-notice @(noticeIsSuccess ? "is-success" : noticeIsError ? "is-danger" : "is-info")" role="status">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="@(noticeIsSuccess ? CheckIcon : InfoIcon)" /></svg>
                 <span>@notice</span>
             </div>
@@ -119,6 +119,8 @@ else
             </button>
         </form>
 
+        <ExternalLoginButtons ReturnUrl="@NextUrl" />
+
         <div class="b53-login-footer">
             @if (registrationOpen)
             {
@@ -149,6 +151,7 @@ else
     [SupplyParameterFromQuery(Name = "expired")] public string? Expired { get; set; }
     [SupplyParameterFromQuery(Name = "signedOut")] public string? SignedOut { get; set; }
     [SupplyParameterFromQuery(Name = "reset")] public string? Reset { get; set; }
+    [SupplyParameterFromQuery(Name = "external_error")] public string? ExternalError { get; set; }
 
     private bool registrationOpen;
     private bool resending;
@@ -157,6 +160,7 @@ else
     private bool ready;
     private string? notice;
     private bool noticeIsSuccess;
+    private bool noticeIsError;
     private bool focusEmailOnReady = true;
     private ElementReference emailRef, passwordRef, submitRef, errorRef;
     private Timer? retryTimer;
@@ -172,7 +176,12 @@ else
             return;
         }
 
-        if (Reset == "1") (notice, noticeIsSuccess) = ("Đã đặt mật khẩu mới. Hãy đăng nhập bằng mật khẩu vừa tạo.", true);
+        if (!string.IsNullOrWhiteSpace(ExternalError))
+        {
+            notice = AuthText.ExternalLoginError(ExternalError);
+            noticeIsError = ExternalError != "cancelled";
+        }
+        else if (Reset == "1") (notice, noticeIsSuccess) = ("Đã đặt mật khẩu mới. Hãy đăng nhập bằng mật khẩu vừa tạo.", true);
         else if (Expired == "1" || Session.EndReason == AuthEndReason.Expired) notice = AuthText.SessionExpired;
         else if (SignedOut == "1") (notice, noticeIsSuccess) = (AuthText.SignedOut, true);
         ready = true; // Form đăng nhập không phải đợi CTA đăng ký.
