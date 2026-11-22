@@ -84,6 +84,14 @@ builder.Services.AddSingleton(sp =>
     return new PreviewQuota(o.LimitPerWindow, TimeSpan.FromMinutes(o.WindowMinutes), o.MaxConcurrent, sp.GetRequiredService<TimeProvider>());
 });
 
+builder.Services.AddOptions<WorkspaceOptions>()
+    .Bind(builder.Configuration.GetSection(WorkspaceOptions.SectionName))
+    .Validate(o => o.PersonalDailyAiEvaluations is >= 1 and <= 10000,
+        "Workspaces:PersonalDailyAiEvaluations phải từ 1 đến 10000.")
+    .Validate(o => o.PersonalMaxCvs is >= 1 and <= 100000,
+        "Workspaces:PersonalMaxCvs phải từ 1 đến 100000.")
+    .ValidateOnStart();
+
 var app = builder.Build();
 // Validate the completed configuration (including host-provided providers) before any database/seed access.
 ProductionSetup.ValidateRequiredSettings(app.Configuration, app.Environment);

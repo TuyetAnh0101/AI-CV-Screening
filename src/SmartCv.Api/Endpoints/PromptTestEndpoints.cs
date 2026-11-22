@@ -7,6 +7,7 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Prompts;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -34,7 +35,7 @@ public static class PromptTestEndpoints
     }
 
     private static async Task<IResult> StartAsync(StartPromptTestRequest request, SmartCvDbContext db,
-        IOptions<ScoringOptions> options, CancellationToken ct)
+        IOptions<ScoringOptions> options, AiQuotaService quota, CancellationToken ct)
     {
         var opt = options.Value;
         // Keep the A12 persisted settings validation used by Screening, including decimal precision.
@@ -47,8 +48,12 @@ public static class PromptTestEndpoints
         try
         {
             await using var transaction = await EvaluationSetWriteScope.BeginAsync(db, request.EvaluationSetId, ct);
-            if (!await db.PromptVersions.AnyAsync(p => p.PromptVersionId == request.PromptVersionId, ct))
-                return Problem(404, "Không tìm thấy prompt", "Phiên bản prompt không tồn tại.");
+            var prompt = await db.PromptVersions.AsNoTracking()
+                .Where(p => p.PromptVersionId == request.PromptVersionId)
+                .Select(p => new { p.PromptVersionId, p.SystemPrompt, p.WorkspaceId })
+                .FirstOrDefaultAsync(ct);
+            if (prompt is null || prompt.WorkspaceId != quota.CurrentWorkspaceId)
+                return Problem(404, "Không tìm thấy prompt", "Phiên bản prompt không tồn tại trong workspace hiện tại.");
             var setRevision = await db.EvaluationSets.AsNoTracking().Where(s => s.EvaluationSetId == request.EvaluationSetId)
                 .Select(s => (int?)s.Revision).FirstOrDefaultAsync(ct);
             if (setRevision is null)
@@ -77,10 +82,22 @@ public static class PromptTestEndpoints
                     detail: $"Phiên bản này đang chạy trên bộ CV đã chọn (lượt #{activeRunId}).",
                     extensions: new Dictionary<string, object?> { ["runId"] = activeRunId });
 
+            // A54: Kiểm tra hạn mức AI trong transaction Serializable của EvaluationSetWriteScope.
+            // Không mở thêm transaction từ AiQuotaService.
+            var budget = await quota.CheckAsync(labels.Count, ct);
+            if (!budget.CanReserve(labels.Count))
+                return Results.Problem(statusCode: 429, title: "Đã hết hạn mức AI hôm nay",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "ai_quota_exceeded", ["limit"] = budget.Limit,
+                        ["used"] = budget.Used, ["resetsAt"] = budget.ResetsAt
+                    });
+
             var now = DateTime.UtcNow;
             var run = new EvaluationRun
             {
                 RunType = RunTypes.PromptTest, PromptVersionId = request.PromptVersionId,
+                SystemPromptSnapshot = prompt.SystemPrompt,
                 EvaluationSetId = request.EvaluationSetId, EvaluationSetRevision = setRevision, // SCApp v2: snapshot phiên bản bộ
                 ModelName = opt.ModelName, Temperature = opt.Temperature,
                 KeywordWeight = opt.KeywordWeight, AiWeight = opt.AiWeight, PassThreshold = opt.PassThreshold,
@@ -91,6 +108,8 @@ public static class PromptTestEndpoints
                 }).ToList()
             };
             db.EvaluationRuns.Add(run);
+            await db.SaveChangesAsync(ct);
+            quota.AddRunReservation(run.RunId, labels.Count, "PromptTest");
             await db.SaveChangesAsync(ct);
             if (transaction is not null) await transaction.CommitAsync(ct);
             var dto = await db.QueryRuns().SingleAsync(r => r.RunId == run.RunId, ct);

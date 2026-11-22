@@ -22,6 +22,53 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("SmartCv.Core.Entities.AiUsageEntry", b =>
+                {
+                    b.Property<long>("AiUsageEntryId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("AiUsageEntryId"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RunId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UnitsReleased")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WorkspaceId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.HasKey("AiUsageEntryId");
+
+                    b.HasIndex("WorkspaceId", "CreatedAtUtc");
+
+                    b.HasIndex("WorkspaceId", "RunId")
+                        .IsUnique()
+                        .HasFilter("[RunId] IS NOT NULL");
+
+                    b.ToTable("AiUsageEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AiUsageEntries_Run", "([Source] = N'Preview' AND [RunId] IS NULL) OR ([Source] <> N'Preview' AND [RunId] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_AiUsageEntries_Source", "[Source] IN (N'Screening', N'PromptTest', N'Preview')");
+
+                            t.HasCheckConstraint("CK_AiUsageEntries_Units", "[Units] > 0 AND [UnitsReleased] BETWEEN 0 AND [Units]");
+                        });
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>
                 {
                     b.Property<int>("ApplicationId")
@@ -756,6 +803,9 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)")
                         .HasDefaultValue("Queued", "DF_EvaluationRuns_Status");
+
+                    b.Property<string>("SystemPromptSnapshot")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("Temperature")
                         .HasPrecision(3, 2)
@@ -2059,6 +2109,15 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_WorkspaceMembers_Role", "[Role] COLLATE Latin1_General_100_BIN2 IN ('Owner', 'Member')");
                         });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.AiUsageEntry", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Application", b =>

@@ -10,6 +10,8 @@ public class EvaluationRun : IWorkspaceOwned
     public int WorkspaceId { get; set; } = WorkspaceKinds.UnassignedWorkspaceId;
     public string RunType { get; set; } = string.Empty;   // Screening | PromptTest
     public int PromptVersionId { get; set; }
+    /// <summary>Bản chữ prompt cố định lúc nhận lượt; run cũ dùng PromptVersion.SystemPrompt.</summary>
+    public string? SystemPromptSnapshot { get; set; }
     public int? EvaluationSetId { get; set; }             // PromptTest: bắt buộc; Screening: để null
     /// <summary>SCApp v2: EvaluationSets.Revision lúc tạo lượt PromptTest; null với lượt cũ hoặc Screening.</summary>
     public int? EvaluationSetRevision { get; set; }

@@ -11,6 +11,7 @@ using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Scoring;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -75,7 +76,7 @@ public static class AiPreviewEndpoints
 
     private static async Task<Results<Ok<AiPreviewDto>, ProblemHttpResult>> PreviewAsync(
         int id, HttpContext http, SmartCvDbContext db, IAiEvaluator ai, IOptions<ScoringOptions> options,
-        IOptions<GeminiOptions> gemini, PreviewQuota quota, CancellationToken ct)
+        IOptions<GeminiOptions> gemini, PreviewQuota quota, AiQuotaService workspaceQuota, CancellationToken ct)
     {
         // A41: kiểm tra body trước mọi truy vấn; không body (A10) = bản đang kích hoạt
         var (request, bodyProblem) = await PromptToolSupport.ReadJsonBodyAsync<AiPreviewRequest>(http, ct);
@@ -108,6 +109,23 @@ public static class AiPreviewEndpoints
         {
             if (!reservation.IsGranted) return Rejected(reservation, gemini.Value.UseFake, http.Response);
 
+            // A54: giữ nguyên quota A41 toàn ứng dụng, bổ sung quota AI theo workspace.
+            var personal = await workspaceQuota.ReservePreviewAsync(ct);
+            if (!personal.Allowed)
+            {
+                reservation.Refund();
+                return TypedResults.Problem(
+                    statusCode: 429,
+                    title: "Đã hết hạn mức AI hôm nay",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "ai_quota_exceeded",
+                        ["limit"] = personal.Snapshot.Limit,
+                        ["used"] = personal.Snapshot.Used,
+                        ["resetsAt"] = personal.Snapshot.ResetsAt
+                    });
+            }
+
             // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che thông tin cá nhân trong GeminiEvaluationService (A37)
             // bằng AiPromptAssembler, cùng hàm với POST /api/prompts/assembled-preview (A41).
             aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job,
@@ -116,7 +134,11 @@ public static class AiPreviewEndpoints
             // Attempts = 0: chưa gửi gì tới AI (ví dụ thiếu API key) → trả lại ĐÚNG vé của request này.
             // Đã gửi (kể cả 503, hết thời gian chờ, Gemini hết hạn mức): giữ lượt vì Gemini có thể đã nhận và tính hạn mức.
             // Ngoại lệ (người dùng hủy request...): không biết chắc đã gửi hay chưa → giữ lượt; using vẫn trả chỗ chạy.
-            if (aiResult.Attempts == 0) reservation.Refund();
+            if (aiResult.Attempts == 0)
+            {
+                reservation.Refund();
+                await workspaceQuota.RefundPreviewAsync(personal.ReservationId!.Value, CancellationToken.None);
+            }
             tryCounted = !reservation.Refunded;
         }
 
