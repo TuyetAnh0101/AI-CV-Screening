@@ -86,7 +86,7 @@ internal static class B28Auth
         // NavMenu / UserMenu dùng AuthNavigator cho nút Đăng xuất (chỉ được tạo khi component đó được vẽ).
         services.TryAddSingleton(_ => B27.Session());
         services.TryAddScoped<AuthNavigator>();
-        services.TryAddScoped<AccountNotice>();   // B29: trang đổi mật khẩu
+        services.TryAddScoped<web::SmartCv.Web.Services.AccountNotice>();
         return services;
     }
 }

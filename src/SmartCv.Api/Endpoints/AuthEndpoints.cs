@@ -30,6 +30,7 @@ public static class AuthEndpoints
             .WithName("Me").WithSummary("Thông tin tài khoản hiện tại");
         AuthPasswordEndpoints.Map(group);
         RegistrationEndpoints.Map(group);
+        AccountSelfServiceEndpoints.Map(group);
         return app;
     }
 
