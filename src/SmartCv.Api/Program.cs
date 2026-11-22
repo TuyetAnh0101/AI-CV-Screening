@@ -43,6 +43,7 @@ builder.Services.AddOptions<RegistrationOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSmartCvAuth(builder.Configuration);
+builder.Services.AddSmartCvGoogle(builder.Configuration);
 builder.Services.AddOptions<ExportOptions>().Bind(builder.Configuration.GetSection(ExportOptions.SectionName))
     .Validate(o => o.MaxRows is >= 1 and <= 5000, "Export:MaxRows phải từ 1 đến 5000.").ValidateOnStart();
 

@@ -9,5 +9,6 @@ public enum EmailTemplate
     ResetPassword,
     PasswordChanged,
     ExternalLoginLinked,
+    ExternalLoginUnlinked,
     AdminDiagnostic
 }

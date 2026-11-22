@@ -64,6 +64,11 @@ public sealed class EmailTemplates(IConfiguration configuration)
                 htmlBody = $"<p>Xin chào {cleanName},</p><p>Phương thức đăng nhập {cleanProvider} đã được liên kết với tài khoản của bạn.</p>";
                 textBody = $"Xin chào {name},\nPhương thức đăng nhập {provider} đã được liên kết với tài khoản của bạn.";
                 break;
+            case EmailTemplate.ExternalLoginUnlinked:
+                subject = "SCApp - Đã hủy liên kết Google";
+                htmlBody = $"<p>Xin chào {cleanName},</p><p>Phương thức đăng nhập {cleanProvider} đã bị hủy liên kết khỏi tài khoản SCApp. Nếu không phải bạn, hãy liên hệ quản trị viên.</p>";
+                textBody = $"Xin chào {name},\nPhương thức đăng nhập {provider} đã bị hủy liên kết khỏi SCApp. Nếu không phải bạn, hãy liên hệ quản trị viên.";
+                break;
             case EmailTemplate.AdminDiagnostic:
                 subject = "SCApp - Kiểm tra hạ tầng email";
                 htmlBody = $"<p>Xin chào {cleanName},</p><p>Đây là email kiểm tra do quản trị viên SCApp yêu cầu.</p>";

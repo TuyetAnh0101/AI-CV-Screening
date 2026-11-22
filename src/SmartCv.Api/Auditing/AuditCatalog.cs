@@ -19,6 +19,7 @@ public static class AuditCatalog
         Add("POST /api/auth/resend-verification", "auth.resend_verification", "Authentication", "User", "Yêu cầu gửi lại xác minh", null);
         Add("POST /api/admin/email/test", "email.test_requested", "Email", "EmailOutbox", "Gửi email kiểm tra", null);
         Add("POST /api/auth/change-password", "auth.password_changed", "Authentication", "User", "Đổi mật khẩu cá nhân", null);
+        Add("DELETE /api/auth/me/logins/{provider}", "auth.external_unlink", "Authentication", "User", "Hủy liên kết phương thức đăng nhập", null);
         Add("POST /api/auth/forgot-password", "auth.forgot_password", "Authentication", "User", "Yêu cầu khôi phục mật khẩu", null);
         Add("POST /api/auth/reset-password", "auth.reset_password", "Authentication", "User", "Đặt lại mật khẩu bằng liên kết", null);
         Add("PUT /api/auth/me/profile", "account.profile_updated", "Accounts", "User", "Cập nhật họ tên cá nhân", null);
@@ -79,6 +80,10 @@ public static class AuditCatalog
     public static AuditAction ByCode(string code) => code switch
     {
         "accounts.role_changed" => new(code, "Accounts", "User", "Thay đổi vai trò tài khoản"),
+        "auth.external_login" => new(code, "Authentication", "User", "Đăng nhập bằng Google"),
+        "auth.external_register" => new(code, "Authentication", "User", "Tạo tài khoản bằng Google"),
+        "auth.external_link" => new(code, "Authentication", "User", "Liên kết Google"),
+        "auth.external_rejected" => new(code, "Authentication", "User", "Từ chối đăng nhập hoặc liên kết ngoài"),
         "auth.session_rejected" => new(code, "Authentication", "Session", "Từ chối phiên truy cập không hợp lệ", null),
         "workspace.provisioned" => new(code, "Workspace", "Workspace", "Khởi tạo không gian cá nhân"),
         "ai.quota_exceeded" => new(code, "Ai", "Workspace", "Từ chối yêu cầu do vượt hạn mức AI"),

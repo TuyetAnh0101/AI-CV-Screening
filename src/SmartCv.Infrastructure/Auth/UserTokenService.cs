@@ -42,8 +42,14 @@ public sealed class UserTokenService(SmartCvDbContext db, TimeProvider time)
             throw new InvalidOperationException("Token issuance requires an existing business transaction.");
 
         var now = time.GetUtcNow().UtcDateTime;
-        await db.UserTokens.Where(x => x.UserId == userId && x.Purpose == purpose && x.ConsumedAt == null)
-            .ExecuteUpdateAsync(up => up.SetProperty(x => x.ConsumedAt, now), ct);
+        if (db.Database.IsSqlServer())
+            await db.UserTokens.Where(x => x.UserId == userId && x.Purpose == purpose && x.ConsumedAt == null)
+                .ExecuteUpdateAsync(up => up.SetProperty(x => x.ConsumedAt, now), ct);
+        else
+        {
+            var old = await db.UserTokens.Where(x => x.UserId == userId && x.Purpose == purpose && x.ConsumedAt == null).ToListAsync(ct);
+            foreach (var previous in old) previous.ConsumedAt = now;
+        }
 
         var token = CreateRandomToken();
         db.UserTokens.Add(new UserToken
@@ -74,6 +80,16 @@ public sealed class UserTokenService(SmartCvDbContext db, TimeProvider time)
         var hash = HashToken(token);
         if (hash is null) return false;
         var now = time.GetUtcNow().UtcDateTime;
+        if (!db.Database.IsSqlServer())
+        {
+            // InMemory test provider has no ExecuteUpdate; concurrent SQL is enforced by WHERE predicate below.
+            var row = await db.UserTokens.SingleOrDefaultAsync(x => x.TokenHash == hash && x.Purpose == purpose &&
+                x.ConsumedAt == null && x.ExpiresAt > now, ct);
+            if (row is null) return false;
+            row.ConsumedAt = now;
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
         var changed = await db.UserTokens
             .Where(x => x.TokenHash == hash && x.Purpose == purpose &&
                 x.ConsumedAt == null && x.ExpiresAt > now)
