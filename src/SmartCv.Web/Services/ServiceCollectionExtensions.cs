@@ -75,6 +75,8 @@ public static class ServiceCollectionExtensions
         // Công khai: kiểm tra API còn chạy và đăng nhập không cần (và không được gửi) Bearer.
         Add<HealthApiClient>(TimeSpan.FromSeconds(5), authenticated: false);
         Add<AuthApiClient>(TimeSpan.FromSeconds(20), authenticated: false); // B27: A28 đăng nhập, /api/auth/me với token chỉ định
+        Add<AccountApiClient>(TimeSpan.FromSeconds(20)); // B55: Bearer theo circuit, tự xử lý 401
+        Add<WorkspaceApiClient>(TimeSpan.FromSeconds(20)); // B55/B56: workspace theo JWT
 
         // Mọi client nghiệp vụ dưới đây đều gửi kèm Bearer của tab đang dùng (A29 bắt buộc).
         Add<JobApiClient>(TimeSpan.FromSeconds(30));

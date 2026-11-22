@@ -1,0 +1,62 @@
+@inject AccountApiClient Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+<section class="b55-card" aria-labelledby="b55-security-heading">
+    <div class="b55-card-top">
+        <div><p class="b55-overline">02 / BẢO MẬT</p><h2 id="b55-security-heading">Mật khẩu & khôi phục</h2><p class="b55-subtitle">Kiểm soát cách truy cập tài khoản.</p></div>
+        <span class="b55-card-symbol" aria-hidden="true">⌘</span>
+    </div>
+    <div class="b55-security-row">
+        <span class="b55-security-icon" aria-hidden="true">✣</span>
+        <div class="b55-security-description">
+            <strong>@(Profile.HasPassword ? "Mật khẩu đã thiết lập" : "Chưa thiết lập mật khẩu")</strong>
+            <p>@(Profile.HasPassword ? "Bạn có thể đổi mật khẩu bằng cách xác nhận mật khẩu hiện tại." : "Tạo mật khẩu riêng để có thêm cách đăng nhập, kể cả khi Google gặp sự cố.")</p>
+        </div>
+        @if (Profile.HasPassword)
+        {
+            <a class="btn sc-btn-secondary b55-small-action" href="/change-password?returnUrl=%2Faccount">Đổi mật khẩu</a>
+        }
+        else
+        {
+            <button class="btn sc-btn-primary b55-small-action" type="button" @onclick="RequestSetupAsync" disabled="@(busy || sent)">@(busy ? "Đang gửi…" : sent ? "Đã yêu cầu gửi" : "Đặt qua email")</button>
+        }
+    </div>
+    @if (notice is not null)
+    {
+        <p class="@(hasError ? "b55-field-error" : "b55-success-text")" role="@(hasError ? "alert" : "status")">@notice</p>
+    }
+    <p class="b55-security-footer">Liên kết đặt mật khẩu chỉ được gửi đến email của tài khoản và có thời hạn sử dụng.</p>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ProfileDto Profile { get; set; } = default!;
+    private bool busy, hasError, sent;
+    private string? notice;
+    private readonly CancellationTokenSource lifetime = new();
+
+    private async Task RequestSetupAsync()
+    {
+        if (busy || sent || Profile.HasPassword) return;
+        busy = true;
+        notice = null;
+        try
+        {
+            var result = await Api.RequestPasswordSetupEmailAsync(lifetime.Token);
+            hasError = !result.IsSuccess;
+            if (result.IsSuccess) sent = true; // tránh gửi trùng khi người dùng bấm nhiều lần
+            notice = result.IsSuccess
+                ? "Nếu tài khoản đủ điều kiện, hướng dẫn đặt mật khẩu đã được gửi tới email của bạn. Hãy kiểm tra cả thư rác."
+                : result.StatusCode switch
+                {
+                    409 => "Tài khoản đã có mật khẩu. Vui lòng tải lại trang.",
+                    429 => "Bạn đã yêu cầu quá nhiều lần. Hãy thử lại sau.",
+                    _ => "Chưa thể gửi hướng dẫn. Vui lòng thử lại sau."
+                };
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { busy = false; }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}

@@ -1,0 +1,101 @@
+@page "/account"
+@attribute [Authorize(Policy = AccessRules.SignedInPolicy)]
+@implements IDisposable
+@inject AccountApiClient AccountApi
+@inject AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Tài khoản của tôi · SCApp</PageTitle>
+
+<div class="b55-page">
+    <header class="b55-hero">
+        <div class="b55-hero-copy">
+            <p class="b55-eyebrow"><span aria-hidden="true">✦</span> KHÔNG GIAN CỦA BẠN</p>
+            <h1>Tài khoản & bảo mật</h1>
+            <p>Thông tin cá nhân, quyền truy cập và không gian làm việc — trong một nơi.</p>
+            <div class="b55-hero-meta"><span class="b55-presence" aria-hidden="true"></span> Phiên đã xác minh bởi SCApp</div>
+        </div>
+        <div class="b55-hero-mark" aria-hidden="true">@AuthText.Initials(profile?.FullName ?? Session.User?.FullName)</div>
+    </header>
+
+    @if (notice is not null)
+    {
+        <div class="b55-banner @(hasError ? "b55-banner-error" : "b55-banner-ok")" role="@(hasError ? "alert" : "status")">
+            <span aria-hidden="true">@(hasError ? "!" : "✓")</span> @notice
+        </div>
+    }
+
+    @if (loading)
+    {
+        <div class="b55-skeleton" role="status"><span class="b55-loader"></span> Đang tải thông tin tài khoản…</div>
+    }
+    else if (profile is null)
+    {
+        <div class="b55-empty" role="alert">
+            <h2>Chưa thể tải hồ sơ</h2>
+            <p>Thông tin hiện tại vẫn được giữ nguyên. Kiểm tra kết nối API rồi thử lại.</p>
+            <button class="btn sc-btn-primary" @onclick="LoadAsync">Thử lại</button>
+        </div>
+    }
+    else
+    {
+        <div class="b55-grid">
+            <div class="b55-main-stack">
+                <ProfileCard Profile="profile" OnSaved="ProfileSavedAsync" />
+                <SecurityCard Profile="profile" />
+            </div>
+            <div class="b55-side-stack">
+                <WorkspaceCard />
+                <section class="b55-note">
+                    <span class="b55-note-icon" aria-hidden="true">◎</span>
+                    <h2>Bảo vệ phiên làm việc</h2>
+                    <p>SCApp không chia sẻ mật khẩu với Google. Đổi mật khẩu hoặc hủy liên kết cần có phiên xác thực hợp lệ.</p>
+                    <a href="/privacy">Xem chính sách dữ liệu</a>
+                </section>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private ProfileDto? profile;
+    private bool loading = true;
+    private bool hasError;
+    private string? notice;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureRestoredAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (lifetime.IsCancellationRequested) return;
+        loading = true;
+        notice = null;
+        try
+        {
+            var result = await AccountApi.GetProfileAsync(lifetime.Token);
+            if (result.IsSuccess && result.Data is not null) profile = result.Data;
+            else { profile = null; notice = "Không lấy được hồ sơ. Hãy thử lại."; hasError = true; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { loading = false; }
+    }
+
+    private async Task ProfileSavedAsync(ProfileDto updated)
+    {
+        profile = updated;
+        hasError = false;
+        notice = "Đã cập nhật họ tên. Thanh tài khoản sẽ hiển thị tên mới.";
+        if (!await Session.RefreshMeAsync())
+        {
+            // Profile đã lưu ở API; không hoàn tác. Nếu 401, AuthNavigator sẽ xử lý phiên.
+            notice = "Đã lưu hồ sơ. Thanh tài khoản sẽ cập nhật sau khi xác minh lại phiên.";
+        }
+    }
+
+    public void Dispose() { lifetime.Cancel(); lifetime.Dispose(); }
+}
