@@ -10,6 +10,8 @@ public sealed class LoginResponse
 {
     public string Token { get; init; } = string.Empty;
     public DateTime ExpiresAt { get; init; }
+    /// <summary>A56: true khi phiên đăng nhập vừa tạo Personal workspace.</summary>
+    public bool IsNewWorkspace { get; init; }
     public MeDto User { get; init; } = new();
 }
 
