@@ -13,6 +13,7 @@ using SmartCv.Core.Privacy;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Api.Endpoints;
 
@@ -439,7 +440,29 @@ public static partial class CvEndpoints
             .Select(f => new CvUploadFile(f.FileName, f.ContentType, f.Length, f.OpenReadStream))
             .ToList();
 
-        var result = await uploadService.UploadAsync(uploadFiles, source, cancellationToken);
-        return TypedResults.Ok(result);
+        // var result = await uploadService.UploadAsync(uploadFiles, source, cancellationToken);
+        // return TypedResults.Ok(result);
+
+        try
+        {
+            var result = await uploadService.UploadAsync(
+                uploadFiles, source, cancellationToken);
+
+            return TypedResults.Ok(result);
+        }
+        catch (CvQuotaExceededException ex)
+        {
+            return TypedResults.Problem(
+                statusCode: 409,
+                title: "Đã vượt số lượng CV được phép",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "cv_quota_exceeded",
+                    ["limit"] = ex.Limit,
+                    ["used"] = ex.Used,
+                    ["requested"] = ex.Requested
+                });
+        }
+
     }
 }

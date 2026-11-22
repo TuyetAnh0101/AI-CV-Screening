@@ -52,6 +52,8 @@ public class SmartCvDbContext : DbContext
     public DbSet<Evaluation> Evaluations => Set<Evaluation>();
     public DbSet<EvaluationSkill> EvaluationSkills => Set<EvaluationSkill>();
 
+    public DbSet<AiUsageEntry> AiUsageEntries => Set<AiUsageEntry>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PrepareStageChanges();
@@ -105,6 +107,8 @@ public class SmartCvDbContext : DbContext
         modelBuilder.Entity<PromptVersion>().HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
         modelBuilder.Entity<EvaluationSet>().HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
         modelBuilder.Entity<EvaluationRun>().HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
+        modelBuilder.Entity<AiUsageEntry>()
+            .HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
         modelBuilder.Entity<ExportLog>().HasQueryFilter(e => InSystemScope || e.WorkspaceId == CurrentWorkspaceId);
 
         modelBuilder.Entity<JobSkill>().HasQueryFilter(e => InSystemScope || e.Job.WorkspaceId == CurrentWorkspaceId);

@@ -13,6 +13,10 @@ public interface ICvFileStorage
     Task<string> SaveAsync(Guid cvId, string extension, Stream content, DateTime uploadedAtUtc, CancellationToken cancellationToken = default);
 
     /// <summary>Mở file để đọc. Ném FileNotFoundException nếu file không còn.</summary>
+    /// <summary>Chỉ dùng overload này cho CV MỚI, bắt buộc workspaceId hợp lệ.</summary>
+    Task<string> SaveAsync(int workspaceId, Guid cvId, string extension, Stream content,
+        DateTime uploadedAtUtc, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Kho CV chưa hỗ trợ lưu theo workspace.");
     Stream OpenRead(string storedPath);
 
     bool Exists(string storedPath);

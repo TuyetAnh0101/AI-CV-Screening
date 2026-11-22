@@ -11,14 +11,12 @@ namespace SmartCv.Infrastructure.Privacy;
 public sealed class RetentionProcessor(SmartCvDbContext db, CvAnonymizer anonymizer, IOptions<RetentionOptions> options, ICvFileStorage storage)
 {
     /// <summary>
-    /// Quét hạn lưu cho CV của MỌI workspace (Admin endpoint hoặc RetentionWorker): chỉ ở system scope, có lý do, được liệt kê trong
-    /// allowlist của test A52. Chỉ ẩn danh hóa CV đến hạn; không đọc hay trả nội dung CV.
+    /// Quét hạn lưu cho CV của MỌI workspace (Admin endpoint hoặc RetentionWorker): chỉ truy vấn CV đến hạn ở system scope, có lý do,
+    /// được liệt kê trong allowlist của test A52. Mỗi thao tác ẩn danh hóa chạy trong workspace thực tế của CV.
+    /// Chỉ ẩn danh hóa CV đến hạn; không đọc hay trả nội dung CV.
     /// </summary>
-    public async Task<RetentionRunResultDto> RunOnceAsync(DateTime nowUtc, bool dryRun, CancellationToken ct)
-    {
-        using var system = SmartCv.Infrastructure.Workspaces.WorkspaceScope.BeginSystem("RetentionProcessor.run-once");
-        return await RunOnceCoreAsync(nowUtc, dryRun, ct);
-    }
+    public Task<RetentionRunResultDto> RunOnceAsync(DateTime nowUtc, bool dryRun, CancellationToken ct)
+        => RunOnceCoreAsync(nowUtc, dryRun, ct);
 
     private async Task<RetentionRunResultDto> RunOnceCoreAsync(DateTime nowUtc, bool dryRun, CancellationToken ct)
     {
@@ -34,6 +32,13 @@ public sealed class RetentionProcessor(SmartCvDbContext db, CvAnonymizer anonymi
             {
                 try
                 {
+                    var workspaceId = await SmartCv.Infrastructure.Workspaces.WorkerWorkspaces.OfCvAsync(db, id, ct);
+                    if (workspaceId is null)
+                    {
+                        recoveryErrors.Add($"CV {id}: không xác định được workspace, cần xử lý thủ công.");
+                        continue;
+                    }
+                    using var tenant = SmartCv.Infrastructure.Workspaces.WorkspaceScope.Begin(workspaceId.Value);
                     var attempt = await anonymizer.AnonymizeAsync(id, "Hệ thống", true, nowUtc, ct, recoveryOnly: true);
                     if (attempt.Outcome is AnonymizeOutcome.Recovered or AnonymizeOutcome.AlreadyDone)
                         recovered++;
@@ -48,7 +53,16 @@ public sealed class RetentionProcessor(SmartCvDbContext db, CvAnonymizer anonymi
             }
 
         var active = RetentionRules.ActiveStages.ToArray();
-        var due = await db.Cvs.AsNoTracking().Where(c => c.AnonymizedAt == null && c.RetainUntil != null && c.RetainUntil <= nowUtc && !c.Applications.Any(a => active.Contains(a.Stage))).Where(c => !recovery.Contains(c.CvId)).OrderBy(c => c.RetainUntil).ThenBy(c => c.CvId).Select(c => c.CvId).Take(options.Value.BatchSize - recovery.Count).ToListAsync(ct);
+        List<Guid> due;
+        using (SmartCv.Infrastructure.Workspaces.WorkspaceScope.BeginSystem("RetentionProcessor.run-once"))
+        {
+            due = await db.Cvs.AsNoTracking()
+                .Where(c => c.AnonymizedAt == null && c.RetainUntil != null && c.RetainUntil <= nowUtc
+                    && !c.Applications.Any(a => active.Contains(a.Stage)))
+                .Where(c => !recovery.Contains(c.CvId))
+                .OrderBy(c => c.RetainUntil).ThenBy(c => c.CvId)
+                .Select(c => c.CvId).Take(options.Value.BatchSize - recovery.Count).ToListAsync(ct);
+        }
         var done = new List<Guid>();
         var errors = recoveryErrors;
         var skipped = 0;
@@ -58,6 +72,13 @@ public sealed class RetentionProcessor(SmartCvDbContext db, CvAnonymizer anonymi
                 AnonymizeAttempt attempt;
                 try
                 {
+                    var workspaceId = await SmartCv.Infrastructure.Workspaces.WorkerWorkspaces.OfCvAsync(db, id, ct);
+                    if (workspaceId is null)
+                    {
+                        errors.Add($"CV {id}: không xác định được workspace, cần xử lý thủ công.");
+                        continue;
+                    }
+                    using var tenant = SmartCv.Infrastructure.Workspaces.WorkspaceScope.Begin(workspaceId.Value);
                     attempt = await anonymizer.AnonymizeAsync(id, "Hệ thống", true, nowUtc, ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)

@@ -16,6 +16,8 @@ using SmartCv.Infrastructure.Extraction;
 using SmartCv.Infrastructure.Scoring;
 using SmartCv.Infrastructure.Storage;
 using SmartCv.Infrastructure.Uploads;
+using SmartCv.Infrastructure.Workspaces;
+
 
 namespace SmartCv.Infrastructure;
 
@@ -93,6 +95,8 @@ public static class DependencyInjection
         services.AddSingleton<TesseractOcrEngine>();                        // tải mô hình OCR một lần
         services.AddSingleton<ICvTextExtractor, CvTextExtractor>();
         services.AddScoped<CvExtractionProcessor>();                        // dùng DbContext nên Scoped
+        services.AddScoped<AiQuotaService>();
+        services.AddScoped<WorkspaceProvisioner>();
 
         return services;
     }

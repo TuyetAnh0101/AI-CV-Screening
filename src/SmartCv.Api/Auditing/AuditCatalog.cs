@@ -59,6 +59,8 @@ public static class AuditCatalog
         Add("DELETE /api/evaluation-sets/{id:int}/labels/{applicationId:int}", "evaluation_sets.label_removed", "EvaluationSets", "EvaluationSet", "Bỏ nhãn HR");
         Add("POST /api/retention/run", "privacy.retention_requested", "Privacy", "Retention", "Yêu cầu quét hạn lưu CV", null);
         Add("POST /api/cvs/{id:guid}/anonymize", "cvs.anonymized", "Privacy", "Cv", "Ẩn danh hóa CV");
+        Add("POST /api/workspace/sample-job", "workspace.sample_job",
+             "Workspace", "Job", "Tạo vị trí mẫu cho không gian cá nhân", null);
         return entries;
     }
     public static AuditAction? For(HttpContext http)
@@ -70,6 +72,8 @@ public static class AuditCatalog
     {
         "accounts.role_changed" => new(code, "Accounts", "User", "Thay đổi vai trò tài khoản"),
         "auth.session_rejected" => new(code, "Authentication", "Session", "Từ chối phiên truy cập không hợp lệ", null),
+        "workspace.provisioned" => new(code, "Workspace", "Workspace", "Khởi tạo không gian cá nhân"),
+        "ai.quota_exceeded" => new(code, "Ai", "Workspace", "Từ chối yêu cầu do vượt hạn mức AI"),
         _ => Routes.Values.FirstOrDefault(a => a.Code == code) ?? throw new ArgumentException("Unknown audit action.", nameof(code))
     };
 }

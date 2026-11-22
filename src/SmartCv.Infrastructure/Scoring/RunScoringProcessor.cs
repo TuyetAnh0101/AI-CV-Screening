@@ -10,6 +10,7 @@ using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Prompts;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Infrastructure.Scoring;
 
@@ -24,7 +25,8 @@ public sealed class RunScoringProcessor(
     SmartCvDbContext db,
     IAiEvaluator ai,
     IOptions<ScoringOptions> scoringOptions,
-    ILogger<RunScoringProcessor> logger)
+    ILogger<RunScoringProcessor> logger,
+    AiQuotaService? quota = null)
 {
     private const string WorkerLockName = "SmartCv.RunScoringWorker";
     private const int MaxErrorLength = 1000;
@@ -36,7 +38,7 @@ public sealed class RunScoringProcessor(
     private readonly ScoringOptions _scoring = scoringOptions.Value;
     private readonly Dictionary<int, JobProfile> _jobCache = [];
 
-    private sealed record RunSettings(int RunId, string ModelName, decimal Temperature, decimal KeywordWeight, decimal AiWeight, decimal PassThreshold, string SystemPrompt);
+    private sealed record RunSettings(int RunId, int WorkspaceId, string ModelName, decimal Temperature, decimal KeywordWeight, decimal AiWeight, decimal PassThreshold, string SystemPrompt);
 
     /// <summary>
     /// Khóa để cả hệ thống chỉ một worker chấm tại một thời điểm, kể cả khi chạy nhiều instance API.
@@ -148,6 +150,27 @@ public sealed class RunScoringProcessor(
         }
         if (run.Status is not (RunStatuses.Queued or RunStatuses.Running)) return 0;
 
+        // A54: luôn kiểm tra prompt thuộc cùng workspace trước khi có thể gọi AI.
+        // Không dùng IgnoreQueryFilters(): prompt khác workspace phải được xem như không tồn tại.
+        var promptWorkspace = await db.PromptVersions.AsNoTracking()
+            .Where(p => p.PromptVersionId == run.PromptVersionId)
+            .Select(p => (int?)p.WorkspaceId)
+            .SingleOrDefaultAsync(ct);
+        if (promptWorkspace != run.WorkspaceId)
+        {
+            var pending = await db.Evaluations
+                .Where(e => e.RunId == run.RunId && e.Status == EvaluationStatuses.Pending)
+                .ToListAsync(ct);
+            foreach (var item in pending) MarkFailed(item, "workspace_mismatch");
+            run.Status = RunStatuses.Failed;
+            run.FailedItems += pending.Count;
+            run.ProcessedItems += pending.Count;
+            run.CompletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            logger.LogError("workspace_mismatch: RunId={RunId}; không gọi AI", runId);
+            return pending.Count;
+        }
+
         if (run.Status == RunStatuses.Queued)
         {
             run.Status = RunStatuses.Running;
@@ -156,7 +179,8 @@ public sealed class RunScoringProcessor(
         }
 
         var settings = await db.EvaluationRuns.AsNoTracking().Where(r => r.RunId == runId)
-            .Select(r => new RunSettings(r.RunId, r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold, r.PromptVersion.SystemPrompt))
+            .Select(r => new RunSettings(r.RunId, r.WorkspaceId, r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold,
+                r.SystemPromptSnapshot ?? r.PromptVersion.SystemPrompt))
             .FirstAsync(ct);
 
         var pendingIds = await db.Evaluations.AsNoTracking()
@@ -185,22 +209,30 @@ public sealed class RunScoringProcessor(
 
         var evaluation = await db.Evaluations.FirstOrDefaultAsync(e => e.EvaluationId == evaluationId, ct);
         if (evaluation is null || evaluation.RunId != run.RunId || evaluation.Status != EvaluationStatuses.Pending) return false;
+        // Chỉ hoàn hạn mức khi chắc chắn evaluator chưa được gọi (hoặc trả Attempts == 0).
+        var mightHaveCalledAi = false;
 
         var info = await db.Applications.AsNoTracking()
             .Where(a => a.ApplicationId == evaluation.ApplicationId)
             .Select(a => new
             {
-                a.JobId, a.Cv.ExtractionStatus, a.Cv.ExtractedText,
+                a.JobId, a.WorkspaceId, CvWorkspaceId = a.Cv.WorkspaceId,
+                a.Cv.ExtractionStatus, a.Cv.ExtractedText,
                 CandidateName = a.Cv.Candidate != null ? a.Cv.Candidate.FullName : null   // A37: để che họ tên trước khi gửi AI
             })
             .FirstOrDefaultAsync(ct);
 
         // Xét trạng thái trước: khi đọc lại (A7), CV về Pending nhưng vẫn còn chữ cũ
-        if (info?.ExtractionStatus == ExtractionStatuses.Pending) return false;
+        if (info is { ExtractionStatus: ExtractionStatuses.Pending } &&
+            info.WorkspaceId == run.WorkspaceId && info.CvWorkspaceId == run.WorkspaceId)
+            return false;
 
         string? failure = info switch
         {
             null => "Không tìm thấy hồ sơ ứng tuyển.",
+            { WorkspaceId: var applicationWorkspace, CvWorkspaceId: var cvWorkspace }
+                when applicationWorkspace != run.WorkspaceId || cvWorkspace != run.WorkspaceId
+                => "Không tìm thấy hồ sơ ứng tuyển.",
             { ExtractionStatus: ExtractionStatuses.Failed } => "CV chưa trích xuất được nội dung (ExtractionStatus = Failed).",
             { ExtractedText: var text } when string.IsNullOrWhiteSpace(text) => "CV đã trích xuất nhưng không có nội dung chữ.",
             _ => null
@@ -223,8 +255,10 @@ public sealed class RunScoringProcessor(
                 else
                 {
                     // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che trong GeminiEvaluationService (A37).
+                    mightHaveCalledAi = true; // Nếu evaluator ném exception, không hoàn quota vì có thể đã gửi Gemini.
                     aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(run.ModelName, run.Temperature, run.SystemPrompt, job!,
                         info.ExtractedText!, info.CandidateName), ct);
+                    mightHaveCalledAi = aiResult.Attempts > 0;
                     result = ScoreCombiner.Combine(keyword, aiResult, run.KeywordWeight, run.AiWeight, run.PassThreshold, _scoring.MissingMustHaveCap);
                 }
             }
@@ -249,6 +283,8 @@ public sealed class RunScoringProcessor(
 
         try
         {
+            if (!mightHaveCalledAi && quota is not null)
+                await quota.ReleaseUnusedRunUnitAsync(run.RunId, ct);
             await SaveWithProgressAsync(run.RunId, evaluation);
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException sql && PermanentDataErrors.Contains(sql.Number))
@@ -260,6 +296,11 @@ public sealed class RunScoringProcessor(
             MarkFailed(evaluation, "Kết quả chấm không lưu được do vi phạm ràng buộc dữ liệu.");
             await MergeSkillsAsync(evaluationId, info?.JobId ?? 0, [], CancellationToken.None);
             result = null;
+            // ChangeTracker.Clear() đã bỏ các thay đổi ledger chưa lưu ở lần đầu.
+            // Đọc lại bản ghi qua AiQuotaService và áp dụng release trước SaveChanges retry.
+            // Dịch vụ quota phải bảo đảm release idempotent đối với run/unit đã hoàn.
+            if (!mightHaveCalledAi && quota is not null)
+                await quota.ReleaseUnusedRunUnitAsync(run.RunId, CancellationToken.None);
             await SaveWithProgressAsync(run.RunId, evaluation);
         }
 

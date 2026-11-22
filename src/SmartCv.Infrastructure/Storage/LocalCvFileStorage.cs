@@ -43,24 +43,66 @@ public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage, ICvS
             throw new IOException("Không đọc lại được dữ liệu kiểm tra kho CV.");
     }
 
-    public async Task<string> SaveAsync(Guid cvId, string extension, Stream content, DateTime uploadedAtUtc, CancellationToken cancellationToken = default)
+    // public async Task<string> SaveAsync(Guid cvId, string extension, Stream content, DateTime uploadedAtUtc, CancellationToken cancellationToken = default)
+    // {
+    //     // Đuôi file đã được A5 kiểm tra; chặn thêm ở đây để không ghép được ký tự đường dẫn vào tên file
+    //     if (string.IsNullOrEmpty(extension) || extension[0] != '.' || extension.Length > 10
+    //         || extension.IndexOfAny(['/', '\\', ':']) >= 0 || extension.Contains(".."))
+    //         throw new ArgumentException($"Đuôi file không hợp lệ: \"{extension}\".", nameof(extension));
+
+    //     // Đường dẫn lưu vào database luôn dùng dấu "/", giống dữ liệu seed: Uploads/CV/2026/11/<GUID>.pdf
+    //     var storedPath = $"{_storageRoot}/{uploadedAtUtc:yyyy}/{uploadedAtUtc:MM}/{cvId}{extension.ToLowerInvariant()}";
+    //     var fullPath = ToFullPath(storedPath);
+
+    //     Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+    //     // FileMode.CreateNew: báo lỗi nếu file đã tồn tại (không bao giờ ghi đè file có sẵn).
+    //     // Lỗi ở bước này thì chưa tạo file nào của lần lưu này, nên không xóa gì.
+    //     var file = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+    //         bufferSize: 81920, useAsync: true);
+
+    //     try
+    //     {
+    //         await using (file)
+    //         {
+    //             await content.CopyToAsync(file, cancellationToken);
+    //         }
+    //     }
+    //     catch
+    //     {
+    //         // Ghi dở (lỗi đọc luồng, hết dung lượng, hủy request...): xóa file vừa tạo, không để file hỏng / mồ côi
+    //         TryDeleteFullPath(fullPath, storedPath);
+    //         throw;
+    //     }
+
+    //     return storedPath;
+    // }
+
+    // Dành cho unit test/hồ sơ legacy trước A54. Không dùng trong đường upload mới.
+    public Task<string> SaveAsync(Guid cvId, string extension, Stream content,
+        DateTime uploadedAtUtc, CancellationToken cancellationToken = default) =>
+        SaveCoreAsync(null, cvId, extension, content, uploadedAtUtc, cancellationToken);
+
+    public Task<string> SaveAsync(int workspaceId, Guid cvId, string extension, Stream content,
+        DateTime uploadedAtUtc, CancellationToken cancellationToken = default)
     {
-        // Đuôi file đã được A5 kiểm tra; chặn thêm ở đây để không ghép được ký tự đường dẫn vào tên file
+        if (workspaceId <= 0) throw new ArgumentOutOfRangeException(nameof(workspaceId));
+        return SaveCoreAsync(workspaceId, cvId, extension, content, uploadedAtUtc, cancellationToken);
+    }
+
+    private async Task<string> SaveCoreAsync(int? workspaceId, Guid cvId, string extension,
+        Stream content, DateTime uploadedAtUtc, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrEmpty(extension) || extension[0] != '.' || extension.Length > 10
             || extension.IndexOfAny(['/', '\\', ':']) >= 0 || extension.Contains(".."))
             throw new ArgumentException($"Đuôi file không hợp lệ: \"{extension}\".", nameof(extension));
 
-        // Đường dẫn lưu vào database luôn dùng dấu "/", giống dữ liệu seed: Uploads/CV/2026/11/<GUID>.pdf
-        var storedPath = $"{_storageRoot}/{uploadedAtUtc:yyyy}/{uploadedAtUtc:MM}/{cvId}{extension.ToLowerInvariant()}";
+        var folder = workspaceId is { } id ? $"{_storageRoot}/w{id}" : _storageRoot;
+        var storedPath = $"{folder}/{uploadedAtUtc:yyyy}/{uploadedAtUtc:MM}/{cvId}{extension.ToLowerInvariant()}";
         var fullPath = ToFullPath(storedPath);
-
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-
-        // FileMode.CreateNew: báo lỗi nếu file đã tồn tại (không bao giờ ghi đè file có sẵn).
-        // Lỗi ở bước này thì chưa tạo file nào của lần lưu này, nên không xóa gì.
         var file = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
             bufferSize: 81920, useAsync: true);
-
         try
         {
             await using (file)
@@ -70,11 +112,9 @@ public sealed class LocalCvFileStorage : ICvFileStorage, ICvErasureStorage, ICvS
         }
         catch
         {
-            // Ghi dở (lỗi đọc luồng, hết dung lượng, hủy request...): xóa file vừa tạo, không để file hỏng / mồ côi
             TryDeleteFullPath(fullPath, storedPath);
             throw;
         }
-
         return storedPath;
     }
 

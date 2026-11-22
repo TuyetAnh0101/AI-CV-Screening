@@ -10,6 +10,8 @@ using SmartCv.Core.Options;
 using SmartCv.Core.Storage;
 using SmartCv.Core.Uploads;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Core.Workspaces;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Infrastructure.Uploads;
 
@@ -27,7 +29,9 @@ public sealed class CvUploadService(
     ICvFileStorage storage,
     ICvExtractionQueue extractionQueue,
     IOptions<CvUploadOptions> options,
-    ILogger<CvUploadService> logger) : ICvUploadService
+    ILogger<CvUploadService> logger,
+    IWorkspaceContext? current = null,
+    AiQuotaService? quota = null) : ICvUploadService
 {
     private readonly CvUploadOptions _options = options.Value;
 
@@ -36,6 +40,17 @@ public sealed class CvUploadService(
         ArgumentNullException.ThrowIfNull(source);
         if (!CvSourceChannels.IsValid(source.SourceChannel) || source.ConsentConfirmedAtUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("Nguồn CV và thời điểm xác nhận UTC không hợp lệ.", nameof(source));
+
+        // A54: kiểm tra quota trước khi đọc bất kỳ file nào; giữ lock suốt lần tải.
+        await using var uploadLock = quota is null ? null
+            : await WorkspaceCvUploadLock.AcquireAsync(db, quota.CurrentWorkspaceId, cancellationToken);
+        if (quota is not null)
+        {
+            var (limit, used) = await quota.CvCountAsync(cancellationToken);
+            if (limit is { } maximum && (long)used + files.Count > maximum)
+                throw new CvQuotaExceededException(maximum, used, files.Count);
+        }
+
         // Giữ đúng thứ tự file người dùng gửi: kết quả thứ i ứng với file thứ i
         var results = new CvUploadItemResult[files.Count];
         var passed = new List<PassedFile>();   // file qua được bước 1–2, chờ kiểm tra trùng
@@ -153,13 +168,18 @@ public sealed class CvUploadService(
         var uploadedAt = DateTime.UtcNow;   // dùng cho cả thư mục yyyy/MM và cột UploadedAt
         string? storedPath = null;
         Cv? cv = null;
+        var workspaceId = current?.WorkspaceId;
+        if (quota is not null && workspaceId is not > 0)
+            throw new InvalidOperationException("Yêu cầu tải CV không có workspace đã xác minh.");
 
         try
         {
             await using (var stream = p.File.OpenReadStream())
             {
-                // Nếu ghi dở bị lỗi, LocalCvFileStorage tự xóa phần đã ghi
-                storedPath = await storage.SaveAsync(cvId, p.Extension, stream, uploadedAt, ct);
+                // Các unit test A6 cũ tạo service trực tiếp, không qua HTTP/DI: vẫn được dùng đường legacy.
+                storedPath = workspaceId is > 0
+                    ? await storage.SaveAsync(workspaceId.Value, cvId, p.Extension, stream, uploadedAt, ct)
+                    : await storage.SaveAsync(cvId, p.Extension, stream, uploadedAt, ct);
             }
 
             cv = new Cv

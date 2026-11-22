@@ -13,30 +13,47 @@ using SmartCv.Core.Runs;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Gemini;
 using SmartCv.Infrastructure.Scoring;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Api.Endpoints;
 
 public static partial class RunEndpoints
 {
+
     public static IEndpointRouteBuilder MapRunEndpoints(this IEndpointRouteBuilder app)
     {
         // A29: authenticated business group, with the existing feature flag.
-        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
+        if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
+            return app;
+
         var group = app.MapGroup("/api/runs").WithTags("Runs");
-        group.MapPost("/", StartAsync).RequireRateLimiting(CvUploadRateLimiting.PolicyName).DisableAntiforgery();
+
+        group.MapPost("/", StartAsync)
+            .RequireRateLimiting(CvUploadRateLimiting.PolicyName)
+            .DisableAntiforgery();
+
         group.MapGet("/", ListAsync);
         group.MapGet("/latest", LatestAsync);
-        // A42: chỉ đọc, đặt trước /{id:int} cho dễ đọc ("estimate" không khớp ràng buộc int nên không che route theo mã)
-        group.MapGet("/estimate", EstimateAsync).WithName("EstimateRun").WithSummary("Ước tính thời gian chấm N CV");
+
+        // A42: chỉ đọc, đặt trước /{id:int} cho dễ đọc.
+        group.MapGet("/estimate", EstimateAsync)
+            .WithName("EstimateRun")
+            .WithSummary("Ước tính thời gian chấm N CV");
+
         group.MapGet("/{id:int}", GetAsync);
-        group.MapGet("/{id:int}/failures", FailuresAsync).WithName("RunFailures").WithSummary("Hồ sơ không chấm được hoặc chỉ có điểm từ khóa");
+
+        group.MapGet("/{id:int}/failures", FailuresAsync)
+            .WithName("RunFailures")
+            .WithSummary("Hồ sơ không chấm được hoặc chỉ có điểm từ khóa");
+
         group.MapGet("/{id:int}/ranking", RankingAsync);
         group.MapGet("/{id:int}/compare", CompareAsync);
+
         return app;
     }
 
     private static async Task<IResult> StartAsync(StartRunRequest request, SmartCvDbContext db,
-        IOptions<ScoringOptions> options, CancellationToken ct)
+        IOptions<ScoringOptions> options, AiQuotaService quota, CancellationToken ct)
     {
         var ids = (request.ApplicationIds ?? []).Distinct().ToArray();
         if (ids.Length is 0 or > RunTimeEstimator.MaxCount || ids.Any(id => id <= 0))
@@ -46,7 +63,7 @@ public static partial class RunEndpoints
         if (await db.Applications.AnyAsync(a => ids.Contains(a.ApplicationId) && a.Cv.AnonymizedAt != null, ct))
             return Results.Problem(statusCode: 409, title: "Không chấm lại CV đã được ẩn danh hóa.");
         var prompts = await db.PromptVersions.AsNoTracking().Where(p => p.IsActive)
-            .Select(p => new { p.PromptVersionId, p.VersionName }).Take(2).ToListAsync(ct);
+            .Select(p => new { p.PromptVersionId, p.VersionName, p.SystemPrompt }).Take(2).ToListAsync(ct);
         if (prompts.Count == 0)
             return Results.Problem(statusCode: 409, title: "Chưa có prompt đang hoạt động.",
                 detail: "Hãy kích hoạt một phiên bản prompt trong không gian làm việc của bạn trước khi chấm.",
@@ -60,10 +77,21 @@ public static partial class RunEndpoints
             || new[] { opt.Temperature, opt.KeywordWeight, opt.AiWeight, opt.PassThreshold }
                 .Any(v => decimal.Round(v, 2) != v))
             return Results.Problem(statusCode: 500, title: "Cấu hình chấm điểm không thể lưu chính xác.");
+        // A54: Hold the serializable transaction across run, evaluations and quota ledger writes.
+        await using var quotaTx = await quota.BeginWriteTransactionAsync(ct);
+        var budget = await quota.CheckAsync(ids.Length, ct);
+        if (!budget.CanReserve(ids.Length))
+            return Results.Problem(statusCode: 429, title: "Đã hết hạn mức AI hôm nay",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "ai_quota_exceeded", ["limit"] = budget.Limit,
+                    ["used"] = budget.Used, ["resetsAt"] = budget.ResetsAt
+                });
         var now = DateTime.UtcNow;
         var run = new EvaluationRun
         {
             RunType = RunTypes.Screening, PromptVersionId = prompts[0].PromptVersionId,
+            SystemPromptSnapshot = prompts[0].SystemPrompt,
             ModelName = opt.ModelName, Temperature = opt.Temperature,
             KeywordWeight = opt.KeywordWeight, AiWeight = opt.AiWeight, PassThreshold = opt.PassThreshold,
             Status = RunStatuses.Queued, TotalItems = ids.Length, CreatedAt = now,
@@ -73,7 +101,10 @@ public static partial class RunEndpoints
             }).ToList()
         };
         db.EvaluationRuns.Add(run);
-        await db.SaveChangesAsync(ct); // Run and Pending evaluations share EF's transaction.
+        await db.SaveChangesAsync(ct); // Persist run and Pending evaluations inside quotaTx.
+        quota.AddRunReservation(run.RunId, ids.Length, "Screening");
+        await db.SaveChangesAsync(ct);
+        if (quotaTx is not null) await quotaTx.CommitAsync(ct);
         // The read/progress endpoint for this resource belongs to A13.
         return Results.Created($"/api/runs/{run.RunId}", new RunProgressDto(
             run.RunId, run.RunType, run.Status, run.PromptVersionId, prompts[0].VersionName,

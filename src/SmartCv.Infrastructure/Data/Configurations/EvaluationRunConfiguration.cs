@@ -63,5 +63,6 @@ public class EvaluationRunConfiguration : IEntityTypeConfiguration<EvaluationRun
             .HasConstraintName("FK_EvaluationRuns_Workspaces").OnDelete(DeleteBehavior.NoAction);
         b.HasIndex(x => x.PromptVersionId).HasDatabaseName("IX_EvaluationRuns_PromptVersionId");
         b.HasIndex(x => x.EvaluationSetId).HasDatabaseName("IX_EvaluationRuns_EvaluationSetId");
+        b.Property(x => x.SystemPromptSnapshot).HasColumnType("nvarchar(max)");
     }
 }
