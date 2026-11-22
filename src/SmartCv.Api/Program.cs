@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using SmartCv.Api;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,6 +21,20 @@ builder.AddOperationalLogging();
 builder.Services.AddControllers();
 if (builder.Environment.IsDevelopment()) builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
+// A55: key material must persist across restarts to decrypt queued verification links.
+var protection = builder.Services.AddDataProtection().SetApplicationName("SmartCv.Api");
+var keyPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(keyPath))
+{
+    var folder = Path.GetFullPath(keyPath);
+    Directory.CreateDirectory(folder);
+    protection.PersistKeysToFileSystem(new DirectoryInfo(folder));
+}
+builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(o => o.IsValid(), "Email configuration invalid.")
+    .ValidateOnStart();
+
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSmartCvAuth(builder.Configuration);
@@ -37,6 +52,7 @@ builder.Services.AddScoped<RetentionProcessor>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<SmartCv.Infrastructure.Ops.ApplicationReadiness>();
 builder.Services.AddHostedService<RetentionWorker>();
+builder.Services.AddHostedService<EmailWorker>();
 
 // A4: giới hạn tần suất cho API tải CV (mục "CvUpload:Endpoint" trong appsettings).
 // Giới hạn dung lượng request (201 MiB) được gắn riêng cho endpoint tải CV trong CvEndpoints,

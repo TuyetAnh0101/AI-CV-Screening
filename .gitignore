@@ -498,3 +498,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# A55: never add development email pickup or local protection keys
+**/.mail-dev/
+**/.mail-keys/
+**/mail-pickup/

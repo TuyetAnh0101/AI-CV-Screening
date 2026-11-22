@@ -1,3 +1,5 @@
+using SmartCv.Core.Email;
+using SmartCv.Infrastructure.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -97,6 +99,20 @@ public static class DependencyInjection
         services.AddScoped<CvExtractionProcessor>();                        // dùng DbContext nên Scoped
         services.AddScoped<AiQuotaService>();
         services.AddScoped<WorkspaceProvisioner>();
+
+        // A55: all outbox components scoped; render/enqueue shares request DbContext.
+        services.AddScoped<EmailTemplates>();
+        services.AddScoped<IEmailQueue, EmailQueue>();
+        services.AddScoped<IEmailOutboxStore, SqlEmailOutboxStore>();
+        services.AddScoped<EmailDispatchProcessor>();
+        services.AddScoped<EmailMimeFactory>();
+        services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IOptions<EmailOptions>>().Value.Mode switch
+        {
+            "File" => ActivatorUtilities.CreateInstance<FileEmailSender>(sp),
+            "Smtp" => ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp),
+            "Disabled" => ActivatorUtilities.CreateInstance<DisabledEmailSender>(sp),
+            _ => throw new InvalidOperationException("Email:Mode is invalid.")
+        });
 
         return services;
     }

@@ -9,13 +9,13 @@ using SmartCv.Infrastructure.Data;
 namespace SmartCv.Infrastructure.Ops;
 
 /// <summary>Read-only DB/schema checks and disposable storage probe; no AI calls, native OCR load or data repair.</summary>
-public sealed class ApplicationReadiness(SmartCvDbContext db, ICvFileStorage storage, IOptions<OcrOptions> ocr,
+public sealed class ApplicationReadiness(SmartCvDbContext db, ICvFileStorage storage, IOptions<OcrOptions> ocr, IOptions<EmailOptions> email,
     TimeProvider time, ILogger<ApplicationReadiness> logger)
 {
     public async Task<HealthReportDto> CheckAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var checks = await Task.WhenAll(DatabaseAsync(ct), UploadsAsync(ct), OcrAsync(ct));
+        var checks = await Task.WhenAll(DatabaseAsync(ct), UploadsAsync(ct), OcrAsync(ct), EmailAsync(ct));
         return HealthRules.Combine(checks, time.GetUtcNow().UtcDateTime);
     }
     private async Task<HealthCheckResult> DatabaseAsync(CancellationToken ct)
@@ -74,6 +74,14 @@ public sealed class ApplicationReadiness(SmartCvDbContext db, ICvFileStorage sto
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception error) when (error is not OutOfMemoryException)
         { Failure("ocr", error); return Task.FromResult(new HealthCheckResult("ocr", false, "Không đọc được dữ liệu ngôn ngữ OCR đã cấu hình.")); }
+    }
+    private Task<HealthCheckResult> EmailAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var value = email.Value;
+        return Task.FromResult(new HealthCheckResult("email", true,
+            value.Mode == "Disabled" ? "Email bị tắt theo cấu hình." :
+            "Cấu hình email đã được nạp; không thử kết nối SMTP."));
     }
     private void Failure(string code, Exception error) => logger.LogWarning("Health check {Code} failed ({FailureType}).", code, error.GetType().Name);
 }
