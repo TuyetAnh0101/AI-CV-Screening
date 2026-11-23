@@ -1,4 +1,5 @@
 @page "/evaluation-sets"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     B25: trang quản lý bộ dữ liệu đánh giá (tách khỏi /prompts).
       - Bước 1–4 (tạo bộ, chọn CV đã quét, gán nhãn HR, kiểm tra bộ + độ tin cậy C8) do EvaluationSetManager đảm nhận — chỉ một instance, chỉ ở đây.

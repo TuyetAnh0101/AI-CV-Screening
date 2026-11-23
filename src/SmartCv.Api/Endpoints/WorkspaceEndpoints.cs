@@ -17,7 +17,8 @@ public static class WorkspaceEndpoints
     {
         var group = app.MapGroup("/api/workspace").WithTags("Workspace").RequireAuthorization();
         group.MapGet("/", GetAsync).WithName("GetMyWorkspace");
-        group.MapPost("/sample-job", SampleJobAsync).WithName("CreateWorkspaceSampleJob");
+        group.MapPost("/sample-job", SampleJobAsync).WithName("CreateWorkspaceSampleJob")
+            .RequireAuthorization(SmartCv.Api.Auth.AuthPolicies.WorkspaceOwner);
         return app;
     }
 

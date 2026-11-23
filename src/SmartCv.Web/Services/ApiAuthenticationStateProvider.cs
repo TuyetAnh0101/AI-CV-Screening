@@ -66,6 +66,11 @@ public sealed class ApiAuthenticationStateProvider : AuthenticationStateProvider
             new(SmartCvClaims.Email, user.Email ?? ""),
             new(AccessRules.SessionClaim, verified ? AccessRules.Verified : AccessRules.Unverified),
         };
+        if (verified && user.Workspace is { Id: > 0 } workspace)
+        {
+            claims.Add(new Claim(AccessRules.WorkspaceKindClaim, workspace.Kind));
+            claims.Add(new Claim(AccessRules.WorkspaceRoleClaim, workspace.Role));
+        }
         if (verified && UserRoles.IsValid(user.Role))
         {
             claims.Add(new Claim(SmartCvClaims.Role, user.Role));

@@ -1,4 +1,5 @@
 @page "/jobs/new"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @page "/jobs/{Id:int}"
 @* Kế thừa [Authorize] nghiệp vụ từ Pages/_Imports: Admin/HR đã xác minh và không phải đổi mật khẩu. *@
 @using SmartCv.Core.Constants

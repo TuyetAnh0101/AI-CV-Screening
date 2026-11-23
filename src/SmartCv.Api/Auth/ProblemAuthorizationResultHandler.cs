@@ -26,7 +26,11 @@ public sealed class ProblemAuthorizationResultHandler : IAuthorizationMiddleware
             }
             // A52: tài khoản hợp lệ nhưng phiên chưa có workspace đã xác nhận (token cấp trước A52, hoặc tài khoản chưa thuộc workspace nào)
             // là lỗi phiên (401, đăng nhập lại), khác với thiếu quyền (403).
-            if (context.User.Identity?.IsAuthenticated == true && !HttpWorkspaceContext.HasValidatedWorkspace(context))
+            if (context.User.Identity?.IsAuthenticated == true
+                && context.User.GetRole() == UserRoles.Hr
+                && !HttpWorkspaceContext.HasValidatedWorkspace(context)
+                && context.GetEndpoint()?.Metadata.GetOrderedMetadata<IAuthorizeData>()
+                    .Any(a => a.Policy is AuthPolicies.BusinessOperator or AuthPolicies.WorkspaceOwner) == true)
             {
                 context.Response.Headers.WWWAuthenticate = "Bearer";
                 await AuthProblems.Problem(401, "authentication_required", "Chưa đăng nhập", "Phiên đăng nhập chưa gắn với không gian làm việc nào. Hãy đăng nhập lại.").ExecuteAsync(context);

@@ -23,11 +23,12 @@ public static class ExportEndpoints
         if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/exports").WithTags("Export");
         group.MapGet("/settings", (HttpContext http, IOptions<ExportOptions> options) => Results.Ok(new ExportSettingsDto
-            { MaxRows = options.Value.MaxRows, CanViewLogs = http.User.IsAdmin() })).WithName("ExportSettings");
-        group.MapGet("/", ListAsync).RequireAuthorization(AuthPolicies.Admin).WithName("ListExports");
-        app.MapGet("/api/runs/{id:int}/ranking/export", DownloadAsync).WithTags("Export").WithName("ExportRanking")
+            { MaxRows = options.Value.MaxRows, CanViewLogs = http.User.IsAdmin() })).WithName("ExportSettings")
+            .RequireAuthorization(AuthPolicies.BusinessOperator);
+        group.MapGet("/", ListAsync).RequireAuthorization(AuthPolicies.SystemAdmin).WithName("ListExports");
+        app.MapGet("/api/runs/{id:int}/ranking/export", DownloadAsync).WithTags("Export").WithName("ExportRanking").RequireAuthorization(AuthPolicies.BusinessOperator)
             .Produces(StatusCodes.Status200OK, contentType: ExcelRankingWriter.ContentType);
-        app.MapGet("/api/runs/{id:int}/ranking/export/preview", PreviewAsync).WithTags("Export").WithName("PreviewRankingExport")
+        app.MapGet("/api/runs/{id:int}/ranking/export/preview", PreviewAsync).WithTags("Export").WithName("PreviewRankingExport").RequireAuthorization(AuthPolicies.BusinessOperator)
             .Produces<RankingExportPreviewDto>();
         return app;
     }

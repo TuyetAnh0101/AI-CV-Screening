@@ -12,7 +12,11 @@ namespace SmartCv.Api.Auth;
 public static class AuthPolicies
 {
     public const string SignedIn = "SignedIn";
+    // Existing routes use Admin: keep the alias during migration.
     public const string Admin = "Admin";
+    public const string SystemAdmin = "SystemAdmin";
+    public const string BusinessOperator = "BusinessOperator";
+    public const string WorkspaceOwner = "WorkspaceOwner";
 }
 
 public static class AuthSetup
@@ -76,16 +80,35 @@ public static class AuthSetup
         });
         services.AddAuthorization(o =>
         {
-            // Fail closed for newly mapped endpoints, including controllers and routes outside the main group.
-            var business = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr)
+            // A01: dùng cùng một điều kiện tài khoản hợp lệ, nhưng KHÔNG buộc Admin
+            // có workspace để sử dụng API quản trị. Nguồn quyền là DB-validated JWT.
+            var staff = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .RequireRole(UserRoles.Admin, UserRoles.Hr)
                 .RequireAssertion(c => !c.User.HasClaim(SmartCvClaims.MustChangePassword, "true"))
-                // A52: nghiệp vụ cần workspace đã được UserSessionValidator xác nhận với database (token cũ không có claim -> 401).
-                .RequireAssertion(c => c.Resource is HttpContext http && HttpWorkspaceContext.HasValidatedWorkspace(http)).Build();
+                .Build();
+            var systemAdmin = new AuthorizationPolicyBuilder(staff)
+                .RequireRole(UserRoles.Admin).Build();
+            var business = new AuthorizationPolicyBuilder(staff)
+                .RequireRole(UserRoles.Hr)
+                .RequireAssertion(c => c.Resource is HttpContext http &&
+                    RoleBoundaryRules.CanOperate(c.User, HttpWorkspaceContext.Get(http)))
+                .Build();
+            var owner = new AuthorizationPolicyBuilder(business)
+                .RequireAssertion(c => c.Resource is HttpContext http &&
+                    RoleBoundaryRules.IsPersonalOwner(c.User, HttpWorkspaceContext.Get(http)))
+                .Build();
+            // Routes chưa phân loại không mặc định trao quyền Admin; endpoint business
+            // luôn nằm trong API group BusinessOperator ở SmartCvApi.cs.
             o.DefaultPolicy = business;
             o.FallbackPolicy = business;
-            o.AddPolicy(AuthPolicies.Admin, new AuthorizationPolicyBuilder(business).RequireRole(UserRoles.Admin).Build());
-            // /me and /change-password remain available while MustChangePassword is true.
-            o.AddPolicy(AuthPolicies.SignedIn, policy => policy.RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr));
+            o.AddPolicy(AuthPolicies.SystemAdmin, systemAdmin);
+            o.AddPolicy(AuthPolicies.Admin, systemAdmin); // compatibility for existing Admin routes
+            o.AddPolicy(AuthPolicies.BusinessOperator, business);
+            o.AddPolicy(AuthPolicies.WorkspaceOwner, owner);
+            // /me, /change-password và self-service không yêu cầu workspace hoặc đổi mật khẩu trước.
+            o.AddPolicy(AuthPolicies.SignedIn,
+                policy => policy.RequireAuthenticatedUser().RequireRole(UserRoles.Admin, UserRoles.Hr));
         });
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, ProblemAuthorizationResultHandler>();
         services.AddRateLimiter(o =>

@@ -1,4 +1,5 @@
 @page "/cvs"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     B24: /cvs (Kho CV của B23) → /candidates?view=cvs, giữ nguyên mọi bộ lọc trên địa chỉ.
     Thay thế mục lịch sử (replace) nên Back không quay lại /cvs rồi bị chuyển hướng lần nữa.

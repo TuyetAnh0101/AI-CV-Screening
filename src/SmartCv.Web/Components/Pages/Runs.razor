@@ -1,4 +1,5 @@
 @page "/runs"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     B26: lịch sử lượt chấm (A25: GET /api/runs?page=&pageSize=20&type=&status=&from=&to= → RunPageDto).
     Địa chỉ trang là bộ lọc đang áp dụng (/runs?type=PromptTest&status=Completed&page=2): F5, Back/Forward và gửi link đều giữ bộ lọc.

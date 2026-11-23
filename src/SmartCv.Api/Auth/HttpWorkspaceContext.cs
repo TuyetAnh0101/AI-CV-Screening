@@ -33,7 +33,7 @@ public static class WorkspaceSelection
         // Chỉ membership còn hiệu lực trong workspace đang Active. WorkspaceMembers/Workspaces là bảng toàn cục (không lọc theo workspace).
         var memberships = await db.WorkspaceMembers.AsNoTracking()
             .Where(m => m.UserId == userId && m.Workspace.IsActive)
-            .Select(m => new WorkspaceSessionInfo(m.WorkspaceId, m.Workspace.Name, m.Workspace.Kind, m.Role))
+            .Select(m => new WorkspaceSessionInfo(m.WorkspaceId, m.Workspace.Name, m.Workspace.Kind, m.Role, m.Workspace.OwnerUserId))
             .ToListAsync(ct);
         return WorkspaceSelectionRules.Choose(memberships);
     }

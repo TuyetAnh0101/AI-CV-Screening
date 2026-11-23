@@ -27,6 +27,7 @@ public static class AppNavigation
         new("Tổng quan",
         [
             new("Bảng điều khiển", "dashboard", "M3 11 12 3l9 8v10h-6v-6H9v6H3z", NavLinkMatch.All),
+            new("Quyền truy cập", "permissions", "M12 2 4 5v6c0 5 3.4 9.1 8 11 4.6-1.9 8-6 8-11V5z"),
         ]),
         new("Tuyển dụng",
         [
@@ -57,6 +58,7 @@ public static class AppNavigation
         if (!AccessRules.CanUseApp(user)) return [];
         var admin = AccessRules.IsAdmin(user);
         return Groups
+            .Where(g => !admin || g.Title is "Tổng quan" or "Quản trị")
             .Select(g => new NavGroup(g.Title, g.Items.Where(i => !i.AdminOnly || admin)
                 .Select(i => i.Href == "dashboard" ? i with { Text = admin ? "Dashboard quản trị" : "Dashboard tuyển dụng", Href = admin ? "admin/dashboard" : "dashboard" } : i).ToList()))
             .Where(g => g.Items.Count > 0)

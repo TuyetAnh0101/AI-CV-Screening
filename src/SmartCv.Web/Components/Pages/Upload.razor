@@ -1,4 +1,5 @@
 @page "/upload"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     Trang "Tải lên & Phân tích CV" (Figma Project_GD, node 375:1982 "Gán CV vào Job").
     B3 (đã làm): ô kéo thả, tải lên ngay qua POST /api/cvs/upload (A4–A6), danh sách CV, ô tích, menu ⋯, nút Hủy.
