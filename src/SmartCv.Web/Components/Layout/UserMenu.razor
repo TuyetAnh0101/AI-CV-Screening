@@ -1,33 +1,32 @@
 @*
-    B27: người đang đăng nhập (chữ viết tắt, họ tên, vai trò) và nút Đăng xuất trên thanh trên cùng.
-    B28: họ tên / vai trò đọc từ trạng thái đăng nhập cascade (cùng nguồn với menu và AuthorizeRouteView) nên đổi cùng lúc.
-    Đăng xuất (AuthNavigator): xóa phiên trong bộ nhớ và sessionStorage, rồi tải lại /login — circuit cũ bị bỏ nên không còn
-    dữ liệu cũ nào trên giao diện (Back của trình duyệt cũng chỉ về được trang đăng nhập).
+    FIX-B56-UI: hồ sơ là điểm vào trang /account.
+    Không truy xuất ảnh Google bên ngoài, vì MeDto chưa có avatar URL đáng tin cậy.
+    Giữ avatar initials; trang /account đã chứa chức năng bảo mật/đổi mật khẩu.
+    Đăng xuất giữ nguyên AuthNavigator.SignOutAsync (không tự thao tác token).
 *@
 @using SmartCv.Core.Auth
 @inject AuthNavigator Navigator
-@inject NavigationManager Nav
 
 @if (AccessRules.FullName(user) is { } name)
 {
     var role = AccessRules.RoleName(user);
     <div class="user-menu">
-        <span class="avatar" aria-hidden="true">@AuthText.Initials(name)</span>
-        <span class="who">
-            <span class="name" title="@user.FindFirst(SmartCvClaims.Email)?.Value">@name</span>
-            <span class="role">@role</span>
-        </span>
-        <span class="visually-hidden">Đang đăng nhập: @name, @role.</span>
-        @* B29: đổi mật khẩu tự nguyện; quay lại trang đang mở sau khi đổi. *@
-        <a class="user-account-link" href="/account" title="Tài khoản của tôi" aria-label="Tài khoản của tôi">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 10c5.5 0 9 3.2 9 7v1H3v-1c0-3.8 3.5-7 9-7zm0 2c-3.7 0-6 1.6-6.8 4h13.6c-.8-2.4-3.1-4-6.8-4z"/></svg>
-            <span>Tài khoản</span>
+        <a class="profile-trigger" href="/account"
+           aria-label="Mở tài khoản của @name, @role" title="Mở thông tin tài khoản">
+            <span class="avatar" aria-hidden="true">@AuthText.Initials(name)</span>
+            <span class="who">
+                <span class="name">@name</span>
+                <span class="role">@role</span>
+            </span>
+            <svg class="profile-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m9 18 6-6-6-6" />
+            </svg>
         </a>
-        <button type="button" class="pw-change" @onclick="OpenChangePassword" disabled="@Navigator.IsLeaving" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14a5 5 0 1 1 4.6-7H22v4h-2v3h-3v-3h-5.4A5 5 0 0 1 7 14zm0-3a2 2 0 1 0 0-4a2 2 0 0 0 0 4z" /></svg>
-        </button>
-        <button type="button" class="logout" @onclick="Navigator.SignOutAsync" disabled="@Navigator.IsLeaving" aria-label="Đăng xuất" title="Đăng xuất khỏi SCApp">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zm-.6 4.4L11 9l-2 2h8v2H9l2 2-1.6 1.6L4.8 12z" /></svg>
+        <button type="button" class="logout" @onclick="Navigator.SignOutAsync"
+                disabled="@Navigator.IsLeaving" aria-label="Đăng xuất" title="Đăng xuất khỏi SCApp">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zm-.6 4.4L11 9l-2 2h8v2H9l2 2-1.6 1.6L4.8 12z" />
+            </svg>
             <span>Đăng xuất</span>
         </button>
     </div>
@@ -35,10 +34,6 @@
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
-
     private System.Security.Claims.ClaimsPrincipal user = AccessRules.Nobody;
-
     protected override async Task OnParametersSetAsync() => user = await AccessRules.ResolveAsync(AuthState);
-
-    private void OpenChangePassword() => Nav.NavigateTo(AuthText.ChangePasswordUrl("/" + Nav.ToBaseRelativePath(Nav.Uri)));
 }
