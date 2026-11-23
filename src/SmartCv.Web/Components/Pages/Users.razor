@@ -39,6 +39,16 @@
                     <option value="@UserRoles.Hr">Nhân sự (HR)</option>
                 </select>
             </label>
+            <label class="users-select">
+                <span class="visually-hidden">Lọc nguồn trong trang danh sách hiện tại</span>
+                <select id="users-source-page" value="@sourceOnPage" @onchange="e => sourceOnPage = e.Value?.ToString() ?? string.Empty">
+                    <option value="">Mọi nguồn (trang này)</option>
+                    <option value="Admin">Admin tạo</option>
+                    <option value="Local">Tự đăng ký</option>
+                    <option value="google">Google</option>
+                    <option value="github">GitHub</option>
+                </select>
+            </label>
             <div class="users-status" role="group" aria-label="Lọc theo trạng thái">
                 @foreach (var (value, label) in StatusFilters)
                 {
@@ -51,6 +61,8 @@
             </button>
         </div>
 
+        @if (!string.IsNullOrEmpty(sourceOnPage))
+        { <p class="b56-source-scope" role="status">Nguồn đang lọc trong trang @Model.Page, không phải toàn bộ tài khoản. Tổng số và phân trang vẫn theo bộ lọc máy chủ.</p> }
         @if (Model.Message is { } message)
         {
             <div class="users-message @(Model.MessageIsError ? "is-error" : "is-success")" role="@(Model.MessageIsError ? "alert" : "status")">
@@ -98,11 +110,14 @@
             }
             <div class="cv-table-wrap users-table-wrap @(Model.Loading ? "is-refreshing" : null)">
                 <table class="users-table">
-                    <caption class="visually-hidden">Danh sách tài khoản: họ tên, vai trò, trạng thái, mật khẩu, đăng nhập gần nhất</caption>
+                    <caption class="visually-hidden">Danh sách tài khoản: tên, vai trò, nguồn, email xác minh, không gian, trạng thái, mật khẩu và đăng nhập gần nhất</caption>
                     <thead>
                         <tr>
                             <th scope="col">Tài khoản</th>
                             <th scope="col">Vai trò</th>
+                            <th scope="col">Nguồn</th>
+                            <th scope="col">Email xác minh</th>
+                            <th scope="col">Không gian</th>
                             <th scope="col">Trạng thái</th>
                             <th scope="col">Mật khẩu</th>
                             <th scope="col">Đăng nhập gần nhất</th>
@@ -110,7 +125,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var u in Model.Items)
+                        @foreach (var u in PageUsers)
                         {
                             var self = Model.IsSelf(u, me);
                             var lockReason = UserText.LockBlockedReason(u, me, Model.ActiveAdmins);
@@ -125,6 +140,9 @@
                                     </div>
                                 </td>
                                 <td data-label="Vai trò"><span class="role-badge @UserText.RoleCss(u.Role)">@UserText.Role(u.Role)</span></td>
+                                <td data-label="Nguồn"><span class="b56-source">@UserText.SignupSource(u.SignupSource)</span></td>
+                                <td data-label="Email xác minh"><span class="b56-verify @(u.EmailVerified ? "verified" : "unverified")">@(u.EmailVerified ? "Đã xác minh" : "Chưa xác minh")</span></td>
+                                <td data-label="Không gian">@(string.IsNullOrWhiteSpace(u.WorkspaceName) ? "Chưa có" : u.WorkspaceName)</td>
                                 <td data-label="Trạng thái"><span class="status @UserText.StatusCss(u)"><i aria-hidden="true"></i>@UserText.Status(u)</span></td>
                                 <td data-label="Mật khẩu">
                                     @if (u.MustChangePassword) { <span class="pw-badge">Chờ đổi mật khẩu</span> }
@@ -153,7 +171,7 @@
                                                     {
                                                         <button type="button" role="menuitem" @onclick="() => UnlockRow(u)"><span>Mở khóa</span></button>
                                                     }
-                                                    @if (UserText.ResetBlockedReason(u) is null)
+                                                    @if (UserText.ResetBlockedReason(u) is null && u.SignupSource == "Admin")
                                                     {
                                                         <button type="button" role="menuitem" @onclick="() => ResetRow(u)">
                                                             <span>Đặt lại mật khẩu</span><small>Tạo mật khẩu tạm mới</small>
@@ -166,6 +184,8 @@
                                 </td>
                             </tr>
                         }
+                        @if (!PageUsers.Any())
+                        { <tr><td colspan="9" class="b56-page-empty">Trang này không có tài khoản thuộc nguồn đã chọn. Hãy đổi trang hoặc bỏ lọc nguồn.</td></tr> }
                     </tbody>
                 </table>
             </div>
@@ -225,6 +245,11 @@
 
     private UsersWorkspace Model = default!;
     private int? me;
+    // A30 /api/users has no source query parameter. This filters ONLY rows already loaded in the current page.
+    private string sourceOnPage = "";
+    private IEnumerable<UserDto> PageUsers => string.IsNullOrEmpty(sourceOnPage)
+        ? Model.Items
+        : Model.Items.Where(u => string.Equals(u.SignupSource, sourceOnPage, StringComparison.OrdinalIgnoreCase));
     private int? openMenu;
     private string? returnFocus;
 

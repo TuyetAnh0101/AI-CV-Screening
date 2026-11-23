@@ -1,0 +1,53 @@
+@using SmartCv.Core.Workspaces
+@using SmartCv.Web.Helpers
+@implements IDisposable
+@inject WorkspaceApiClient WorkspaceApi
+
+@if (B56QuotaRules.Recognized(StatusCode, ErrorCode))
+{
+    <aside class="b56-notice" role="alert" aria-live="assertive">
+        <div class="b56-notice-icon" aria-hidden="true">!</div>
+        <div>
+            <strong>@Heading</strong>
+            <p>@CurrentMessage</p>
+            @if (ErrorCode == B56QuotaRules.NoActivePrompt)
+            { <a href="/prompts">Mở System Prompt →</a> }
+            else if (ErrorCode == B56QuotaRules.CvExceeded)
+            { <a href="/candidates?view=cvs">Quản lý CV →</a> }
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter] public int? StatusCode { get; set; }
+    [Parameter] public string? ErrorCode { get; set; }
+    private WorkspaceDto? snapshot;
+    private (int?, string?)? seen;
+    private readonly CancellationTokenSource lifetime = new();
+    private bool disposed;
+    private string CurrentMessage => B56QuotaRules.Message(StatusCode, ErrorCode, snapshot?.AiUsedToday,
+        ErrorCode == B56QuotaRules.CvExceeded ? snapshot?.MaxCvCount : snapshot?.DailyAiLimit, snapshot?.AiResetsAt);
+    private string Heading => ErrorCode switch
+    {
+        B56QuotaRules.AiExceeded => "Đã hết lượt AI",
+        B56QuotaRules.CvExceeded => "Không gian đã đầy CV",
+        _ => "Cần kích hoạt System Prompt"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = (StatusCode, ErrorCode);
+        if (seen == key || !B56QuotaRules.Recognized(StatusCode, ErrorCode)) return;
+        seen = key;
+        snapshot = null;
+        if (ErrorCode is not (B56QuotaRules.AiExceeded or B56QuotaRules.CvExceeded)) return;
+        try
+        {
+            var result = await WorkspaceApi.GetWorkspaceAsync(lifetime.Token);
+            if (!disposed && seen == key && result.IsSuccess) snapshot = result.Data;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+    }
+
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

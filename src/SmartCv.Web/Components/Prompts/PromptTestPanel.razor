@@ -24,8 +24,9 @@
     {
         <div class="confirm-run" role="alert"><p>Chạy phiên bản <strong>@Versions.FirstOrDefault(v => v.PromptVersionId == promptId)?.VersionName</strong> trên @SelectedSet?.LabelCount CV có nhãn HR của <strong>@SelectedSet?.Name</strong>@(SelectedSet is { UnlabeledCount: > 0 } u ? $" ({u.UnlabeledCount} hồ sơ chưa gán nhãn không được chạy)" : "")? Lượt chạy có thể gọi Gemini và tiêu tốn quota. Nội dung nháp chưa lưu không được sử dụng.</p><button class="btn sc-btn-secondary" @onclick="() => confirm = false">Hủy</button> <button class="btn sc-btn-primary" @onclick="StartAsync">Xác nhận chạy đánh giá</button></div>
     }
-    @if (flow.Error is not null)
+    @if (flow.Error is not null && !B56QuotaRules.Recognized(flow.B56QuotaStatus, flow.B56QuotaCode))
     { <div class="test-error" role="alert">@flow.Error <button type="button" class="btn sc-btn-secondary" disabled="@(flow.Checking || flow.Starting)" @onclick="RetryAsync">Kiểm tra lại trạng thái</button></div> }
+    <QuotaNotice StatusCode="@flow.B56QuotaStatus" ErrorCode="@flow.B56QuotaCode" />
     @if (flow.Current is { } run)
     {
         <div class="run-progress @(run.Status.ToLowerInvariant())" role="status" aria-live="polite">

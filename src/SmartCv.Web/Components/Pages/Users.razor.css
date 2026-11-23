@@ -171,3 +171,6 @@
     .menu-btn { width: 36px; }
     .users-foot { justify-content: center; }
 }
+
+/* B56: source, verification and workspace; no artificial total counts. */
+.b56-source-scope{font-size:12px;color:#665b41;background:#fff8e9;padding:10px 16px;margin:0;border-bottom:1px solid #f0dfbe}.b56-source{display:inline-flex;padding:4px 8px;border-radius:7px;background:#e9f3f2;color:#176e65;font-size:12px;font-weight:650}.b56-verify{font-size:12px;font-weight:650}.b56-verify.verified{color:#107758}.b56-verify.unverified{color:#a66d22}.b56-page-empty{text-align:center;color:#61706d;padding:25px!important}

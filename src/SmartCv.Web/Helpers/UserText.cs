@@ -8,6 +8,17 @@ public static class UserText
 {
     public static string Role(string? role) => role switch { UserRoles.Admin => "Quản trị viên", UserRoles.Hr => "Nhân sự (HR)", _ => "Không xác định" };
 
+    /// <summary>Display only the source explicitly supplied by A56; never infer it from email or workspace.</summary>
+    public static string SignupSource(string? source) => source switch
+    {
+        "Admin" => "Admin tạo",
+        "Local" => "Tự đăng ký",
+        "google" => "Google",
+        "github" => "GitHub",
+        "linkedin" => "LinkedIn",
+        _ => "Không rõ nguồn"
+    };
+
     public static string RoleCss(string? role) => role == UserRoles.Admin ? "role-admin" : "role-hr";
 
     public static string Status(UserDto u) => u.IsActive ? "Đang hoạt động" : "Đã khóa";

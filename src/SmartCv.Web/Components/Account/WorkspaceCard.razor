@@ -14,8 +14,8 @@
     else if (workspace is null)
     {
         <div class="b55-workspace-unavailable">
-            <strong>Chưa có dữ liệu workspace</strong>
-            <p>@(status == 403 ? "Tài khoản này không sử dụng workspace cá nhân hoặc không được phép xem hạn mức." : "Dịch vụ hạn mức đang tạm không khả dụng.")</p>
+            <strong>@(status == 403 ? "Không gian hệ thống" : "Chưa có dữ liệu workspace")</strong>
+            <p>@(status == 403 ? "Quản trị viên hệ thống không có hạn mức Personal. Đây là trạng thái bình thường; xem Quản lý tài khoản để quản trị người dùng." : "Dịch vụ hạn mức đang tạm không khả dụng.")</p>
             <button class="btn sc-btn-secondary" type="button" @onclick="LoadAsync">Thử lại</button>
         </div>
     }

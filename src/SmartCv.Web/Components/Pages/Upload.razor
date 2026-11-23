@@ -132,7 +132,9 @@
                         Caption="@Caption" />
 
             @* B5: lỗi của cả lần tải (mất kết nối API, máy chủ lỗi, A38 từ chối) – khác lỗi từng file hiện trong bảng *@
-            <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" />
+            @if (!B56QuotaRules.Recognized(uploadQuotaStatus, uploadQuotaCode))
+            { <ErrorAlert Title="@(uploadError?.Title ?? string.Empty)" Message="@uploadError?.Message" /> }
+            <QuotaNotice StatusCode="@uploadQuotaStatus" ErrorCode="@uploadQuotaCode" />
         </section>
 
         @* ================= Bước 3: danh sách CV + kiểm tra chữ ================= *@
@@ -247,7 +249,9 @@
             </div>
 
             @* B6: không phân tích được (chưa chọn job / CV, API gắn CV hoặc tạo lượt lỗi) – hiện ngay cạnh nút *@
-            <ErrorAlert Title="@(analyzeError?.Title ?? string.Empty)" Message="@analyzeError?.Message" />
+            @if (!B56QuotaRules.Recognized(analyzeQuotaStatus, analyzeQuotaCode))
+            { <ErrorAlert Title="@(analyzeError?.Title ?? string.Empty)" Message="@analyzeError?.Message" /> }
+            <QuotaNotice StatusCode="@analyzeQuotaStatus" ErrorCode="@analyzeQuotaCode" />
 
             @if (ReadingSelectedCount > 0)
             {
@@ -319,6 +323,8 @@
     private bool busy;              // đang tải lên: khóa ô kéo thả để IBrowserFile cũ không bị thay thế giữa chừng
     private string? notice;
     private bool noticeHasErrors;
+    private int? uploadQuotaStatus, analyzeQuotaStatus;
+    private string? uploadQuotaCode, analyzeQuotaCode;
     private (string Title, string Message)? uploadError;   // B5: lỗi của cả request (kết nối, máy chủ)
     private int generation;        // tăng khi bấm Hủy: kết quả của lần tải cũ không ghi đè thông báo mới
     private string? apiBaseUrl;
@@ -474,6 +480,7 @@
 
         notice = null;
         uploadError = null;
+        uploadQuotaCode = null; uploadQuotaStatus = null;
 
         // GetMultipleFiles mặc định chỉ cho 10 file và NÉM LỖI nếu nhiều hơn; lấy rộng rồi tự áp giới hạn.
         var picked = e.GetMultipleFiles(maximumFileCount: 1000);
@@ -546,6 +553,8 @@
                         "Trình duyệt không còn cho đọc file đã chọn hoặc kết nối bị gián đoạn. Vui lòng chọn lại file.");
                 }
 
+                if (myGeneration == generation && B56QuotaRules.Recognized(result.StatusCode, result.ErrorCode))
+                    (uploadQuotaStatus, uploadQuotaCode) = (result.StatusCode, result.ErrorCode);
                 // B5: chỉ giữ lỗi đầu tiên trên khung đầu thẻ; lý do từng file vẫn hiện trong bảng.
                 if (batchError is not null && uploadError is null && myGeneration == generation) uploadError = batchError;
                 var batchItems = batch.Select(x => x.Item).ToList();
@@ -560,7 +569,7 @@
                 }
                 StateHasChanged();   // cập nhật từng nhóm, nhóm đã xong không bị mất khi nhóm sau lỗi
 
-                if (UploadRules.StopsRemainingBatches(result.StatusCode))
+                if (UploadRules.StopsRemainingBatches(result.StatusCode) || (result.StatusCode == 409 && result.ErrorCode == B56QuotaRules.CvExceeded))
                 {
                     // B38: máy chủ từ chối cả request (nguồn / đồng ý / tần suất): các nhóm sau cũng sẽ bị từ chối → dừng, không tự gửi lại
                     foreach (var rest in batches.Skip(b + 1).SelectMany(x => x))
@@ -641,6 +650,8 @@
         notice = null;
         uploadError = null;
         analyzeError = null;
+        uploadQuotaStatus = analyzeQuotaStatus = null;
+        uploadQuotaCode = analyzeQuotaCode = null;
         jobInvalid = false;
         SelectionChanged();
     }
@@ -886,6 +897,7 @@
         if (analyzing || busy) return;   // chặn bấm lặp: kiểm tra trước lần await đầu tiên
 
         analyzeError = null;
+        analyzeQuotaStatus = null; analyzeQuotaCode = null;
         jobInvalid = false;
         if (RunFlow.ValidateAnalyze(SelectedJob, items) is { } invalid)
         {
@@ -921,6 +933,7 @@
             var start = await RunApi.StartAsync(applicationIds);
             if (!start.IsSuccess || start.Data is null)
             {
+                (analyzeQuotaStatus, analyzeQuotaCode) = (start.StatusCode, start.ErrorCode);
                 analyzeError = ("Không tạo được lượt phân tích",
                     RunFlow.FailureMessage(start, "Máy chủ gặp lỗi khi tạo lượt phân tích. Vui lòng thử lại sau.")
                     + " CV đã được gắn vào công việc; bấm \"Phân tích hồ sơ\" lần nữa để thử lại.");
