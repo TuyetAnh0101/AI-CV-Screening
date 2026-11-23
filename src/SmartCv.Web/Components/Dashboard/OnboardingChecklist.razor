@@ -1,0 +1,157 @@
+@using Microsoft.AspNetCore.WebUtilities
+@using SmartCv.Core.Workspaces
+@using SmartCv.Web.Services
+@using SmartCv.Web.Helpers
+@implements IAsyncDisposable
+@inject WorkspaceApiClient WorkspaceApi
+@inject RunApiClient RunApi
+@inject AuthSession Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@if (workspace is { Kind: WorkspaceKinds.Personal } personal)
+{
+    <QuotaMeter Workspace="personal" />
+    @if (B56OnboardingRules.Show(personal, hasRun, welcome, hidden))
+    {
+        <section class="b56-start" aria-labelledby="b56-title" aria-busy="@(busy ? "true" : "false")">
+            <header class="b56-header">
+                <div><span class="b56-eyebrow">KHỞI ĐẦU CÙNG SCAPP</span>
+                    <h2 id="b56-title">Ba bước tới kết quả sàng lọc đầu tiên</h2>
+                    <p>Tạo vị trí, thêm CV thử nghiệm và phân tích trên dữ liệu của chính không gian này.</p>
+                </div>
+                <button type="button" class="b56-hide" @onclick="HideAsync" disabled="@busy">Ẩn hướng dẫn</button>
+            </header>
+            <ol class="b56-steps">
+                <li class="@(personal.JobCount > 0 ? "complete" : "")">
+                    <span class="b56-number">@(personal.JobCount > 0 ? "✓" : "1")</span>
+                    <div><h3>Tạo vị trí tuyển dụng</h3>
+                        <p>@(personal.JobCount > 0 ? $"Đã có {personal.JobCount} vị trí tuyển dụng." : "Bắt đầu bằng một bộ tiêu chí rõ ràng để AI có cơ sở đánh giá.")</p>
+                        @if (personal.JobCount == 0)
+                        { <div class="b56-actions"><a href="/jobs/new">Tạo vị trí</a><button type="button" disabled="@busy" @onclick="CreateSampleAsync">@(busy ? "Đang tạo…" : "Dùng vị trí mẫu")</button></div> }
+                    </div>
+                </li>
+                <li class="@(personal.CvCount > 0 ? "complete" : "")">
+                    <span class="b56-number">@(personal.CvCount > 0 ? "✓" : "2")</span>
+                    <div><h3>Tải CV lên</h3>
+                        <p>@(personal.CvCount > 0 ? $"Đã lưu {personal.CvCount} CV trong workspace." : "Hãy dùng CV tổng hợp để thử. Không đưa thông tin thật của ứng viên khi chưa có đồng ý.")</p>
+                        <div class="b56-actions"><a href="/upload">Mở trang tải CV</a><a class="b56-secondary" href="/samples/cv-mau.zip" download>Tải bộ CV mẫu</a></div>
+                    </div>
+                </li>
+                <li class="@(hasRun == true ? "complete" : "")">
+                    <span class="b56-number">@(hasRun == true ? "✓" : "3")</span>
+                    <div><h3>Phân tích hồ sơ</h3>
+                        <p>@(hasRun == true ? "Đã tạo lượt phân tích đầu tiên." : hasRun == null ? "Chưa xác định được trạng thái lượt phân tích." : "Chọn vị trí và các CV hợp lệ, sau đó bấm ‘Phân tích hồ sơ’.")</p>
+                        @if (!personal.HasActivePrompt)
+                        { <p class="b56-prompt">Chưa có System Prompt đang hoạt động. <a href="/prompts">Mở System Prompt</a> trước khi chạy.</p> }
+                        <div class="b56-actions"><a href="/upload">Đến bước phân tích</a></div>
+                    </div>
+                </li>
+            </ol>
+            @if (notice is not null) { <p class="b56-feedback" role="status">@notice</p> }
+            @if (error is not null) { <p class="b56-error" role="alert">@error <button type="button" @onclick="RefreshAsync" disabled="@busy">Thử lại</button></p> }
+        </section>
+    }
+    else if (hidden)
+    { <button type="button" class="b56-restore" @onclick="RestoreAsync">Hiện lại hướng dẫn bắt đầu</button> }
+}
+else if (loadFailed)
+{
+    <div class="b56-load-error" role="status">Chưa tải được thông tin workspace để hiển thị hướng dẫn bắt đầu.
+        <button type="button" @onclick="RefreshAsync">Thử lại</button></div>
+}
+
+@code {
+    private WorkspaceDto? workspace;
+    private IJSObjectReference? module;
+    private bool initialized, hidden, busy, loadFailed, welcome, disposed;
+    private bool? hasRun;
+    private string? error, notice;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!RendererInfo.IsInteractive || initialized) return;
+        initialized = true;
+        await Session.EnsureRestoredAsync();
+        if (Session.User?.Workspace?.Kind != WorkspaceKinds.Personal) return;
+        var q = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        welcome = q.TryGetValue("welcome", out var flag) && flag.ToString() == "1";
+        try { module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/b56-onboarding.js"); }
+        catch (JSException) { /* Storage unavailable: continue without persistence. */ }
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null; loadFailed = false;
+        try
+        {
+            var result = await WorkspaceApi.GetWorkspaceAsync(lifetime.Token);
+            if (!result.IsSuccess || result.Data is not { Kind: WorkspaceKinds.Personal } ws)
+            {
+                if (result.StatusCode != 403)
+                {
+                    loadFailed = workspace is null;
+                    error = "Chưa cập nhật được hạn mức và checklist. Những phần khác của Dashboard vẫn sử dụng được.";
+                }
+                return;
+            }
+            workspace = ws;
+            if (module is not null)
+            {
+                try { hidden = await module.InvokeAsync<bool>("readHidden", ws.Id); }
+                catch (JSException) { }
+            }
+            var runs = await RunApi.GetScreeningTotalsAsync(ct: lifetime.Token);
+            hasRun = runs.IsSuccess && runs.Data?.TotalCount is { } count ? count > 0 : null;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception e) when (e is HttpRequestException or InvalidOperationException or JSException)
+        { loadFailed = workspace is null; error = "Không tải được dữ liệu mới. Các mục khác trên Dashboard vẫn hoạt động."; }
+        finally { busy = false; if (!disposed) await InvokeAsync(StateHasChanged); }
+    }
+
+    private async Task CreateSampleAsync()
+    {
+        if (busy || workspace is not { JobCount: 0 }) return;
+        busy = true; error = notice = null;
+        try
+        {
+            var response = await WorkspaceApi.CreateSampleJobAsync(lifetime.Token);
+            if (response.IsSuccess) notice = "Đã tạo vị trí mẫu. Bạn có thể sửa yêu cầu tại Quản lý vị trí.";
+            else if (response.StatusCode == 409) notice = "Vị trí mẫu đã tồn tại. Đang kiểm tra lại danh sách.";
+            else if (response.FailureKind is ApiFailureKind.Timeout or ApiFailureKind.Network)
+                error = "Chưa xác định được vị trí mẫu đã được tạo hay chưa. Hãy kiểm tra danh sách vị trí trước khi thử lại.";
+            else error = response.ErrorMessage ?? "Chưa tạo được vị trí mẫu.";
+        }
+        finally { busy = false; }
+        var operationError = error;
+        await RefreshAsync();
+        if (operationError is not null) error = operationError;
+    }
+
+    private async Task HideAsync()
+    {
+        if (workspace is null) return;
+        hidden = true;
+        if (module is not null)
+            try { await module.InvokeVoidAsync("hide", workspace.Id); } catch (JSException) { }
+    }
+
+    private async Task RestoreAsync()
+    {
+        if (workspace is null) return;
+        hidden = false;
+        if (module is not null)
+            try { await module.InvokeVoidAsync("show", workspace.Id); } catch (JSException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true; lifetime.Cancel();
+        if (module is not null) try { await module.DisposeAsync(); } catch (JSDisconnectedException) { }
+        lifetime.Dispose();
+    }
+}

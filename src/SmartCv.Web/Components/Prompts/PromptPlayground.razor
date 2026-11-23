@@ -176,7 +176,7 @@
                 {
                     <p class="pg-note" role="status">@runNotice</p>
                 }
-                @if (runError is { } e)
+                @if (runError is { } e && !B56QuotaRules.Recognized(b56QuotaStatus, b56QuotaCode))
                 {
                     <div class="pg-alert tone-@(e.QuotaExhausted ? "warn" : "error")" role="alert">
                         <div><strong>@e.Title</strong><p>@e.Message</p></div>
@@ -187,6 +187,7 @@
                     </div>
                 }
             </div>
+            <QuotaNotice StatusCode="@b56QuotaStatus" ErrorCode="@b56QuotaCode" />
             @if (running && result is null)
             {
                 <div class="pg-compare" aria-hidden="true">
@@ -410,6 +411,8 @@
 
     private PreviewQuotaDto? quota;
     private string? quotaError;
+    private string? b56QuotaCode;
+    private int? b56QuotaStatus;
     private bool quotaLoading;
     private int quotaVersion;
 
@@ -674,6 +677,7 @@
         runCts = cts;
         running = true;
         runError = null;
+        b56QuotaStatus = null; b56QuotaCode = null;
         runNotice = null;
         tab = 0;
         SaveSelection();
@@ -695,6 +699,7 @@
             }
             else
             {
+                (b56QuotaStatus, b56QuotaCode) = (r.StatusCode, r.ErrorCode);
                 runError = PlaygroundRules.DescribePreviewError(r.StatusCode, r.ErrorCode, r.ErrorMessage, r.RetryAfter);
                 // Kể cả khi lỗi, số lượt có thể đã đổi: lấy lại từ API (không giả định 429 chỉ trừ 1).
                 await RefreshQuotaAsync();

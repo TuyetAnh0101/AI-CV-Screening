@@ -6,6 +6,7 @@
 @implements IDisposable
 @inject DashboardApiClient DashboardApi
 @inject JobApiClient JobApi
+@inject AuthSession Session
 @inject NavigationManager Nav
 
 <PageTitle>Tổng quan tuyển dụng · SCApp</PageTitle>
@@ -18,6 +19,7 @@ else
         <div><p class="eyebrow">Không gian tuyển dụng</p><h1>Tổng quan tuyển dụng</h1><p>Theo dõi hồ sơ, tiến độ và những quyết định cần ưu tiên.</p></div>
         <div class="heading-actions"><button type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button><a href="/upload" class="btn sc-btn-primary"><span aria-hidden="true">+</span> Tải CV lên</a></div>
     </header>
+    <OnboardingChecklist />
     <section class="dashboard-filters" aria-label="Bộ lọc Tổng quan">
         <div class="filter-fields">
             <label class="job-field">Vị trí tuyển dụng<select id="dashboard-job" value="@jobInput" @onchange="ChangeJobAsync" disabled="@(workspace.JobsLoading && workspace.Jobs.Count == 0)" aria-describedby="dashboard-filter-help dashboard-filter-error">
@@ -57,7 +59,7 @@ else
             <a class="kpi kpi-link flag-kpi @(data.FlaggedUnresolved > 0 ? "has-flags" : "")" href="@DashboardText.FlaggedLink(data)" data-kpi="flagged"><div class="kpi-head"><h2>Cần xem kỹ</h2><span class="kpi-symbol" aria-hidden="true">⚑</span></div><strong class="kpi-number">@DashboardText.Number(data.FlaggedUnresolved)</strong><p>Mới / Đang xem có cảnh báo hoặc cờ HR@(data.ManualFlagsOpen > 0 ? $" · {DashboardText.Number(data.ManualFlagsOpen)} cờ HR" : "") <span aria-hidden="true">↗</span></p></a>
         </section>
         <p class="cohort-note">@(workspace.Filter!.JobId is null ? "Tổng CV theo ngày tải lên; hồ sơ và các phân tích theo ngày ứng tuyển. Một CV có thể ứng tuyển nhiều vị trí." : "Tổng CV là số CV khác nhau trong các hồ sơ của vị trí và khoảng ngày đã chọn.")</p>
-        @if (data.IsEmpty && !workspace.Filter.HasAny)
+        @if (data.IsEmpty && !workspace.Filter.HasAny && Session.User?.Workspace?.Kind != "Personal")
         {
             <section class="onboarding" aria-labelledby="onboarding-title"><span class="onboarding-symbol" aria-hidden="true">+</span><div><p class="eyebrow">Bắt đầu đợt tuyển dụng đầu tiên</p><h2 id="onboarding-title">Chưa có hồ sơ nào</h2><p>Tải CV lên và gán vào vị trí để bắt đầu theo dõi quá trình tuyển dụng.</p><div class="onboarding-actions"><a class="btn sc-btn-primary" href="/upload">Tải CV lên</a>@if (workspace.JobsLoaded && workspace.Jobs.Count == 0) { @if (AccessRules.Can(AuthState, AppPermission.ManageJobs)) { <a href="/jobs/new">Tạo vị trí tuyển dụng <span aria-hidden="true">↗</span></a> } else { <span class="onboarding-hint">Chưa có vị trí tuyển dụng — nhờ quản trị viên (Admin) tạo vị trí trước.</span> } }</div></div></section>
         }

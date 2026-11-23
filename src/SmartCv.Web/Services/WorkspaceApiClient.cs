@@ -7,4 +7,10 @@ public sealed class WorkspaceApiClient(HttpClient http, ILogger<WorkspaceApiClie
 {
     public Task<ApiResult<WorkspaceDto>> GetWorkspaceAsync(CancellationToken ct = default) =>
         GetAsync<WorkspaceDto>("api/workspace/", ct);
+
+    /// <summary>A54: idempotent for duplicate sample jobs; a 409 means check the job list, do not retry blindly.</summary>
+    public Task<ApiResult<SmartCv.Core.Contracts.JobDto>> CreateSampleJobAsync(CancellationToken ct = default) =>
+        SendRequestAsync<SmartCv.Core.Contracts.JobDto>(
+            () => new HttpRequestMessage(HttpMethod.Post, "api/workspace/sample-job"),
+            "api/workspace/sample-job", ct);
 }

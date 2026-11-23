@@ -1,0 +1,22 @@
+@using SmartCv.Core.Workspaces
+@using SmartCv.Web.Helpers
+
+@if (Workspace is { Kind: WorkspaceKinds.Personal } ws && ws.DailyAiLimit is > 0)
+{
+    var limit = ws.DailyAiLimit!.Value;
+    var used = Math.Max(0, ws.AiUsedToday);
+    var percent = Math.Clamp(used * 100.0 / limit, 0, 100);
+    var percentCss = percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%";
+    <section class="b56-meter" aria-label="Hạn mức AI của không gian làm việc">
+        <div class="b56-meter-head"><span>Lượt AI hôm nay</span><strong>@used/@limit</strong></div>
+        <div class="b56-meter-track" role="progressbar" aria-label="Lượt AI đã sử dụng"
+             aria-valuemin="0" aria-valuemax="@limit" aria-valuenow="@Math.Min(used, limit)">
+            <div class="b56-meter-fill @(used >= limit ? "exhausted" : "")" style="width:@percentCss"></div>
+        </div>
+        <p>Đặt lại lúc @B56QuotaRules.VietnamClock(ws.AiResetsAt) · @Math.Max(0, limit - used) lượt còn lại</p>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public WorkspaceDto? Workspace { get; set; }
+}

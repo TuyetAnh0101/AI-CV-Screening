@@ -14,6 +14,8 @@ public sealed class PromptTestFlow(PromptApiClient api, TimeProvider? timeProvid
     public string? SetsError { get; private set; }
     public string Token { get; private set; } = "";
     public string? Error { get; private set; }
+    public int? B56QuotaStatus { get; private set; }
+    public string? B56QuotaCode { get; private set; }
     public bool Checking { get; private set; }
     public bool Starting { get; private set; }
     public bool Uncertain { get; private set; }
@@ -79,7 +81,7 @@ public sealed class PromptTestFlow(PromptApiClient api, TimeProvider? timeProvid
     public async Task StartAsync(int promptId, int setId, CancellationToken ct)
     {
         if (Locked || promptId <= 0 || !ValidSet(Sets.FirstOrDefault(s => s.EvaluationSetId == setId))) return;
-        Starting = true; Error = null;
+        Starting = true; Error = null; B56QuotaStatus = null; B56QuotaCode = null;
         try
         {
             var list = await api.GetTestsAsync(ct);
@@ -91,6 +93,8 @@ public sealed class PromptTestFlow(PromptApiClient api, TimeProvider? timeProvid
             Uncertain = true;
             await Notify(); // Persist pending intent in the URL before spending quota.
             var result = await api.StartTestAsync(new() { PromptVersionId = promptId, EvaluationSetId = setId }, ct);
+            if (result.StatusCode == 429)
+                (B56QuotaStatus, B56QuotaCode) = (result.StatusCode, result.ErrorCode);
             if (result.IsSuccess && result.Data!.RunId > 0) await ReadAsync(result.Data.RunId, ct);
             else if (result.StatusCode is 400 or 404 or 429)
             { Token = ""; Uncertain = false; Error = result.ErrorMessage; }
