@@ -1,0 +1,517 @@
+/*
+ * SCApp · Candidate page refinement (2026-11-23)
+ * Visual-only overrides. Applies ONLY inside /candidates via .candidates-page.
+ * No API, state, anonymization behavior, form, or authentication changes.
+ * Loaded after SmartCv.Web.styles.css to override Blazor isolated component CSS.
+ * Deep Teal + clearer contrasts + compact table and anonymous switch.
+ */
+
+/* 01 — Page composition / distinctive but restrained teal accents */
+.candidates-page {
+    --cp-ink: #173d45;
+    --cp-deep: #075e62;
+    --cp-teal: #098477;
+    --cp-soft: #eaf7f2;
+    --cp-soft-2: #d9efe8;
+    --cp-border: #c9e2db;
+    --cp-muted: #536c73;
+    --cp-shadow: 0 10px 28px rgba(11, 68, 74, .08);
+    gap: 16px;
+    color: var(--cp-ink);
+}
+
+.candidates-page .page-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px 22px;
+    padding: 20px 22px 20px 27px;
+    border: 1px solid var(--cp-border);
+    border-radius: 17px;
+    background: linear-gradient(110deg, #eaf7f2 0%, #f5fbf9 53%, #fff 100%);
+    box-shadow: var(--cp-shadow);
+    overflow: hidden;
+}
+.candidates-page .page-head::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: linear-gradient(180deg, #0b877a, #0a5261);
+}
+.candidates-page .page-head > div:first-child { flex: 1 1 350px; min-width: 0; }
+.candidates-page .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 7px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .095em;
+    color: var(--cp-deep);
+}
+.candidates-page .eyebrow::before {
+    content: "";
+    width: 17px;
+    height: 3px;
+    border-radius: 3px;
+    background: #11a28b;
+}
+.candidates-page .page-head h1 {
+    margin: 0 0 6px;
+    color: #153942;
+    font-size: clamp(24px, 2vw, 30px);
+    font-weight: 760;
+    letter-spacing: -.035em;
+}
+.candidates-page .page-head .lead {
+    max-width: 680px;
+    margin: 0;
+    color: #486873;
+    font-size: 13px;
+    line-height: 1.55;
+}
+.candidates-page .head-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 0;
+}
+.candidates-page .head-actions > .btn {
+    min-height: 39px;
+    border-color: #bddbd2;
+    background: #fff;
+    color: var(--cp-deep);
+    box-shadow: 0 2px 5px rgba(7, 94, 98, .035);
+    font-weight: 700;
+    transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+}
+.candidates-page .head-actions > .btn:hover {
+    background: #dcf3eb;
+    border-color: #72beaf;
+    transform: translateY(-1px);
+}
+
+/* 02 — Compact anonymity control, ONLY on Candidates header.
+   Existing checkbox, privacy state, warning/retry stay in the same Razor component.
+   Supporting explanation is visually hidden, still available to assistive technology. */
+.candidates-page .head-actions .anonymous-control {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0;
+    position: relative;
+    flex: 0 0 auto;
+    min-height: 39px;
+    max-width: 100%;
+    padding: 4px 11px;
+    border: 1px solid #beddd5;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(7, 94, 98, .035);
+    transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+.candidates-page .head-actions .anonymous-control:hover,
+.candidates-page .head-actions .anonymous-control:focus-within {
+    border-color: #59b4a3;
+    background: #effaf6;
+}
+.candidates-page .head-actions .anonymous-control label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    gap: 8px;
+    margin: 0;
+    color: var(--cp-ink);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.candidates-page .head-actions .anonymous-control label strong {
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 0;
+}
+.candidates-page .head-actions .anonymous-control input[role="switch"] {
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    flex: none;
+    background: #bacdd1;
+    border: 0;
+    border-radius: 999px;
+    transition: background-color .18s ease;
+}
+.candidates-page .head-actions .anonymous-control input[role="switch"]::before {
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    transition: transform .18s ease;
+}
+.candidates-page .head-actions .anonymous-control input[role="switch"]:checked {
+    background: #0b837b;
+}
+.candidates-page .head-actions .anonymous-control input[role="switch"]:checked::before {
+    transform: translateX(14px);
+}
+.candidates-page .head-actions .anonymous-control:has(input:checked) {
+    background: #dcf4eb;
+    border-color: #77c3ae;
+}
+.candidates-page .head-actions .anonymous-control small {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+/* If reading the saved privacy preference fails, show the warning; never hide it. */
+.candidates-page .head-actions .anonymous-control p[role="status"] {
+    position: absolute;
+    z-index: 4;
+    top: calc(100% + 8px);
+    right: 0;
+    width: max-content;
+    max-width: min(300px, calc(100vw - 32px));
+    padding: 10px 12px;
+    border: 1px solid #f1ce9c;
+    border-radius: 10px;
+    background: #fff9ed;
+    color: #81490e;
+    box-shadow: 0 8px 24px rgba(94, 68, 16, .12);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: normal;
+}
+.candidates-page .head-actions .anonymous-control p[role="status"] button {
+    min-height: 28px;
+    padding: 0 3px;
+    color: #0b6c68;
+    font-weight: 700;
+}
+
+/* 03 — View switch with clearer selected state. */
+.candidates-page .view-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    padding: 5px;
+    border: 1px solid #cfebe2;
+    border-radius: 13px;
+    background: #eaf5f1;
+}
+.candidates-page .view-tab {
+    min-height: 39px;
+    padding: 8px 15px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: #3d636a;
+    font-weight: 650;
+    transition: background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.candidates-page .view-tab:hover { background: #d9efe7; color: #075d60; }
+.candidates-page .view-tab.on {
+    border-color: #b6dbd0;
+    background: #fff;
+    color: #075f62;
+    box-shadow: 0 2px 7px rgba(6, 83, 83, .10);
+}
+.candidates-page .view-tab.on .tab-count { background: #075e62; color: #fff; }
+.candidates-page .tab-note { color: #527078; font-size: 12px; }
+
+/* 04 — Search and actions: clear hierarchy and stronger focus indicator. */
+.candidates-page .people-view .toolbar {
+    gap: 12px;
+    align-items: center;
+    padding: 15px 17px;
+    border: 1px solid var(--cp-border);
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 5px 17px rgba(6, 76, 75, .055);
+}
+.candidates-page .people-view .search-wrap { min-width: 0; }
+.candidates-page .people-view .search-box {
+    min-height: 44px;
+    height: 44px;
+    border-color: #bddbd3;
+    background: #f6fbf9;
+    box-shadow: inset 0 1px 0 rgba(9, 104, 94, .025);
+    transition: background-color .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.candidates-page .people-view .search-box:focus-within {
+    background: #fff;
+    border-color: #0c9284;
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(7, 148, 130, .14);
+}
+.candidates-page .people-view .search-box svg { stroke: #067c74; }
+.candidates-page .people-view .search-box input {
+    font-size: 13px;
+    font-weight: 500;
+    color: #173d45;
+}
+.candidates-page .people-view .search-box input::placeholder { color: #70868b; opacity: 1; }
+.candidates-page .people-view .hint { margin-top: 7px; color: #5a7479; line-height: 1.5; }
+.candidates-page .people-view .toolbar-actions .btn {
+    min-height: 42px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+/* 05 — Unattached CVs: informative amber accent without covering the whole page. */
+.candidates-page .people-view .unattached-strip {
+    position: relative;
+    gap: 11px;
+    padding: 10px 14px 10px 16px;
+    border: 1px solid #eedbaf;
+    border-radius: 12px;
+    background: #fff9ed;
+    color: #6f511b;
+    text-decoration: none;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+.candidates-page .people-view .unattached-strip::before {
+    content: "";
+    position: absolute;
+    inset: 8px auto 8px 0;
+    width: 3px;
+    border-radius: 3px;
+    background: #d38c27;
+}
+.candidates-page .people-view .unattached-strip:hover { background: #fff2d6; border-color: #d9b775; }
+.candidates-page .people-view .unattached-strip strong { color: #7a4b08; }
+.candidates-page .people-view .strip-icon { background: #fbe9bf; color: #955b0a; }
+
+/* 06 — Main candidate roster: compact, legible and more deliberately branded. */
+.candidates-page .people-view .list-card {
+    border: 1px solid #c1ded7;
+    border-top: 3px solid #0b837d;
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(4, 65, 69, .075);
+    overflow: hidden;
+}
+.candidates-page .people-view .list-head {
+    padding: 16px 19px;
+    background: linear-gradient(95deg, #e6f4ef 0%, #f6fbf9 58%, #fff 100%);
+}
+.candidates-page .people-view .list-head h2 {
+    gap: 8px;
+    color: #174752;
+    font-size: 17px;
+    font-weight: 760;
+}
+.candidates-page .people-view .list-head p { margin-top: 5px; color: #4d6b73; font-size: 12px; }
+.candidates-page .people-view .count-chip {
+    padding: 3px 9px;
+    border: 1px solid #aad7c8;
+    border-radius: 999px;
+    background: #d7f0e7;
+    color: #075b5e;
+    font-size: 12px;
+    font-weight: 750;
+}
+.candidates-page .people-view .people-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-variant-numeric: tabular-nums;
+}
+.candidates-page .people-view .people-table th {
+    padding: 12px 10px;
+    border-block: 1px solid #c8e1d9;
+    border-bottom: 2px solid #afdbd0;
+    background: #deeee8;
+    color: #28565e;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .025em;
+    white-space: normal;
+}
+.candidates-page .people-view .people-table th:first-child { padding-left: 19px; width: 29%; }
+.candidates-page .people-view .people-table th:nth-child(2) { width: 27%; }
+.candidates-page .people-view .people-table th:nth-child(3) { width: 8%; }
+.candidates-page .people-view .people-table th:nth-child(4) { width: 13%; }
+.candidates-page .people-view .people-table th:nth-child(5) { width: 11%; }
+.candidates-page .people-view .people-table th:last-child { width: 12%; padding-right: 19px; }
+.candidates-page .people-view .people-table td {
+    padding: 11px 10px;
+    border-bottom: 1px solid #e0ebe7;
+    color: #233f47;
+    font-size: 13px;
+    line-height: 1.45;
+    vertical-align: middle;
+    transition: background-color .16s ease;
+}
+.candidates-page .people-view .people-table td:first-child { padding-left: 19px; }
+.candidates-page .people-view .people-table td:last-child { padding-right: 19px; }
+.candidates-page .people-view .people-table tbody tr:nth-child(even) td { background: #f8fbf9; }
+.candidates-page .people-view .people-table tbody tr:hover td { background: #e8f6f0; }
+.candidates-page .people-view .people-table tbody tr:focus-within td { background: #f0f9f5; }
+.candidates-page .people-view .who { gap: 10px; align-items: center; }
+.candidates-page .people-view .avatar {
+    display: grid;
+    place-items: center;
+    flex: 0 0 37px;
+    width: 37px;
+    height: 37px;
+    border-radius: 11px;
+    background: linear-gradient(135deg, #0a5963, #168c81);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    box-shadow: 0 3px 9px rgba(3, 86, 78, .14);
+}
+.candidates-page .people-view .people-table tbody tr:nth-child(3n+2) .avatar {
+    background: #d8f2e9;
+    color: #095e62;
+    box-shadow: inset 0 0 0 1px #b7dfd2;
+}
+.candidates-page .people-view .person {
+    display: inline-block;
+    color: #075f68;
+    font-size: 13px;
+    font-weight: 750;
+    line-height: 1.45;
+    text-decoration: none;
+    transition: color .16s ease;
+}
+.candidates-page .people-view .person:hover { color: #02967d; text-decoration: underline; text-underline-offset: 3px; }
+.candidates-page .people-view .contact { color: #27515a; font-weight: 650; }
+.candidates-page .people-view .sub { margin-top: 2px; color: #60787e; font-size: 11.5px; line-height: 1.5; }
+.candidates-page .people-view .people-table td.num { text-align: right; }
+.candidates-page .people-view .people-table td.num strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    min-height: 26px;
+    padding: 2px 7px;
+    border: 1px solid #bfdfd4;
+    border-radius: 8px;
+    background: #e0f3eb;
+    color: #075d60;
+    font-size: 13px;
+    font-weight: 800;
+}
+.candidates-page .people-view .people-table td[data-label="CV gần nhất"] { color: #375a62; font-weight: 600; font-size: 12px; }
+.candidates-page .people-view .action-cell { text-align: right; }
+.candidates-page .people-view .open-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid #accfc3;
+    border-radius: 9px;
+    background: #f4fbf8;
+    color: #086568;
+    font-size: 12px;
+    font-weight: 760;
+    white-space: nowrap;
+    transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.candidates-page .people-view .open-link:hover {
+    background: #d4eee5;
+    border-color: #6bb5a3;
+    color: #075356;
+    transform: translateX(1px);
+}
+.candidates-page .people-view .list-foot {
+    padding: 13px 19px;
+    border-top: 1px solid #d9e8e2;
+    background: #f0f8f4;
+    color: #3e646c;
+    font-size: 12px;
+}
+.candidates-page .people-view .list-foot button { border-color: #bddbd0; background: #fff; color: #24575f; }
+.candidates-page .people-view .list-foot button:hover:not(:disabled) { border-color: #80b6aa; background: #e5f5ee; }
+.candidates-page .people-view :is(a, button, input):focus-visible {
+    outline: 3px solid #078477;
+    outline-offset: 3px;
+}
+
+/* 07 — Tablet: keep name/contact readable, retain original card behavior. */
+@media (max-width: 1100px) and (min-width: 901px) {
+    .candidates-page .people-view .people-table th:first-child { width: 27%; }
+    .candidates-page .people-view .people-table th:nth-child(2) { width: 25%; }
+    .candidates-page .people-view .people-table th:nth-child(4) { width: 14%; }
+    .candidates-page .people-view .people-table th:last-child { width: 15%; }
+    .candidates-page .people-view .people-table th,
+    .candidates-page .people-view .people-table td { padding-inline: 8px; }
+}
+
+@media (max-width: 900px) {
+    .candidates-page .page-head { padding: 18px 18px 18px 23px; }
+    .candidates-page .head-actions { justify-content: flex-start; }
+    .candidates-page .people-view .people-table,
+    .candidates-page .people-view .people-table tbody { display: block; }
+    .candidates-page .people-view .people-table tbody { padding: 0 14px 14px; }
+    .candidates-page .people-view .people-table tbody tr {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 11px 12px;
+        margin-top: 12px;
+        padding: 14px;
+        border: 1px solid #cee4dc;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 3px 9px rgba(4, 74, 67, .045);
+    }
+    .candidates-page .people-view .people-table tbody tr:nth-child(even) { background: #f8fcfa; }
+    .candidates-page .people-view .people-table td {
+        display: block;
+        padding: 0 !important;
+        border: 0;
+        background: transparent !important;
+        text-align: left;
+    }
+    .candidates-page .people-view .people-table td.who-cell,
+    .candidates-page .people-view .people-table td[data-label="Liên hệ"],
+    .candidates-page .people-view .people-table td.action-cell { grid-column: 1 / -1; }
+    .candidates-page .people-view .people-table td.num strong { min-height: 24px; }
+    .candidates-page .people-view .people-table td.action-cell { padding-top: 10px !important; border-top: 1px solid #dfebe6; }
+    .candidates-page .people-view .open-link { width: 100%; min-height: 40px; }
+}
+
+@media (max-width: 620px) {
+    .candidates-page { gap: 12px; }
+    .candidates-page .page-head { gap: 13px; border-radius: 13px; padding: 16px 15px 16px 19px; }
+    .candidates-page .page-head h1 { font-size: 25px; }
+    .candidates-page .head-actions { width: 100%; gap: 8px; }
+    .candidates-page .head-actions .anonymous-control { flex: 0 0 auto; }
+    .candidates-page .head-actions > .btn { flex: 1; justify-content: center; }
+    .candidates-page .view-tabs { width: 100%; }
+    .candidates-page .view-tab { flex: 1; justify-content: center; padding-inline: 8px; }
+    .candidates-page .view-tabs .tab-note { display: none; }
+    .candidates-page .people-view .toolbar { padding: 13px; }
+    .candidates-page .people-view .hint { font-size: 11.5px; }
+    .candidates-page .people-view .toolbar-actions { width: 100%; }
+    .candidates-page .people-view .toolbar-actions .btn { flex: 1; justify-content: center; }
+    .candidates-page .people-view .list-head { padding: 14px; }
+    .candidates-page .people-view .list-foot { padding: 12px 14px; }
+}
+
+@media (max-width: 380px) {
+    .candidates-page .people-view .people-table tbody tr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .candidates-page .people-view .people-table td[data-label="CV gần nhất"] { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .candidates-page :is(.view-tab, .open-link, .person, .search-box, .head-actions .btn, .anonymous-control),
+    .candidates-page .people-view .people-table td { transition: none !important; }
+    .candidates-page .head-actions > .btn:hover,
+    .candidates-page .people-view .open-link:hover { transform: none; }
+}

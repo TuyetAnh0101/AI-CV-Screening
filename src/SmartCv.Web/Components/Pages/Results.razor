@@ -68,7 +68,13 @@
         }
         @if (ShowCurrent)
         {
-            <FitDistribution Ranking="ranking!" ProgressItems="progressItems" />
+            <details class="results-distribution">
+                <summary aria-label="Xem hoặc ẩn phân bố mức độ phù hợp">
+                    <span>Phân bố mức độ phù hợp</span>
+                    <span class="distribution-caption">Xem biểu đồ và các khoảng điểm</span>
+                </summary>
+                <FitDistribution Ranking="ranking!" ProgressItems="progressItems" />
+            </details>
         }
     </section>
 

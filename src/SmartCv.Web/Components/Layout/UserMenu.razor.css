@@ -1,93 +1,103 @@
-/* B27 — khối người dùng trên thanh trên cùng; cao bằng huy hiệu API (32–36px), tách bằng vạch mảnh. */
-
+/* FIX-B56-UI · Cụm tài khoản làm một đường dẫn rõ ràng.
+   CSS scoped trong UserMenu; không ảnh hưởng avatar ứng viên ở RankingTable. */
 .user-menu {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding-left: 16px;
-    border-left: 1px solid var(--sc-line-200);
     min-width: 0;
-    flex-shrink: 0;
+    padding-left: 14px;
+    flex-shrink: 1;
+    border-left: 1px solid var(--sc-line-200);
 }
-
+.profile-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 9px 5px 6px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: 13px;
+    background: transparent;
+    color: var(--sc-ink-900);
+    transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.profile-trigger:hover {
+    color: var(--sc-brand-800);
+    text-decoration: none;
+    background: var(--sc-brand-50);
+    border-color: var(--sc-line-200);
+}
+.profile-trigger:focus-visible {
+    outline: 3px solid var(--sc-focus);
+    outline-offset: 2px;
+    background: var(--sc-brand-50);
+}
 .avatar {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
-    flex-shrink: 0;
+    flex: 0 0 37px;
+    width: 37px;
+    height: 37px;
     border-radius: 50%;
     background: var(--sc-grad-brand);
     color: #fff;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 750;
     letter-spacing: .02em;
+    transition: transform .2s ease;
 }
-
-.who { display: grid; min-width: 0; line-height: 1.25; }
+.profile-trigger:hover .avatar { transform: scale(1.045); }
+.who { display: grid; gap: 2px; min-width: 0; line-height: 1.18; }
 .name {
-    max-width: 180px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--sc-ink-900);
+    display: block;
+    max-width: 192px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--sc-ink-900);
 }
-.role { font-size: 12px; color: var(--sc-ink-500); white-space: nowrap; }
-
+.role { display: block; white-space: nowrap; font-size: 11.5px; color: var(--sc-ink-500); }
+.profile-chevron { flex: 0 0 14px; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; color: var(--sc-ink-400); transition: transform .2s ease; }
+.profile-trigger:hover .profile-chevron { transform: translateX(2px); }
 .logout {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 34px;
-    padding: 0 12px;
+    justify-content: center;
+    gap: 7px;
+    min-height: 39px;
+    padding: 0 13px;
     border: 1px solid var(--sc-line-300);
-    border-radius: var(--sc-radius-md);
+    border-radius: 11px;
     background: var(--sc-surface-0);
     color: var(--sc-ink-700);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 650;
     white-space: nowrap;
     cursor: pointer;
+    transition: background-color .18s ease, border-color .18s ease;
 }
-.logout svg { width: 16px; height: 16px; fill: currentColor; }
-.logout:hover:not(:disabled) { background: var(--sc-brand-50); border-color: #a9c7c3; color: var(--sc-brand-800); }
-.logout:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
-.logout:disabled { color: var(--sc-disabled-fg); cursor: progress; }
-
-@media (max-width: 767.98px) {
-    .user-menu { gap: 8px; padding-left: 12px; }
-    .who { display: none; }
-    .avatar { width: 32px; height: 32px; font-size: 12px; }
-}
-
-@media (max-width: 419.98px) {
-    .logout { padding: 0 9px; }
-    .logout span { display: none; }   /* còn biểu tượng; tên nút lấy từ aria-label */
-}
-
-/* B29: nút Đổi mật khẩu (chỉ biểu tượng chìa khóa, cùng chiều cao với Đăng xuất). */
-.pw-change {
-    display: inline-grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    flex-shrink: 0;
-    padding: 0;
-    border: 1px solid var(--sc-line-300);
-    border-radius: var(--sc-radius-md);
-    background: var(--sc-surface-0);
-    color: var(--sc-ink-700);
-    cursor: pointer;
-}
-.pw-change svg { width: 17px; height: 17px; fill: currentColor; }
-.pw-change:hover:not(:disabled) { background: var(--sc-brand-50); border-color: #a9c7c3; color: var(--sc-brand-800); }
-.pw-change:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 2px; }
-@media (max-width: 767.98px) { .pw-change { display: none; } }   /* màn hình hẹp: có trong khối tài khoản của menu */
-/* B29: thêm nút Đổi mật khẩu → ở 768–991px (có menu trái, thanh trên hẹp) Đăng xuất chỉ còn biểu tượng (tên lấy từ aria-label). */
-@media (min-width: 768px) and (max-width: 991.98px) {
-    .logout { padding: 0 9px; }
-    .logout span { display: none; }
+.logout svg { flex: 0 0 17px; width: 17px; height: 17px; fill: currentColor; }
+.logout:hover:not(:disabled) { background: var(--sc-brand-50); border-color: var(--sc-brand-600); color: var(--sc-brand-800); }
+.logout:focus-visible { outline: 3px solid var(--sc-focus); outline-offset: 2px; }
+.logout:disabled { opacity: .55; cursor: wait; }
+@media (max-width: 1100px) {
+    .user-menu { gap: 6px; padding-left: 9px; }
     .name { max-width: 140px; }
+    .logout { padding: 0 10px; }
+}
+@media (max-width: 767.98px) {
+    .user-menu { padding-left: 6px; gap: 5px; }
+    .profile-trigger { padding: 4px; min-height: 42px; }
+    .avatar { flex-basis: 34px; width: 34px; height: 34px; }
+    .who, .profile-chevron { display: none; }
+    .logout { width: 38px; min-height: 38px; padding: 0; }
+    .logout span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .profile-trigger, .avatar, .profile-chevron, .logout { transition: none; }
+    .profile-trigger:hover .avatar, .profile-trigger:hover .profile-chevron { transform: none; }
 }

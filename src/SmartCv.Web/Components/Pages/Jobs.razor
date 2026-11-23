@@ -5,7 +5,7 @@
 
 <PageTitle>Vị trí tuyển dụng · SCApp</PageTitle>
 
-<div class="jobs-page">
+<div class="jobs-page dpr-jobs-page">
     <header class="page-heading">
         <div>
             <p class="eyebrow"><span aria-hidden="true">✧</span> Quản lý tuyển dụng</p>
@@ -34,7 +34,7 @@
     </section>
 
     <section class="jobs-panel" aria-labelledby="jobs-list-title" aria-busy="@Model.Loading.ToString().ToLowerInvariant()">
-        <div class="panel-heading"><h2 id="jobs-list-title">Danh sách vị trí</h2><span>Chủ động theo dõi hành trình tuyển dụng</span></div>
+        <div class="panel-heading dpr-panel-heading"><div><span class="dpr-kicker">TỔNG QUAN TUYỂN DỤNG</span><h2 id="jobs-list-title">Danh sách vị trí</h2></div><span>Chọn vị trí để xem hồ sơ hoặc điều chỉnh tiêu chí.</span></div>
         <div class="toolbar">
             <div class="status-filters" role="group" aria-label="Lọc trạng thái vị trí">
                 @foreach (var (value, label) in Filters)
@@ -95,7 +95,16 @@
                                     @if (CanManage) { <a class="job-title" href="jobs/@job.JobId">@job.Title</a> }
                                     else { <span class="job-title">@job.Title</span> }
                                     <span class="skill-caption">@job.MustHaveCount kỹ năng bắt buộc</span>
-                                    <div class="skills">@foreach (var skill in job.Skills.Where(s => s.SkillType == SkillTypes.MustHave)) { <span>@skill.DisplayName</span> }</div>
+                                    <div class="skills dpr-job-skills">
+                                        @foreach (var skill in job.Skills.Where(s => s.SkillType == SkillTypes.MustHave).Take(3)) { <span>@skill.DisplayName</span> }
+                                        @if (job.Skills.Count(s => s.SkillType == SkillTypes.MustHave) > 3)
+                                        {
+                                            <details class="dpr-inline-more" data-scapp-detail>
+                                                <summary>+@(job.Skills.Count(s => s.SkillType == SkillTypes.MustHave) - 3) kỹ năng</summary>
+                                                <span class="dpr-inline-list">@string.Join(" · ", job.Skills.Where(s => s.SkillType == SkillTypes.MustHave).Skip(3).Select(s => s.DisplayName))</span>
+                                            </details>
+                                        }
+                                    </div>
                                 </td>
                                 <td class="headcount-cell" data-label="Cần tuyển"><span class="headcount">@JobText.Headcount(job.Headcount)</span>@if (job.Headcount is not null) { <small>nhân sự</small> }</td>
                                 <td class="deadline-cell" data-label="Hạn nhận CV"><span>@JobText.Closing(job.ClosingDate)</span>@if (job.IsExpired) { <small class="expired-label">Đã quá hạn</small> }</td>
@@ -103,7 +112,23 @@
                                     <div class="application-total">@(job.ApplicationCount is { } total ? $"{total:N0} hồ sơ" : "Chưa có thống kê hồ sơ")</div>
                                     @if (job.StageCounts is { } stages)
                                     {
-                                        <div class="stages">@foreach (var stage in ApplicationStages.All) { <a class="stage-link @StageText.Css(stage)" href="@JobText.ResultsUrl(job.JobId, stage)" title="Xem @StageText.Name(stage) trong lượt chấm mới nhất"><span>@StageText.Name(stage)</span><b>@(stages.TryGetValue(stage, out var count) ? count.ToString("N0") : "—")</b></a> }</div>
+                                        var keyStages = ApplicationStages.All.Where(stage => stages.TryGetValue(stage, out var count) && count > 0).Take(3).ToArray();
+                                        <div class="stages dpr-stage-featured">
+                                            @if (keyStages.Length == 0) { <span class="dpr-stage-empty">Chưa có giai đoạn phát sinh</span> }
+                                            @foreach (var stage in keyStages)
+                                            {
+                                                <a class="stage-link @StageText.Css(stage)" href="@JobText.ResultsUrl(job.JobId, stage)" title="Xem @StageText.Name(stage) trong lượt chấm mới nhất"><span>@StageText.Name(stage)</span><b>@(stages.TryGetValue(stage, out var count) ? count.ToString("N0") : "—")</b></a>
+                                            }
+                                        </div>
+                                        <details class="dpr-disclosure dpr-stage-disclosure" data-scapp-detail>
+                                            <summary>Xem tất cả @ApplicationStages.All.Count() giai đoạn</summary>
+                                            <div class="stages dpr-stage-complete">
+                                                @foreach (var stage in ApplicationStages.All)
+                                                {
+                                                    <a class="stage-link @StageText.Css(stage)" href="@JobText.ResultsUrl(job.JobId, stage)" title="Xem @StageText.Name(stage) trong lượt chấm mới nhất"><span>@StageText.Name(stage)</span><b>@(stages.TryGetValue(stage, out var count) ? count.ToString("N0") : "—")</b></a>
+                                                }
+                                            </div>
+                                        </details>
                                     }
                                     else { <span class="unavailable">Thống kê chưa được cung cấp</span> }
                                 </td>
@@ -121,7 +146,7 @@
                     </tbody>
                 </table>
             </div>
-            <footer class="panel-footer"><span>Hiển thị <strong>@Model.Visible.Count</strong> / @Model.Jobs.Count vị trí</span><p>Thống kê gồm toàn bộ hồ sơ của vị trí. Liên kết giai đoạn mở kết quả trong lượt chấm mới nhất.</p></footer>
+            <footer class="panel-footer"><span>Hiển thị <strong>@Model.Visible.Count</strong> / @Model.Jobs.Count vị trí</span><p>Chọn một giai đoạn để mở kết quả.</p></footer>
         }
     </section>
     @if (!Model.Loading && Model.Error is null && Model.Jobs.Any(j => j.HasEvaluations is null))

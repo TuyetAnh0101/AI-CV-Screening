@@ -1,0 +1,319 @@
+/* SCApp Detail Pages Refinement R1 — global overrides for Razor-isolated pages.
+   Scoped by page roots; deliberately does not alter authentication, privacy state,
+   calculations, or Blazor events. Loaded AFTER SmartCv.Web.styles.css. */
+
+:where(.dpr-candidate-page, .dpr-jobs-page, .dpr-evaluation-page, .job-edit-page) {
+  --dpr-teal: #0b7167;
+  --dpr-teal-deep: #10534e;
+  --dpr-dark: #103b3a;
+  --dpr-line: #d5e6e1;
+  --dpr-soft: #f1f9f7;
+  --dpr-muted: #617b77;
+  --dpr-shadow: 0 9px 28px rgba(13, 67, 62, .065);
+}
+
+/* Shared compact privacy switch. The control is still the original Blazor component. */
+.dpr-privacy-control { display:flex; flex:0 0 auto; min-width:0; }
+.dpr-privacy-control .anonymous-control {
+  display:flex; flex-direction:row; align-items:center; gap:0;
+  width:auto; padding:4px 10px; border:1px solid var(--dpr-line);
+  background:#f6fbfa; border-radius:999px; box-shadow:none;
+}
+.dpr-privacy-control .anonymous-control label {
+  min-height:32px; display:flex; flex-direction:row; gap:8px;
+  font-size:12px; color:var(--dpr-teal-deep); font-weight:700; margin:0;
+}
+.dpr-privacy-control .anonymous-control label strong { font-size:12px; white-space:nowrap; }
+.dpr-privacy-control .anonymous-control input[type="checkbox"] {
+  width:33px; height:20px; min-height:0; margin:0; flex:none;
+}
+.dpr-privacy-control .anonymous-control input[type="checkbox"]::before {
+  width:14px; height:14px; top:3px; left:3px;
+}
+.dpr-privacy-control .anonymous-control input[type="checkbox"]:checked::before { transform:translateX(13px); }
+.dpr-privacy-control .anonymous-control > small { display:none; }
+.dpr-privacy-control .anonymous-control p { max-width:190px; font-size:11px; line-height:1.35; }
+.dpr-privacy-control .anonymous-control:has(p) { border-radius:12px; flex-wrap:wrap; }
+
+.dpr-kicker {
+  display:block; margin:0 0 6px; color:var(--dpr-teal);
+  font-size:10px; font-weight:800; letter-spacing:.13em; line-height:1.4;
+}
+.dpr-disclosure { min-width:0; }
+.dpr-disclosure > summary { cursor:pointer; list-style:none; }
+.dpr-disclosure > summary::-webkit-details-marker { display:none; }
+.dpr-disclosure > summary::after {
+  content:"⌄"; display:inline-grid; place-items:center; flex:none;
+  color:var(--dpr-teal); font-size:20px; font-weight:650;
+  line-height:1; transition:transform .17s ease;
+}
+.dpr-disclosure[open] > summary::after { transform:rotate(180deg); }
+.dpr-disclosure > summary:focus-visible,
+.dpr-inline-more > summary:focus-visible {
+  outline:3px solid var(--dpr-teal); outline-offset:3px; border-radius:6px;
+}
+.dpr-disclosure-hint { margin-left:auto; color:var(--dpr-muted); font-size:11px; font-weight:550; white-space:nowrap; }
+
+/* ─── Candidate detail: compact identity hero, vivid CV cards ─── */
+.detail-page.dpr-candidate-page { gap:13px; max-width:1480px; margin-inline:auto; }
+.dpr-candidate-page .crumbs a { min-height:30px; color:var(--dpr-teal); }
+.dpr-candidate-page .dpr-profile-head {
+  position:relative; display:grid; grid-template-columns:52px minmax(240px, 1fr) auto;
+  gap:16px; align-items:center; padding:18px 22px;
+  background:linear-gradient(112deg, #e5f4f0 0%, #f7fcfa 42%, #fff 83%);
+  border:1px solid #cce5dd; border-left:4px solid var(--dpr-teal);
+  border-radius:16px; box-shadow:var(--dpr-shadow);
+}
+.dpr-candidate-page .dpr-profile-head::before {
+  content:""; position:absolute; top:0; right:0; width:25%; height:3px;
+  background:linear-gradient(90deg,transparent,#42b7a6); border-radius:0 16px 0 0;
+}
+.dpr-candidate-page .dpr-profile-head .avatar {
+  width:52px; height:52px; border-radius:13px; font-weight:800;
+  background:linear-gradient(145deg,#0b776d,#084943); box-shadow:0 6px 14px #0c5c5026;
+}
+.dpr-candidate-page .dpr-profile-head h1 { font-size:clamp(21px,2vw,26px); color:var(--dpr-dark); }
+.dpr-candidate-page .dpr-profile-head .meta { margin:3px 0 9px; }
+.dpr-candidate-page .dpr-profile-head .chips { gap:6px; }
+.dpr-candidate-page .dpr-profile-head .chips li {
+  border-color:#cae8de; background:#fff; color:#245b55;
+  padding:4px 9px; font-size:11px;
+}
+.dpr-candidate-page .dpr-profile-head .head-actions {
+  display:flex; justify-content:flex-end; align-items:center; gap:7px;
+}
+.dpr-candidate-page .head-actions .btn { min-height:34px; padding:6px 11px; font-size:12px; border-radius:9px; }
+.dpr-candidate-page #detail-edit { color:var(--dpr-teal-deep); border-color:#aed9ce; background:#fff; font-weight:650; }
+.dpr-candidate-page .dpr-privacy-banner {
+  display:flex; align-items:center; gap:8px; font-size:12px; padding:9px 13px;
+  border:1px solid #c5dfd9; border-left:3px solid var(--dpr-teal);
+  color:#235f57; background:#ecf8f4; border-radius:9px;
+}
+.dpr-candidate-page .profile-grid { grid-template-columns:minmax(0,1fr) 315px; gap:16px; }
+.dpr-candidate-page .main-col, .dpr-candidate-page .side-col { gap:12px; }
+.dpr-candidate-page .dpr-section-head {
+  display:flex; gap:12px; align-items:end; justify-content:space-between;
+  border-bottom:2px solid #d9ece6; padding:4px 3px 10px;
+}
+.dpr-candidate-page .dpr-section-head h2 { color:var(--dpr-dark); font-size:18px; font-weight:750; }
+.dpr-candidate-page .dpr-section-head p { margin:0 0 2px; max-width:180px; text-align:right; }
+.dpr-candidate-page .cv-card {
+  border:1px solid #d5e8e2; border-radius:14px; box-shadow:var(--dpr-shadow);
+  background:#fff; overflow:hidden;
+}
+.dpr-candidate-page .cv-head { padding:12px 15px; background:#fbfefd; border-bottom:1px solid #e1eeea; }
+.dpr-candidate-page .file-icon { width:35px; height:35px; color:#0d695e; background:#e2f4ef; font-weight:700; }
+.dpr-candidate-page .cv-title strong { font-size:13px; color:var(--dpr-dark); }
+.dpr-candidate-page .cv-title span { font-size:11px; }
+.dpr-candidate-page .cv-card.anonymized { opacity:1; border-style:dashed; background:#f9fbfb; }
+.dpr-candidate-page .app { padding:10px 15px; border-top-color:#e2eeea; }
+.dpr-candidate-page .app-job strong { color:var(--dpr-dark); }
+.dpr-candidate-page .app-score strong { font-weight:800; font-size:20px; color:var(--dpr-teal-deep); }
+.dpr-candidate-page .app-score span { font-size:10px; }
+.dpr-candidate-page .timeline-toggle { color:var(--dpr-teal); font-size:12px; }
+.dpr-candidate-page .side-card { padding:14px 15px; border-color:#d5e8e2; box-shadow:var(--dpr-shadow); }
+.dpr-candidate-page .side-head h2 { color:var(--dpr-dark); font-weight:750; }
+.dpr-candidate-page .side-card.warn { background:#fffcf6; border-color:#f0e0bc; }
+.dpr-candidate-page .dpr-cv-disclosure {
+  margin:0; border:0; border-bottom:1px solid #e6efec; background:#fbfdfc;
+}
+.dpr-candidate-page .dpr-cv-disclosure > summary {
+  display:flex; gap:10px; align-items:center; min-height:35px; padding:8px 15px;
+  color:var(--dpr-teal-deep); font-size:11px; font-weight:700;
+}
+.dpr-candidate-page .dpr-cv-disclosure[open] > summary { background:#ecf7f3; }
+.dpr-candidate-page .dpr-cv-disclosure .cv-facts { background:#f5fbf9; padding:11px 15px; border-top:1px solid #dcebe6; }
+.dpr-candidate-page .dpr-cv-disclosure .cv-facts dt { color:#476c65; }
+.dpr-candidate-page .rights-actions { gap:7px; }
+.dpr-candidate-page .rights-actions .btn { min-height:36px; font-size:12px; padding:6px 10px; }
+
+/* ─── Job editor: compact, calmer forms, strong teal hierarchy. No Razor change. ─── */
+.job-edit-page { gap:15px; }
+.job-edit-page .page-heading h1 { color:var(--dpr-dark); font-size:clamp(24px,2.3vw,30px); }
+.job-edit-page .page-heading .eyebrow { color:var(--dpr-teal); font-weight:700; }
+.job-edit-page .draft-status { border-color:#bcded4; background:#eaf7f2; color:var(--dpr-teal-deep); font-weight:650; }
+.job-edit-page .general-panel,
+.job-edit-page .state-panel {
+  padding:20px 22px; border-radius:15px; border:1px solid #d3e6e0;
+  border-top:3px solid var(--dpr-teal); background:linear-gradient(180deg,#f7fcfa 0,#fff 85px);
+  box-shadow:var(--dpr-shadow);
+}
+.job-edit-page .panel-heading { margin-bottom:15px; }
+.job-edit-page .panel-heading h2,
+.job-edit-page .skills-heading h2 { color:var(--dpr-dark); font-size:17px; font-weight:750; }
+.job-edit-page .section-number {
+  border-color:#bee3d8; background:#e0f3ed; color:var(--dpr-teal-deep); font-weight:800;
+}
+.job-edit-page .fields-grid { gap:14px 16px; }
+.job-edit-page .field label { color:#264c49; font-weight:700; }
+.job-edit-page .field input,
+.job-edit-page .field textarea,
+.job-edit-page .skill-panel input { border-color:#c7dcd6; border-radius:9px; }
+.job-edit-page .field input:focus,
+.job-edit-page .field textarea:focus,
+.job-edit-page .skill-panel input:focus { border-color:#168477; box-shadow:0 0 0 3px #d8f2ea; outline:0; }
+.job-edit-page .fields-grid .field.full textarea { min-height:95px; }
+.job-edit-page .skills-heading { padding-left:4px; border-left:3px solid var(--dpr-teal); }
+.job-edit-page .skills-heading > div { padding-left:10px; }
+.job-edit-page .skills-grid { gap:14px; }
+.job-edit-page .skill-panel {
+  border:1px solid #cde4dc; border-radius:14px; padding:15px;
+  background:#fff; box-shadow:var(--dpr-shadow);
+}
+.job-edit-page .skill-panel.required-panel { border-top:3px solid var(--dpr-teal); padding-top:13px; }
+.job-edit-page .skill-panel .section-kicker { color:var(--dpr-teal); font-weight:750; }
+.job-edit-page .skill-panel h2 { color:var(--dpr-dark); font-size:16px; }
+.job-edit-page .skill-panel .panel-hint { margin:7px 0 11px; font-size:12px; }
+.job-edit-page .skill-list { gap:9px; }
+.job-edit-page .skill-row { padding:11px 12px; border-color:#dceae6; background:#fbfefd; }
+.job-edit-page .skill-row .row-heading { margin-bottom:7px; }
+.job-edit-page .skill-row .skill-fields { gap:9px 10px; }
+.job-edit-page .skill-row .row-actions button { min-height:32px; }
+.job-edit-page .skill-panel .add-button { min-height:34px; font-weight:700; color:var(--dpr-teal-deep); border-color:#a7d9c9; }
+.job-edit-page .save-bar { border-color:#cde6dd; border-top:3px solid var(--dpr-teal); padding:14px 18px; }
+
+/* ─── Jobs list: first three active stage counts, all six on demand ─── */
+.jobs-page.dpr-jobs-page { gap:14px; max-width:1480px; margin-inline:auto; }
+.dpr-jobs-page .page-heading { align-items:center; }
+.dpr-jobs-page h1 { color:var(--dpr-dark); }
+.dpr-jobs-page .page-heading .eyebrow { color:var(--dpr-teal); font-weight:700; }
+.dpr-jobs-page .overview { border:1px solid #d6e8e1; border-radius:14px; box-shadow:var(--dpr-shadow); background:#fff; }
+.dpr-jobs-page .overview>div { padding:13px 17px; }
+.dpr-jobs-page .overview strong { color:var(--dpr-dark); font-size:25px; }
+.dpr-jobs-page .metric-icon { width:36px; height:36px; border-radius:10px; background:#e2f4ee; color:var(--dpr-teal); }
+.dpr-jobs-page .jobs-panel { border:1px solid #d3e6e0; box-shadow:var(--dpr-shadow); }
+.dpr-jobs-page .dpr-panel-heading { padding-top:17px; align-items:center; }
+.dpr-jobs-page .dpr-panel-heading h2 { color:var(--dpr-dark); font-weight:750; font-size:17px; }
+.dpr-jobs-page .toolbar { padding:12px 20px 15px; }
+.dpr-jobs-page .status-filters button.selected { color:var(--dpr-teal-deep); border-color:#9ad0c2; background:#e4f6ef; font-weight:700; }
+.dpr-jobs-page .search { border-color:#c6ded6; }
+.dpr-jobs-page .jobs-table th { background:#edf7f3; border-color:#d5e7e0; color:#335b55; font-weight:700; }
+.dpr-jobs-page .jobs-table td { padding-top:13px; padding-bottom:13px; }
+.dpr-jobs-page .jobs-table tbody tr:hover { background:#f8fcfa; }
+.dpr-jobs-page .job-title { color:var(--dpr-dark); font-weight:750; font-size:14px; }
+.dpr-jobs-page .skill-caption { font-size:11px; margin:5px 0; }
+.dpr-jobs-page .dpr-job-skills { align-items:center; }
+.dpr-jobs-page .dpr-job-skills > span { background:#eff8f4; color:#285d53; border-color:#cee6dd; }
+.dpr-jobs-page .dpr-inline-more { border:0; margin:0; padding:0; display:inline-flex; flex-wrap:wrap; align-items:center; max-width:100%; gap:7px; }
+.dpr-jobs-page .dpr-inline-more summary {
+  cursor:pointer; list-style:none; color:var(--dpr-teal); font-size:11px;
+  font-weight:750; padding:3px 5px; border-radius:6px;
+}
+.dpr-jobs-page .dpr-inline-more summary::-webkit-details-marker { display:none; }
+.dpr-jobs-page .dpr-inline-list { font-size:11px; line-height:1.5; color:#3a6560; }
+.dpr-jobs-page .application-total { margin-bottom:6px; font-weight:700; color:#335e56; }
+.dpr-jobs-page .stages { grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
+.dpr-jobs-page .dpr-stage-featured .stage-link { border-color:#c6e3d9; background:#f7fcfa; }
+.dpr-jobs-page .stage-link b { color:var(--dpr-teal-deep); }
+.dpr-jobs-page .dpr-stage-empty { color:var(--dpr-muted); font-size:11px; }
+.dpr-jobs-page .dpr-stage-disclosure { border:0; padding:0; margin-top:6px; }
+.dpr-jobs-page .dpr-stage-disclosure > summary {
+  display:flex; align-items:center; width:max-content; max-width:100%;
+  gap:6px; font-size:11px; font-weight:750; color:var(--dpr-teal);
+}
+.dpr-jobs-page .dpr-stage-disclosure > summary::after { font-size:16px; }
+.dpr-jobs-page .dpr-stage-complete {
+  margin-top:8px; border-top:1px dashed #d4e8e1; padding-top:9px;
+}
+.dpr-jobs-page .status-badge.is-active { background:#e0f5e8; color:#126744; }
+.dpr-jobs-page .row-actions .results-link { color:var(--dpr-teal); font-weight:750; }
+.dpr-jobs-page .row-actions .edit-link { color:#35605a; }
+.dpr-jobs-page .toggle-button { border-color:#d0e1db; }
+.dpr-jobs-page .panel-footer { padding:12px 20px; background:#fbfefd; }
+
+/* ─── Evaluation: intentional score focus, compressed privacy and metadata ─── */
+.evaluation-detail.dpr-evaluation-page { max-width:1480px; }
+.dpr-evaluation-page .detail-toolbar { margin-bottom:12px; gap:8px; }
+.dpr-evaluation-page .breadcrumb { font-size:12px; }
+.dpr-evaluation-page .dpr-eval-hero {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(125px,155px) auto;
+  align-items:center; gap:18px; padding:19px 22px;
+  margin-bottom:15px; border:1px solid #cce5db; border-left:4px solid var(--dpr-teal);
+  border-radius:15px; background:linear-gradient(110deg,#e7f5f0 0,#f9fdfb 42%,#fff 82%);
+  box-shadow:var(--dpr-shadow);
+}
+.dpr-evaluation-page .dpr-eval-hero h1 { color:var(--dpr-dark); font-size:clamp(22px,2vw,27px); line-height:1.25; }
+.dpr-evaluation-page .dpr-eval-hero .eyebrow { color:var(--dpr-teal); font-weight:800; }
+.dpr-evaluation-page .dpr-eval-hero .job { margin:3px 0; color:#265a53; }
+.dpr-evaluation-page .dpr-eval-hero .identity > .muted { margin:3px 0 9px; font-size:12px; }
+.dpr-evaluation-page .badges { gap:7px; }
+.dpr-evaluation-page .prediction { padding:5px 9px; font-size:11px; border:1px solid #c8e3da; background:#eef8f4; color:#225c54; }
+.dpr-evaluation-page .dpr-score-feature {
+  display:grid; justify-items:start; align-content:center; gap:4px;
+  border-left:1px solid #b9ded2; padding-left:17px; min-width:0;
+}
+.dpr-evaluation-page .dpr-score-feature > span { font-size:10px; font-weight:800; color:var(--dpr-teal); letter-spacing:.12em; }
+.dpr-evaluation-page .dpr-score-feature > strong { font-size:clamp(34px,4vw,44px); font-weight:850; letter-spacing:-.055em; line-height:1; color:var(--dpr-teal-deep); font-variant-numeric:tabular-nums; }
+.dpr-evaluation-page .dpr-score-feature > small { font-size:10px; color:var(--dpr-muted); line-height:1.45; }
+.dpr-evaluation-page .dpr-eval-hero .cv-actions { display:flex; flex-direction:column; flex-basis:auto; align-items:stretch; gap:7px; min-width:135px; }
+.dpr-evaluation-page .dpr-eval-hero .cv-actions .btn { min-height:36px; font-size:12px; padding:6px 10px; }
+.dpr-evaluation-page .dpr-eval-hero .cv-actions small { font-size:10px; }
+.dpr-evaluation-page .detail-grid { gap:16px; grid-template-columns:minmax(0,1.65fr) minmax(295px,.9fr); }
+.dpr-evaluation-page .assessment-column, .dpr-evaluation-page .decision-column { gap:15px; }
+.dpr-evaluation-page .panel { padding:19px 20px; border-radius:14px; border-color:#d5e6e0; box-shadow:var(--dpr-shadow); }
+.dpr-evaluation-page .panel.scores { border-top:3px solid var(--dpr-teal); }
+.dpr-evaluation-page .panel.ai { background:#f7fbfa; border-color:#cce8df; }
+.dpr-evaluation-page .panel.ai .eyebrow { color:var(--dpr-teal); }
+.dpr-evaluation-page .panel.skills-panel { border-top:2px solid #cde6dc; }
+.dpr-evaluation-page .section-head h2 { margin-bottom:9px; color:var(--dpr-dark); font-weight:750; }
+.dpr-evaluation-page .score-content { gap:13px; }
+.dpr-evaluation-page .breakdown th, .dpr-evaluation-page .breakdown td { padding:8px 5px; }
+.dpr-evaluation-page .breakdown tr.total { background:#e7f5f0; color:var(--dpr-teal-deep); }
+.dpr-evaluation-page .skill-summary { background:#e8f6f1; color:#245c50; }
+.dpr-evaluation-page .skills li { padding:11px 0; }
+.dpr-evaluation-page .review-notice { margin-bottom:13px; padding:11px 15px; border-radius:10px; }
+.dpr-evaluation-page .notice { margin-bottom:13px; padding:12px 15px; }
+.dpr-evaluation-page .ai .dpr-ai-json { border-top:1px solid #d5e8e2; margin-top:14px; padding-top:12px; }
+.dpr-evaluation-page .dpr-ai-json > summary { display:flex; align-items:center; gap:8px; color:var(--dpr-teal); }
+.dpr-evaluation-page .dpr-technical {
+  display:block; margin:0; padding:0; border:1px solid #d5e6e0; overflow:hidden; background:white;
+}
+.dpr-evaluation-page .dpr-technical > summary {
+  display:flex; gap:9px; align-items:center; min-height:51px; padding:12px 14px;
+  color:var(--dpr-dark); font-size:13px; font-weight:750;
+  background:linear-gradient(90deg,#edf8f4,#fff);
+}
+.dpr-evaluation-page .dpr-technical[open] > summary { border-bottom:1px solid #dbece5; }
+.dpr-evaluation-page .dpr-technical-content { padding:13px 15px 15px; }
+.dpr-evaluation-page .dpr-technical-content dl { gap:9px 12px; font-size:12px; }
+.dpr-evaluation-page .dpr-technical-content p { font-size:11px; margin:8px 0 0; }
+
+/* Responsive rules maintain accessible actions at mobile widths. */
+@media (max-width: 1180px) {
+  .dpr-candidate-page .profile-grid { grid-template-columns:minmax(0,1fr); }
+  .dpr-candidate-page .side-col { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dpr-jobs-page .jobs-table td { padding:0; }
+  .dpr-evaluation-page .detail-grid { grid-template-columns:minmax(0,1fr); }
+  .dpr-evaluation-page .decision-column { grid-row:auto; }
+}
+@media (max-width: 820px) {
+  .dpr-candidate-page .dpr-profile-head { grid-template-columns:45px minmax(0,1fr); padding:15px; gap:10px; }
+  .dpr-candidate-page .dpr-profile-head .avatar { width:45px; height:45px; }
+  .dpr-candidate-page .dpr-profile-head .head-actions { grid-column:1/-1; justify-content:flex-start; flex-wrap:wrap; }
+  .dpr-evaluation-page .dpr-eval-hero { grid-template-columns:minmax(0,1fr) minmax(110px,145px); gap:13px; }
+  .dpr-evaluation-page .dpr-eval-hero .cv-actions { grid-column:1/-1; display:flex; flex-direction:row; flex-wrap:wrap; }
+  .dpr-evaluation-page .dpr-eval-hero .cv-actions small { flex-basis:100%; }
+  .job-edit-page .skills-grid { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width: 600px) {
+  .dpr-candidate-page .dpr-profile-head { padding:13px; }
+  .dpr-candidate-page .dpr-profile-head h1 { font-size:21px; }
+  .dpr-candidate-page .dpr-profile-head .head-actions .btn { flex:none; }
+  .dpr-candidate-page .dpr-section-head { align-items:start; flex-direction:column; gap:4px; }
+  .dpr-candidate-page .dpr-section-head p { text-align:left; }
+  .dpr-candidate-page .side-col { grid-template-columns:minmax(0,1fr); }
+  .dpr-candidate-page .cv-head { padding:10px 12px; }
+  .dpr-candidate-page .app-main { grid-template-columns:minmax(0,1fr) auto; }
+  .dpr-jobs-page .overview>div { padding:12px 14px; }
+  .dpr-jobs-page .dpr-panel-heading { flex-direction:column; align-items:start; }
+  .dpr-jobs-page .dpr-stage-complete { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dpr-evaluation-page .dpr-eval-hero { grid-template-columns:minmax(0,1fr); padding:14px; }
+  .dpr-evaluation-page .dpr-score-feature { border:0; border-top:1px solid #b9ded2; padding:10px 0 0; }
+  .dpr-evaluation-page .dpr-score-feature > strong { font-size:35px; }
+  .dpr-evaluation-page .panel { padding:15px; }
+  .job-edit-page .general-panel { padding:16px; }
+  .job-edit-page .skill-panel { padding:13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dpr-disclosure > summary::after { transition:none; }
+}

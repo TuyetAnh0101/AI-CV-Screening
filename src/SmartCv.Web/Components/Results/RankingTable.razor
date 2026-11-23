@@ -15,7 +15,7 @@
     <div class="ranking-head">
         <div>
             <h2 id="ranking-title" tabindex="-1">Bảng xếp hạng ứng viên</h2>
-            <p>Mặc định sắp theo điểm cuối giảm dần · CV chưa có điểm nằm cuối · Ngưỡng Đạt @RankingView.Score(PassThreshold) · AI gợi ý, HR quyết định giai đoạn</p>
+            <p>AI dự đoán mức phù hợp; HR quyết định giai đoạn tuyển dụng.</p>
         </div>
         <div class="ranking-actions"><AnonymousToggle />
             @if (OffersExport) { <div class="export-action"><button id="ranking-export-open" type="button" class="btn sc-btn-secondary" disabled="@ExportLocked" title="@ExportHelp" aria-describedby="export-availability" @onclick="OpenExportAsync"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" /></svg>Xuất kết quả</button><span id="export-availability" class="@(RunStatus == RunStatuses.Completed && Items.Count > 0 ? "visually-hidden" : "export-availability")">@ExportHelp</span></div> }
@@ -63,7 +63,18 @@
                 </button>
             }
         </div>
-        <div class="filter-group stage-filters" role="group" aria-label="Lọc giai đoạn hồ sơ">
+        <details class="ranking-more-filters" open="@(stageFilter is not null || flaggedOnly || manualOnly)">
+            <summary aria-label="Mở hoặc đóng bộ lọc giai đoạn HR và cờ">
+                <span class="more-title">Giai đoạn HR và cờ</span>
+                <span class="more-hint">
+                    @if (stageFilter is not null) { <span class="selected-filter">@StageText.Name(stageFilter)</span> }
+                    @if (flaggedOnly) { <span class="selected-filter">Cần xem kỹ</span> }
+                    @if (manualOnly) { <span class="selected-filter">Cờ HR</span> }
+                    @if (stageFilter is null && !flaggedOnly && !manualOnly) { <span>Tùy chọn</span> }
+                </span>
+            </summary>
+            <div class="more-filter-body">
+            <div class="filter-group stage-filters" role="group" aria-label="Lọc giai đoạn hồ sơ">
             <span class="filter-label">Giai đoạn HR</span>
             <button id="stage-filter-all" type="button" class="stage-filter @(stageFilter is null ? "on" : null)" aria-pressed="@(stageFilter is null ? "true" : "false")" disabled="@(busy || pending is not null)" @onclick="() => SetStageFilter(null)">Tất cả <span>@StageCount(null)</span></button>
             @foreach (var stage in ApplicationStages.All)
@@ -78,6 +89,8 @@
             <button id="flag-filter" type="button" class="stage-filter flag-filter @(flaggedOnly ? "on" : null)" aria-pressed="@flaggedOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="ToggleFlaggedAsync" title="Hồ sơ Mới / Đang xem có cảnh báo tự động hoặc cờ HR đang mở">⚑ Cần xem kỹ <span>@NeedsReviewCount</span></button>
             <button id="manual-filter" type="button" class="stage-filter manual-filter @(manualOnly ? "on" : null)" aria-pressed="@manualOnly.ToString().ToLowerInvariant()" disabled="@(busy || pending is not null)" @onclick="ToggleManualOnly" title="Hồ sơ HR đã đánh dấu cần kiểm tra (mọi giai đoạn)">Cờ HR <span>@ManualCount</span></button>
         </div>
+            </div>
+        </details>
     </div>
 
     @if (message is not null)
