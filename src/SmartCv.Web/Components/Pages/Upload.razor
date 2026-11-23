@@ -126,6 +126,14 @@
                 </p>
             </div>
 
+            <div class="upload-stage-header" aria-labelledby="upload-stage-title">
+                <span class="upload-stage-number" aria-hidden="true">02</span>
+                <div>
+                    <h2 id="upload-stage-title" class="section-title">Tải CV lên</h2>
+                    <p>Chọn tệp PDF, JPG hoặc PNG. Hệ thống sẽ kiểm tra và trích xuất chữ sau khi tải.</p>
+                </div>
+            </div>
+
             <CvDropzone OnFilesSelected="OnFilesSelectedAsync" Disabled="@(busy || !CanUpload)" Busy="busy" Accept="@AcceptAttr"
                         DisabledTitle="@(busy ? "Đang tải lên..." : UploadRules.LockedTitle)"
                         DisabledReason="@(busy ? uploadProgress : UploadRules.LockReason(sourceChannel, consentConfirmed))"
@@ -140,7 +148,13 @@
         @* ================= Bước 3: danh sách CV + kiểm tra chữ ================= *@
         <section class="list-section" aria-labelledby="cv-list-title">
             <div class="list-head">
-                <h2 id="cv-list-title" class="section-title" tabindex="-1">Danh sách CV</h2>
+                <div class="list-stage-heading">
+                    <span class="stage-number" aria-hidden="true">03</span>
+                    <div>
+                        <h2 id="cv-list-title" class="section-title" tabindex="-1">Danh sách CV</h2>
+                        <p>Kiểm tra trạng thái và chữ đã đọc trước khi chọn hồ sơ phân tích.</p>
+                    </div>
+                </div>
                 @if (items.Count > 0)
                 {
                     <span class="list-summary" aria-live="polite">
@@ -200,7 +214,13 @@
 
         @* ================= Bước 4–5: chọn công việc + phân tích ================= *@
         <section class="analyze-panel" aria-labelledby="analyze-title">
-            <h2 id="analyze-title" class="visually-hidden">Phân tích CV đã chọn</h2>
+            <div class="analyze-heading">
+                <span class="stage-number" aria-hidden="true">04</span>
+                <div>
+                    <h2 id="analyze-title" class="section-title">Chọn công việc và phân tích</h2>
+                    <p>Gắn những CV đã chọn vào vị trí tuyển dụng; AI chỉ chạy khi bạn nhấn Phân tích hồ sơ.</p>
+                </div>
+            </div>
             <div class="field job-field">
                 <label for="job" class="field-label">Chọn công việc</label>
                 <select id="job" class="sc-select @(jobInvalid ? "is-invalid" : null)" @bind="selectedJobId" @bind:after="OnJobChanged"
