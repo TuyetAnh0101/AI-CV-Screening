@@ -21,7 +21,7 @@
 
 <PageTitle>@PageTitleText · SCApp</PageTitle>
 
-<div class="detail-page">
+<div class="detail-page dpr-candidate-page">
     <nav class="crumbs" aria-label="Điều hướng"><a id="back-to-list" href="@BackUrl"><span aria-hidden="true">←</span> @(FromCvs ? "Hồ sơ CV" : "Danh sách ứng viên")</a></nav>
 
     @switch (workspace.Status)
@@ -52,9 +52,10 @@
         default:
             var c = workspace.Data!;
             var anon = Anonymity.Enabled;
-            <header class="profile-head">
+            <header class="profile-head dpr-profile-head">
                 <span class="avatar" aria-hidden="true">@CandidateText.Initials(c.FullName, anon)</span>
                 <div class="identity">
+                    <p class="dpr-kicker">HỒ SƠ ỨNG VIÊN</p>
                     <h1 id="candidate-name" tabindex="-1">@CandidateText.Name(c.CandidateId, c.FullName, anon)</h1>
                     <p class="meta">Ứng viên #@c.CandidateId · tạo @CandidateText.Date(c.CreatedAt)</p>
                     <ul class="chips" aria-label="Tóm tắt">
@@ -63,7 +64,7 @@
                     </ul>
                 </div>
                 <div class="head-actions">
-                    <AnonymousToggle />
+                    <div class="dpr-privacy-control"><AnonymousToggle /></div>
                     <button id="detail-edit" type="button" class="btn sc-btn-secondary" disabled="@(anon || busy)" @onclick="() => editing = true">Sửa thông tin</button>
                     <button id="detail-refresh" type="button" class="btn sc-btn-secondary" disabled="@workspace.Refreshing" @onclick="ReloadAsync" aria-label="Tải lại hồ sơ"><span aria-hidden="true">↻</span></button>
                 </div>
@@ -71,14 +72,14 @@
 
             @if (anon)
             {
-                <p class="privacy-banner" role="note"><span aria-hidden="true">◐</span> Đang bật Ẩn danh: tên, liên hệ, tên file và ghi chú được che. Tắt Ẩn danh để sửa thông tin, gộp hoặc xử lý yêu cầu dữ liệu của ứng viên.</p>
+                <p class="privacy-banner dpr-privacy-banner" role="note"><span aria-hidden="true">◐</span> Đang ẩn danh: thông tin nhận diện đã được che. Tắt Ẩn danh để sử dụng các thao tác cần xác minh danh tính.</p>
             }
             @if (notice is not null) { <p class="notice @(noticeError ? "error" : "ok")" role="@(noticeError ? "alert" : "status")">@notice <button type="button" class="notice-close" aria-label="Đóng thông báo" @onclick="() => notice = null">×</button></p> }
             @if (workspace.Error is not null && workspace.Data is not null) { <p class="notice error" role="alert">@workspace.Error <button type="button" class="link" @onclick="ReloadAsync">Tải lại</button></p> }
 
             <div class="profile-grid">
                 <section class="main-col" aria-labelledby="applications-title">
-                    <div class="section-head"><h2 id="applications-title">CV và hồ sơ ứng tuyển</h2><p>Mỗi CV có thể ứng tuyển nhiều vị trí. Điểm sàng lọc thuộc từng lần ứng tuyển, không phải điểm của người.</p></div>
+                    <div class="section-head dpr-section-head"><div><span class="dpr-kicker">DANH SÁCH HỒ SƠ</span><h2 id="applications-title">CV và lần ứng tuyển</h2></div><p>Điểm thuộc từng lần ứng tuyển.</p></div>
                     @if (c.Cvs.Count == 0) { <div class="empty-card">Ứng viên chưa có CV nào. Gắn CV cho người này ở <a href="/candidates?view=cvs&candidate=none">Hồ sơ CV › Chưa gắn ứng viên</a>.</div> }
                     @foreach (var cv in c.Cvs.OrderByDescending(v => v.UploadedAt))
                     {
@@ -92,11 +93,14 @@
                                 </div>
                                 @if (!cv.IsAnonymized && !anon) { <CvFileButton CvId="cv.CvId" CssClass="btn sc-btn-ghost btn-sm" /> }
                             </header>
-                            <dl class="cv-facts">
-                                <div><dt>Đọc chữ</dt><dd>@(cv.IsAnonymized ? "Đã ẩn danh" : CvLibraryText.Statuses.FirstOrDefault(s => s.Code == cv.ExtractionStatus).Name ?? "—")</dd></div>
-                                <div><dt>Hạn lưu</dt><dd class="@(RetentionSoon(cv) ? "soon" : null)">@CvLibraryText.Retention(cv.RetainUntil, cv.AnonymizedAt, now)</dd></div>
-                                <div><dt>Đồng ý lưu</dt><dd>@CandidateText.Date(cv.ConsentConfirmedAt)</dd></div>
-                            </dl>
+                            <details class="dpr-disclosure dpr-cv-disclosure" data-scapp-detail>
+                                <summary><span>Trích xuất và lưu trữ CV</span><span class="dpr-disclosure-hint">Xem thông tin</span></summary>
+                                <dl class="cv-facts">
+                                    <div><dt>Đọc chữ</dt><dd>@(cv.IsAnonymized ? "Đã ẩn danh" : CvLibraryText.Statuses.FirstOrDefault(s => s.Code == cv.ExtractionStatus).Name ?? "—")</dd></div>
+                                    <div><dt>Hạn lưu</dt><dd class="@(RetentionSoon(cv) ? "soon" : null)">@CvLibraryText.Retention(cv.RetainUntil, cv.AnonymizedAt, now)</dd></div>
+                                    <div><dt>Đồng ý lưu</dt><dd>@CandidateText.Date(cv.ConsentConfirmedAt)</dd></div>
+                                </dl>
+                            </details>
                             @if (apps.Count == 0) { <p class="no-apps">CV này chưa ứng tuyển vị trí nào.</p> }
                             else
                             {

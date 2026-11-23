@@ -5,10 +5,10 @@
 @inject AnonymityState Anonymity
 
 <PageTitle>@(detail is null ? "Chi tiết đánh giá CV" : Anonymity.Name(detail.CandidateName, detail.Rank, detail.ApplicationId)) · SCApp</PageTitle>
-<div class="evaluation-detail">
+<div class="evaluation-detail dpr-evaluation-page">
     <div class="detail-toolbar">
     <nav class="breadcrumb" aria-label="Điều hướng"><a href="@BackUrl">← Bảng xếp hạng</a><span>/ Chi tiết đánh giá #@Id</span></nav>
-    <AnonymousToggle />
+    <div class="dpr-privacy-control"><AnonymousToggle /></div>
     </div>
     @if (loading)
     {
@@ -22,7 +22,7 @@
     {
         var ready = detail.Status == EvaluationStatuses.Completed;
         var keywordOnly = detail.ScoreSource == ScoreSources.KeywordOnly;
-        <header class="panel candidate">
+        <header class="panel candidate dpr-eval-hero">
             <div class="identity">
                 <p class="eyebrow">HỒ SƠ ĐÁNH GIÁ · HẠNG @(detail.Rank?.ToString() ?? "—")/@detail.RankTotal</p>
                 <h1>@Anonymity.Name(detail.CandidateName, detail.Rank, detail.ApplicationId)</h1>
@@ -32,6 +32,11 @@
                     <FitBadge FitLabel="@Anonymity.Label(detail.FitLabel)" FinalScore="detail.FinalScore" Status="@detail.Status" ScoreSource="@detail.ScoreSource" />
                     <span class="prediction">Dự đoán: @(!ready || detail.PredictedPass is null ? "Chưa có" : detail.PredictedPass == true ? "Đạt" : "Không đạt")</span>
                 </div>
+            </div>
+            <div class="dpr-score-feature" aria-label="Điểm đánh giá cuối">
+                <span>ĐIỂM CUỐI</span>
+                <strong>@Display.Score(ready ? detail.FinalScore : null)</strong>
+                <small>@(ready ? "Điểm đã lưu của lượt chấm" : "Chưa có kết quả hoàn tất")</small>
             </div>
             <div class="cv-actions">
                 @if (Anonymity.Enabled)
@@ -100,13 +105,11 @@
                 {
                     <p>Chưa có nhận xét Gemini thành công để hiển thị.</p>
                 }
-                @if (Anonymity.Enabled)
-                { <p class="muted">JSON gốc được ẩn vì có thể chứa thông tin cá nhân.</p> }
-                else if (ready && !keywordOnly && detail.AiScore is not null && !string.IsNullOrWhiteSpace(detail.AiRawResponse))
+                @if (!Anonymity.Enabled && ready && !keywordOnly && detail.AiScore is not null && !string.IsNullOrWhiteSpace(detail.AiRawResponse))
                 {
-                    <details><summary>Xem JSON gốc AI trả về</summary><p class="muted">Dữ liệu gốc được lưu; không mặc định là JSON hợp lệ hoặc kết quả AI thành công. Có thể chọn và sao chép nội dung.</p><pre tabindex="0" aria-label="Phản hồi AI gốc">@detail.AiRawResponse</pre></details>
+                    <details class="dpr-disclosure dpr-ai-json" data-scapp-detail><summary>Xem JSON phản hồi AI</summary><p class="muted">Phản hồi gốc có thể chứa dữ liệu cá nhân. Chỉ xem khi cần đối chiếu.</p><pre tabindex="0" aria-label="Phản hồi AI gốc">@detail.AiRawResponse</pre></details>
                 }
-                else { <p class="muted">Không có phản hồi AI gốc được lưu.</p> }
+                else if (!Anonymity.Enabled) { <p class="muted">Không có phản hồi AI gốc được lưu.</p> }
             </section>
             <section class="panel skills-panel" aria-labelledby="skills-title">
                 <div class="section-head"><span class="eyebrow">03 / ĐỐI CHIẾU NĂNG LỰC</span><h2 id="skills-title">Kỹ năng và bằng chứng</h2><p class="muted">Kết quả theo dữ liệu API. Xác nhận của AI được giữ nguyên nguồn, cần kiểm chứng.</p></div>
@@ -132,12 +135,14 @@
             </div>
             <aside class="decision-column" aria-label="Quyết định và lịch sử HR">
                 @if (detail.ApplicationId > 0) { <HrDecisionPanel Detail="detail" Anonymous="Anonymity.Enabled" @key="(detail.EvaluationId, detail.StageVersion)" /> }
-            <section class="panel metadata" aria-labelledby="metadata-title">
-                <div class="section-head"><span class="eyebrow">04 / THÔNG TIN LẦN ĐÁNH GIÁ</span><h2 id="metadata-title">Nguồn và cấu hình</h2></div>
-                <dl><dt>Lượt chấm / Job</dt><dd>#@detail.RunId / #@detail.JobId</dd><dt>Phiên bản prompt</dt><dd>@Display.Text(detail.PromptVersionName)</dd><dt>Model AI</dt><dd>@Display.Text(detail.ModelName)</dd><dt>Temperature</dt><dd>@Display.Score(detail.Temperature)</dd><dt>Nguồn điểm</dt><dd>@Display.Text(detail.ScoreSource)</dd><dt>Trạng thái</dt><dd>@Display.Text(detail.Status)</dd><dt>Thời gian tạo đánh giá</dt><dd>@Display.VnTime(detail.CreatedAt)</dd><dt>Cách đọc CV</dt><dd>@Display.Text(detail.ExtractionMethod)</dd></dl>
-                <p class="muted">Kết quả và trọng số thuộc lượt chấm đã lưu. Chấm lại với cấu hình hoặc quy tắc hiện hành có thể cho kết quả khác.</p>
-                <p class="muted">API cung cấp thời gian tạo bản đánh giá, chưa có thời gian hoàn tất riêng.</p>
-            </section>
+            <details class="panel metadata dpr-disclosure dpr-technical" data-scapp-detail>
+                <summary id="metadata-title"><span>Thông tin lượt chấm và cấu hình</span><span class="dpr-disclosure-hint">Xem thêm</span></summary>
+                <div class="dpr-technical-content">
+                    <dl><dt>Lượt chấm / Job</dt><dd>#@detail.RunId / #@detail.JobId</dd><dt>Phiên bản prompt</dt><dd>@Display.Text(detail.PromptVersionName)</dd><dt>Model AI</dt><dd>@Display.Text(detail.ModelName)</dd><dt>Temperature</dt><dd>@Display.Score(detail.Temperature)</dd><dt>Nguồn điểm</dt><dd>@Display.Text(detail.ScoreSource)</dd><dt>Trạng thái</dt><dd>@Display.Text(detail.Status)</dd><dt>Thời gian tạo đánh giá</dt><dd>@Display.VnTime(detail.CreatedAt)</dd><dt>Cách đọc CV</dt><dd>@Display.Text(detail.ExtractionMethod)</dd></dl>
+                    <p class="muted">Kết quả và trọng số thuộc lượt chấm đã lưu; chấm lại có thể cho kết quả khác.</p>
+                    <p class="muted">API chỉ cung cấp thời gian tạo đánh giá.</p>
+                </div>
+            </details>
             </aside>
         </div>
     }
