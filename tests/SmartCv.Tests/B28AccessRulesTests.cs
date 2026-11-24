@@ -72,7 +72,7 @@ public class B28AccessRulesTests
         foreach (var permission in Enum.GetValues<AppPermission>())
         {
             var adminOnly = permission is AppPermission.ManageUsers or AppPermission.ViewAudit;
-            Assert.Equal(adminOnly ? state == "Admin" : state is "Admin" or "HR", AccessRules.Can(user, permission));
+            Assert.Equal(adminOnly && state == "Admin", AccessRules.Can(user, permission)); // no HR workspace in the legacy fixture
         }
     }
 
@@ -83,7 +83,7 @@ public class B28AccessRulesTests
         Assert.Same(AccessRules.Nobody, AccessRules.Current(null));
         Assert.Same(AccessRules.Nobody, AccessRules.Current(pending));
         Assert.False(AccessRules.Can(pending, AppPermission.ManageJobs));
-        Assert.True(AccessRules.Can(Task.FromResult(new Microsoft.AspNetCore.Components.Authorization.AuthenticationState(State("Admin"))), AppPermission.ManageJobs));
+        Assert.False(AccessRules.Can(Task.FromResult(new Microsoft.AspNetCore.Components.Authorization.AuthenticationState(State("Admin"))), AppPermission.ManageJobs));
     }
 
     // ---------- Trang: AuthorizeRouteView ----------
@@ -149,7 +149,10 @@ public class B28AccessRulesTests
         {
             var expected = PublicPages.Contains(page)
                 || (page == typeof(web::SmartCv.Web.Components.Account.ChangePassword) ? state is "HR" or "Admin" or "mcp"   // B29: SignedIn
-                : AdminPages.Contains(page) ? state == "Admin" : business);
+                : AdminPages.Contains(page) ? state == "Admin"
+                : page == typeof(RoleReports) ? state == "Admin"
+                : page.GetCustomAttributes<AuthorizeAttribute>().Any(a => a.Policy == AccessRules.BusinessPolicy) ? false
+                : business);
             Assert.True(expected == await CanOpen(page, user), $"{page.Name} / {state}: mong đợi {(expected ? "MỞ" : "CHẶN")}");
         }
     }
@@ -160,8 +163,8 @@ public class B28AccessRulesTests
         var routes = typeof(JobEdit).GetCustomAttributes<RouteAttribute>().Select(r => r.Template).ToList();
         Assert.Equal(["/jobs/new", "/jobs/{Id:int}"], routes);
         Assert.NotEmpty(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>());
-        Assert.DoesNotContain(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy is not null || a.Roles is not null);
-        Assert.DoesNotContain(typeof(JobsPage).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy is not null || a.Roles is not null);
+        Assert.Contains(typeof(JobEdit).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy == AccessRules.BusinessPolicy);
+        Assert.Contains(typeof(JobsPage).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy == AccessRules.BusinessPolicy);
     }
 
     [Fact]
@@ -191,23 +194,34 @@ public class B28AccessRulesTests
 
     // ---------- Menu ----------
 
+    private static ClaimsPrincipal ValidHr()
+    {
+        var baseUser = B28Auth.Principal("HR");
+        var claims = baseUser.Claims.Concat(new[]
+        {
+            new Claim(AccessRules.WorkspaceKindClaim, "Internal"),
+            new Claim(AccessRules.WorkspaceRoleClaim, "Member")
+        });
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, AccessRules.AuthenticationType, "name", "role"));
+    }
+
     [Theory]
     [InlineData("HR")]
     [InlineData("Admin")]
     public async Task Menu_shows_only_reachable_pages_and_never_an_empty_group(string role)
     {
-        var user = B28Auth.Principal(role);
+        var user = role == "HR" ? ValidHr() : B28Auth.Principal("Admin");
         var groups = AppNavigation.For(user);
         Assert.NotEmpty(groups);
         Assert.All(groups, g => Assert.NotEmpty(g.Items));
         if (role == "HR") Assert.All(groups.SelectMany(g => g.Items), i => Assert.False(i.AdminOnly));
-        // Mỗi mục trỏ tới một trang mà vai trò này mở được.
-        var pages = RoutablePages().SelectMany(p => p.GetCustomAttributes<RouteAttribute>().Select(r => (Page: p, Path: r.Template.Trim('/')))).ToList();
+        var pages = RoutablePages().SelectMany(p => p.GetCustomAttributes<RouteAttribute>()
+            .Select(r => (Page: p, Path: r.Template.Trim('/')))).ToList();
         foreach (var item in groups.SelectMany(g => g.Items))
         {
             var target = pages.FirstOrDefault(p => p.Path.Equals(item.Href, StringComparison.OrdinalIgnoreCase));
-            Assert.True(target.Page is not null, $"Mục menu {item.Text} trỏ tới đường dẫn chết /{item.Href}");
-            Assert.True(await CanOpen(target.Page, user), $"{role} thấy {item.Text} nhưng không mở được");
+            Assert.True(target.Page is not null, $"Menu {item.Text} points to missing /{item.Href}");
+            Assert.True(await CanOpen(target.Page, user), $"{role} sees {item.Text} but route denies it");
         }
     }
 
@@ -221,20 +235,25 @@ public class B28AccessRulesTests
     [Fact]
     public void Menu_groups_all_existing_business_destinations_under_recruitment_and_AI()
     {
-        var hrefs = AppNavigation.For(B28Auth.Principal("HR")).SelectMany(g => g.Items).Select(i => i.Href);
-        Assert.Equal(["dashboard", "upload", "candidates", "results", "jobs", "runs", "prompts", "evaluation-sets"], hrefs);
+        var hrefs = AppNavigation.For(ValidHr()).SelectMany(g => g.Items).Select(i => i.Href).ToList();
+        Assert.Contains("dashboard", hrefs);
+        Assert.Contains("reports", hrefs);
+        Assert.Contains("jobs", hrefs);
+        Assert.Contains("results", hrefs);
+        Assert.Contains("account", hrefs);
+        Assert.DoesNotContain("admin/dashboard", hrefs);
     }
 
     [Fact]
     public void Admin_has_a_distinct_home_and_shares_the_same_business_routes_with_HR()
     {
         var admin = AppNavigation.For(B28Auth.Principal("Admin"));
-        var hr = AppNavigation.For(B28Auth.Principal("HR"));
+        var hr = AppNavigation.For(ValidHr());
         Assert.Equal("admin/dashboard", admin[0].Items[0].Href);
         Assert.Equal("Dashboard quản trị", admin[0].Items[0].Text);
         Assert.Equal("Dashboard tuyển dụng", hr[0].Items[0].Text);
-        Assert.Equal(hr.Skip(1).SelectMany(g => g.Items).Select(i => i.Href),
-            admin.Skip(1).SelectMany(g => g.Items).Where(i => !i.AdminOnly).Select(i => i.Href));
+        Assert.DoesNotContain(admin.SelectMany(g => g.Items), i => i.Href is "jobs" or "upload" or "results");
+        Assert.DoesNotContain(hr.SelectMany(g => g.Items), i => i.Href.StartsWith("admin/", StringComparison.Ordinal));
         Assert.Equal("/admin/dashboard", AppNavigation.HomeFor(B28Auth.Principal("Admin")));
         Assert.Equal("/dashboard", AppNavigation.HomeFor(B28Auth.Principal("HR")));
     }
@@ -247,5 +266,5 @@ public class B28AccessRulesTests
     [InlineData("unknown/thing", null)]
     [InlineData("", null)]
     public void Forbidden_page_back_link_is_an_in_app_parent(string path, string? expected) =>
-        Assert.Equal(expected, AppNavigation.ParentFor(path, B28Auth.Principal("HR"))?.Href);
+        Assert.Equal(expected, AppNavigation.ParentFor(path, ValidHr())?.Href);
 }

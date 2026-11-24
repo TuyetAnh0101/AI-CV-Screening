@@ -1,0 +1,111 @@
+@page "/reports"
+@attribute [Authorize(Policy = AccessRules.ReportsPolicy)]
+@using SmartCv.Web.Helpers
+@inject AuthSession Session
+
+<PageTitle>Báo cáo &amp; dữ liệu · SCApp</PageTitle>
+
+@{
+    var me = Session.User;
+    var admin = me?.Role == "Admin";
+    var owner = me?.Role == "HR" && me.Workspace is { Kind: "Personal", Role: "Owner" };
+    var internalHr = me?.Role == "HR" && me.Workspace is { Kind: "Internal", Role: "Owner" or "Member" };
+    var currentWorkspace = me?.Workspace?.Name;
+}
+<section class="rx-page" data-rx-reports aria-labelledby="rx-reports-title">
+    <header class="rx-hero">
+        <div>
+            <p class="rx-eyebrow"><span></span> REPORTING CENTER · SCAPP</p>
+            <h1 id="rx-reports-title">@(admin ? "Báo cáo vận hành" : owner ? "Báo cáo & dữ liệu của tôi" : "Báo cáo tuyển dụng") <i aria-hidden="true">✦</i></h1>
+            <p>@(admin
+                ? "Tập trung vào sức khỏe dịch vụ, bảo mật, AI và hoạt động toàn hệ thống — không mở nội dung CV."
+                : owner
+                    ? "Chỉ xem, xuất và quản lý hồ sơ trong workspace cá nhân đã được xác minh."
+                    : "Theo dõi kết quả tuyển dụng và xuất xếp hạng trong workspace nội bộ.")</p>
+        </div>
+        <span class="rx-scope">@(admin ? "SYSTEM SCOPE" : owner ? "PERSONAL WORKSPACE" : "INTERNAL WORKSPACE")</span>
+    </header>
+
+    <div class="rx-notice" role="status">
+        <strong>Phạm vi truy cập:</strong>
+        @(admin ? "Số liệu vận hành toàn hệ thống" : "Workspace: " + (currentWorkspace ?? "Chưa xác định"))
+        <span aria-hidden="true">·</span> Không cấp quyền mới qua giao diện này.
+    </div>
+
+    @if (admin)
+    {
+        <div class="rx-cards">
+            <article class="rx-card rx-violet">
+                <div class="rx-card-top"><span>01 · HỆ THỐNG</span><span class="rx-chip rx-ready">Đã có dữ liệu</span></div>
+                <h2>Thống kê vận hành</h2>
+                <p>Tài khoản, workspace, sức khỏe dịch vụ, lỗi, queue và quota. Các chỉ số tổng hợp được lấy từ API Admin hiện có.</p>
+                <a href="/admin/dashboard" class="rx-link">Mở Dashboard quản trị <span>↗</span></a>
+            </article>
+            <article class="rx-card rx-coral">
+                <div class="rx-card-top"><span>02 · GIÁM SÁT</span><span class="rx-chip rx-ready">Đã có dữ liệu</span></div>
+                <h2>AI &amp; Audit Log</h2>
+                <p>Phân tích lượt gọi Gemini, token đã ghi nhận, lỗi và lịch sử sự kiện. Không chứa prompt, API key hoặc nội dung CV.</p>
+                <div class="rx-links"><a href="/admin/ai-usage" class="rx-link">Giám sát AI ↗</a><a href="/admin/activity-logs" class="rx-link">Audit Log ↗</a></div>
+            </article>
+            <article class="rx-card rx-amber">
+                <div class="rx-card-top"><span>03 · XUẤT BÁO CÁO</span><span class="rx-chip rx-planned">Chưa hỗ trợ</span></div>
+                <h2>Excel / CSV quản trị</h2>
+                <p>SCApp hiện có nhật ký và số liệu Admin, nhưng chưa có API xuất báo cáo vận hành Excel/CSV riêng. Không tạo nút tải tệp giả.</p>
+                <span class="rx-muted">Đề xuất triển khai ở nhánh báo cáo hệ thống riêng, kiểm thử phân quyền Admin và nhật ký xuất.</span>
+            </article>
+        </div>
+    }
+    else if (owner || internalHr)
+    {
+        <div class="rx-cards">
+            <article class="rx-card rx-teal">
+                <div class="rx-card-top"><span>01 · TUYỂN DỤNG</span><span class="rx-chip rx-ready">Excel có sẵn</span></div>
+                <h2>Xuất kết quả theo lượt chấm</h2>
+                <p>Chọn Run/Job tại Kết quả, xem trước phạm vi, áp dụng bộ lọc và tải Excel theo workspace. Chức năng hiện có, mặc định ẩn danh khi xuất.</p>
+                <a href="/results" class="rx-link">Mở Kết quả &amp; xếp hạng <span>↗</span></a>
+            </article>
+            <article class="rx-card rx-violet">
+                <div class="rx-card-top"><span>02 · PHÂN TÍCH</span><span class="rx-chip rx-ready">Đã có dữ liệu</span></div>
+                <h2>Tổng quan tuyển dụng</h2>
+                <p>Xem số CV, vị trí, giai đoạn, lý do loại và thời gian xử lý theo bộ lọc. Đây là báo cáo vận hành tuyển dụng, không phải báo cáo bảo mật Admin.</p>
+                <a href="/dashboard" class="rx-link">Xem tổng quan <span>↗</span></a>
+            </article>
+            @if (owner)
+            {
+                <article class="rx-card rx-amber">
+                    <div class="rx-card-top"><span>03 · DỮ LIỆU CÁ NHÂN</span><span class="rx-chip rx-planned">Chưa hỗ trợ</span></div>
+                    <h2>Sao lưu workspace · ZIP</h2>
+                    <p>ZIP backup cần chính sách chọn dữ liệu, ẩn danh, khả năng phục hồi, giới hạn dung lượng và audit riêng. Chưa có endpoint tải ZIP an toàn.</p>
+                    <a href="/account" class="rx-link">Quản lý tài khoản <span>↗</span></a>
+                </article>
+            }
+            else
+            {
+                <article class="rx-card rx-amber">
+                    <div class="rx-card-top"><span>03 · BÁO CÁO NÂNG CAO</span><span class="rx-chip rx-planned">Đề xuất</span></div>
+                    <h2>Báo cáo tuyển dụng tổng hợp</h2>
+                    <p>File báo cáo tổng hợp nhiều lượt chấm, phễu tuyển dụng và thống kê theo kỳ chưa có endpoint xuất riêng. Hiện sử dụng Dashboard và Excel từng Run.</p>
+                    <span class="rx-muted">Không được nhầm với bản xuất toàn bộ dữ liệu workspace.</span>
+                </article>
+            }
+        </div>
+    }
+
+    <section class="rx-principles" aria-labelledby="rx-what-title">
+        <div class="rx-principles-head"><h2 id="rx-what-title">Nguyên tắc xuất dữ liệu</h2><button type="button" data-rx-copy="@CopyText" class="rx-copy">Sao chép phạm vi <span aria-hidden="true">⧉</span></button></div>
+        <div class="rx-principle-grid">
+            <div><strong>Chỉ xuất đúng quyền</strong><p>API quyết định phạm vi thật, không dựa vào menu hoặc vai trò hiển thị trên trình duyệt.</p></div>
+            <div><strong>Dữ liệu nhạy cảm</strong><p>Ưu tiên ẩn danh, giữ đúng Run/Job và ghi lịch sử khi có xuất file thực tế.</p></div>
+            <div><strong>Không giả lập</strong><p>Chỉ hiển thị nút tải cho định dạng và endpoint đang hoạt động.</p></div>
+        </div>
+        <p class="rx-copy-status" data-rx-copy-status role="status" aria-live="polite"></p>
+    </section>
+</section>
+
+@code {
+    private string CopyText => Session.User?.Role == "Admin"
+        ? "SCApp: Báo cáo quản trị chỉ gồm vận hành, sức khỏe, Audit, AI và workspace tổng hợp. Excel/CSV quản trị chưa triển khai."
+        : Session.User?.Workspace?.Kind == "Personal"
+            ? "SCApp: Chỉ dữ liệu workspace cá nhân. Excel kết quả đang hỗ trợ; ZIP backup workspace chưa triển khai."
+            : "SCApp: Chỉ dữ liệu tuyển dụng workspace nội bộ. Excel từng lượt chấm đang hỗ trợ.";
+}

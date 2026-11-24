@@ -12,7 +12,7 @@
 
             <div class="main-area">
                 <header class="topbar">
-                    <span class="topbar-title">@(AccessRules.IsAdmin(AccessRules.Current(AuthState)) ? "Quản trị & vận hành SCApp" : "Sàng lọc hồ sơ ứng viên ứng dụng AI")</span>
+                    <span class="topbar-title">@RoleBasedNavigation.TopbarTitle(AccessRules.Current(AuthState))</span>
                     <ApiStatusBadge />
                     <UserMenu />
                 </header>

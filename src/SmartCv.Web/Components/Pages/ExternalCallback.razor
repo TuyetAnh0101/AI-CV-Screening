@@ -70,7 +70,10 @@
                     IsNewWorkspace = response.IsNewWorkspace
                 };
                 await Session.SignInAsync(sessionResponse);
-                Nav.NavigateTo(ExternalAuthUiRules.SafeDestination(response.ReturnUrl), replace: true);
+                var target = Session.MustChangePassword ? AuthText.ChangePasswordUrl(response.ReturnUrl)
+                    : RoleBasedNavigation.Destination(response.ReturnUrl, response.User.Role,
+                        response.User.Workspace?.Kind, response.User.Workspace?.Role);
+                Nav.NavigateTo(target, replace: true);
                 return;
             }
             Fail(ExternalAuthUiRules.ExchangeError(result.ErrorCode) ?? (result.StatusCode == 429

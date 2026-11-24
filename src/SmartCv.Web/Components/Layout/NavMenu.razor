@@ -18,7 +18,14 @@
     </button>
 </div>
 
-<nav id="main-navigation" aria-label="Điều hướng chính" class="nav-list @(collapsed ? "collapsed" : null)">
+<div class="rx-role-tools" data-rx-nav-toolbar>
+    <span class="rx-role-caption">@RoleBasedNavigation.PersonaLabel(user)</span>
+    <label class="rx-role-search"><span aria-hidden="true">⌕</span>
+        <input type="search" data-rx-nav-search aria-label="Tìm trong menu" placeholder="Tìm mục điều hướng…" maxlength="80" autocomplete="off" />
+        <kbd>Ctrl K</kbd>
+    </label>
+</div>
+<nav id="main-navigation" data-rx-nav-target aria-label="Điều hướng chính" class="nav-list @(collapsed ? "collapsed" : null)">
     @foreach (var group in groups)
     {
         <div class="nav-group" role="presentation">@group.Title</div>
@@ -30,6 +37,8 @@
             </NavLink>
         }
     }
+
+    <div class="rx-nav-empty" data-rx-nav-empty hidden role="status">Không có chức năng khớp từ khóa.</div>
 
     @if (AccessRules.FullName(user) is { } name)
     {
