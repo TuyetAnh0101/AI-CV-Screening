@@ -102,6 +102,11 @@ public class B28AccessRulesTests
     // Các trang chỉ dành cho Admin.
     private static readonly Type[] AdminPages =
     [
+        typeof(AdminOperationsDashboard),
+        typeof(AdminSystemHealth),
+        typeof(AdminWorkspaces),
+        typeof(AdminAiUsage),
+        typeof(AdminIntegrations),
         typeof(Users),
         typeof(ActivityLogs),
         typeof(web::SmartCv.Web.Components.Pages.AdminDashboard)

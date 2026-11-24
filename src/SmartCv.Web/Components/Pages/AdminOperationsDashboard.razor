@@ -1,0 +1,125 @@
+@page "/admin/dashboard"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Contracts
+@inject AdminOperationsApiClient AdminOps
+@implements IDisposable
+
+<PageTitle>Trung tâm vận hành · SCApp</PageTitle>
+<div class="op-shell">
+    <header class="op-header">
+        <div>
+            <div class="op-eyebrow"><span class="op-dot"></span> TRUNG TÂM QUẢN TRỊ · SCAPP</div>
+            <h1>Toàn cảnh vận hành <span class="op-spark">✦</span></h1>
+            <p>Giám sát nền tảng và tài nguyên hệ thống. Không truy cập nội dung CV của HR.</p>
+        </div>
+        <button class="op-button op-button-plain" disabled="@busy" @onclick="ReloadAsync">↻ Làm mới</button>
+    </header>
+    @if (busy && overview is null)
+    {
+        <div class="op-loading" role="status">Đang tải thống kê quản trị từ máy chủ…</div>
+    }
+    else if (error is not null)
+    {
+        <section class="op-alert" role="alert">
+            <strong>Không thể tải số liệu toàn hệ thống.</strong>
+            <p>@error</p>
+            <button class="op-button" @onclick="ReloadAsync">Thử lại</button>
+        </section>
+    }
+    else if (overview is { } x)
+    {
+        <div class="op-meta"><span>Phạm vi: tất cả workspace · dữ liệu tổng hợp</span><span>Đồng bộ lúc @VnTime(x.CapturedAtUtc)</span></div>
+        <section class="op-kpis" aria-label="Chỉ số toàn hệ thống">
+            <div class="op-kpi op-azure"><div class="op-kpi-label">Tài khoản <span>◉</span></div><strong>@Fmt(x.TotalAccounts)</strong><p>@Fmt(x.ActiveAccounts) đang hoạt động</p></div>
+            <div class="op-kpi op-violet"><div class="op-kpi-label">Workspace <span>⬡</span></div><strong>@Fmt(x.ActiveWorkspaces)</strong><p>@Fmt(x.PersonalWorkspaces) workspace cá nhân</p></div>
+            <div class="op-kpi op-amber"><div class="op-kpi-label">CV còn lưu <span>▤</span></div><strong>@Fmt(x.StoredCvs)</strong><p>Số lượng tổng hợp; không mở nội dung</p></div>
+            <div class="op-kpi op-coral"><div class="op-kpi-label">Quota AI hôm nay <span>✧</span></div><strong>@Fmt(x.AiReservedUnitsToday)</strong><p>Đơn vị quota giữ chỗ, không phải token</p></div>
+            <div class="op-kpi op-teal"><div class="op-kpi-label">Vị trí tuyển <span>▣</span></div><strong>@Fmt(x.ActiveJobs)</strong><p>@Fmt(x.TotalJobs) vị trí trong cơ sở dữ liệu</p></div>
+            <div class="op-kpi op-rose"><div class="op-kpi-label">Sự kiện bị từ chối/lỗi <span>⚑</span></div><strong>@Fmt(x.RejectedAuditEvents24h)</strong><p>Audit · 24 giờ gần nhất</p></div>
+        </section>
+        <section class="op-columns">
+            <div class="op-card">
+                <div class="op-card-top"><h2>Hàng đợi xử lý</h2><span class="op-mini-tag">AI · VẬN HÀNH</span></div>
+                <div class="op-duo">
+                    <div><strong>@Fmt(x.PendingRuns)</strong><span>Queued / Running</span></div>
+                    <div><strong>@Fmt(x.FailedRuns24h)</strong><span>Lượt thất bại trong 24h</span></div>
+                </div>
+                <p>Số liệu tổng hợp từ <code>EvaluationRuns</code>; không hiển thị điểm, CV hay danh tính ứng viên.</p>
+                <a class="op-link" href="/admin/ai-usage">Giám sát sử dụng AI →</a>
+            </div>
+            <div class="op-card op-feature">
+                <div class="op-card-top"><h2>Quyền và phạm vi dữ liệu</h2><span class="op-mini-tag">AN TOÀN</span></div>
+                <p><strong>Admin:</strong> giám sát và quản lý hệ thống. <strong>HR:</strong> xử lý nghiệp vụ tuyển dụng. <strong>Personal Owner:</strong> dữ liệu workspace của mình.</p>
+                <p>Thống kê toàn hệ thống chỉ trả về số lượng; các API Job/CV/Results vẫn giữ ranh giới workspace.</p>
+                <a class="op-link" href="/permissions">Xem ma trận quyền →</a>
+            </div>
+        </section>
+        <section class="op-card op-feature">
+            <div class="op-card-top"><h2>AI · Tổng hợp lịch sử đánh giá</h2><span class="op-mini-tag">TOÀN BỘ LỊCH SỬ</span></div>
+            @if (history is { } h)
+            {
+                <div class="op-ai-dashboard-mini">
+                    <div><strong>@Fmt(h.TotalRuns)</strong><span>Lượt chấm đã lưu</span></div>
+                    <div><strong>@Fmt(h.TotalEvaluations)</strong><span>Bản ghi đánh giá</span></div>
+                    <div><strong>@Fmt(h.CombinedEvaluations)</strong><span>Combined</span></div>
+                    <div><strong>@Fmt(h.KeywordOnlyEvaluations)</strong><span>KeywordOnly</span></div>
+                    <div><strong>@Fmt(h.FailedEvaluations)</strong><span>Evaluation lỗi</span></div>
+                </div>
+                <p>Dữ liệu từ <code>EvaluationRuns</code> và <code>Evaluations</code>. Các con số không phải lượt gọi hoặc token Gemini.</p>
+            }
+            else if (historyError is not null)
+            {
+                <p role="status">Lịch sử AI chưa tải được: @historyError</p>
+            }
+            else { <p>Đang tải lịch sử AI…</p> }
+            <a class="op-link" href="/admin/ai-usage">Xem insight theo model và thời gian →</a>
+        </section>
+        <section class="op-card">
+            <div class="op-card-top"><h2>Thao tác quản trị</h2><span class="op-mini-tag">CHUYÊN BIỆT THEO NHIỆM VỤ</span></div>
+            <div class="op-shortcuts">
+                <a href="/admin/system-health"><span class="op-shortcut-icon op-teal">◉</span><strong>Sức khỏe hệ thống</strong><small>SQL, OCR, Email, API</small></a>
+                <a href="/users"><span class="op-shortcut-icon op-azure">♙</span><strong>Tài khoản</strong><small>Vai trò, khóa/mở khóa</small></a>
+                <a href="/admin/workspaces"><span class="op-shortcut-icon op-violet">⬡</span><strong>Workspace & quota</strong><small>Hạn mức, tình trạng</small></a>
+                <a href="/admin/ai-usage"><span class="op-shortcut-icon op-coral">✧</span><strong>AI Usage</strong><small>Xu hướng, giới hạn</small></a>
+                <a href="/admin/integrations"><span class="op-shortcut-icon op-amber">⚙</span><strong>Tích hợp</strong><small>Gemini, Google Sign-In</small></a>
+                <a href="/admin/activity-logs"><span class="op-shortcut-icon op-teal">☷</span><strong>Audit Log</strong><small>Hoạt động và truy vết</small></a>
+            </div>
+        </section>
+        <p class="op-footnote">Đây là Dashboard quản trị độc lập. Không gọi <code>/api/dashboard/summary</code> hoặc <code>/api/runs</code> của HR nên không tạo lỗi 403 sai ngữ cảnh.</p>
+    }
+</div>
+
+@code {
+    private AdminSystemOverviewDto? overview;
+    private AdminAiHistoryDto? history;
+    private string? historyError;
+    private string? error;
+    private bool busy;
+    private bool disposed;
+    private readonly CancellationTokenSource lifecycle = new();
+    protected override Task OnInitializedAsync() => ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null;
+        try
+        {
+            var response = await AdminOps.GetOverviewAsync(lifecycle.Token);
+            if (disposed) return;
+            if (response.IsSuccess) overview = response.Data;
+            else { overview = null; error = response.ErrorMessage ?? "API không trả kết quả."; }
+            // Independent Admin-only history reader; an outage must not blank the overview.
+            var past = await AdminOps.GetAiHistoryAsync("all", lifecycle.Token);
+            if (disposed) return;
+            if (past.IsSuccess && past.Data is not null) { history = past.Data; historyError = null; }
+            else { history = null; historyError = past.ErrorMessage ?? "Không có dữ liệu từ API lịch sử."; }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { if (!disposed) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+    private static string VnTime(DateTime utc) =>
+        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm") + " (UTC+7)";
+    private static string Fmt(long v) => v.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}

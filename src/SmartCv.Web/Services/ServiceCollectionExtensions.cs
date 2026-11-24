@@ -56,7 +56,7 @@ public static class ServiceCollectionExtensions
             clientBuilder.RedactLoggedHeaders(_ => true);
             // HttpClient's default logger includes the entire URI, including private search queries.
             // B29: tìm tài khoản theo email cũng là dữ liệu riêng tư.
-            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient) || typeof(TClient) == typeof(AuditApiClient) || typeof(TClient) == typeof(ExportApiClient))
+            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient) || typeof(TClient) == typeof(AuditApiClient) || typeof(TClient) == typeof(ExportApiClient) || typeof(TClient) == typeof(AdminOperationsApiClient))
                 clientBuilder.RemoveAllLoggers();
             if (authenticated)
             {
@@ -83,6 +83,7 @@ public static class ServiceCollectionExtensions
         Add<JobApiClient>(TimeSpan.FromSeconds(30));
         Add<UserApiClient>(TimeSpan.FromSeconds(20)); // B29: quản lý tài khoản (A30, chỉ Admin)
         Add<AuditApiClient>(TimeSpan.FromSeconds(20));
+        Add<AdminOperationsApiClient>(TimeSpan.FromSeconds(25)); // Bảo mật JWT theo circuit.
         Add<ExportApiClient>(TimeSpan.FromSeconds(20));
         Add<DashboardApiClient>(TimeSpan.FromSeconds(30)); // B19: A19 summary, read-only.
         Add<ApplicationApiClient>(TimeSpan.FromSeconds(30));

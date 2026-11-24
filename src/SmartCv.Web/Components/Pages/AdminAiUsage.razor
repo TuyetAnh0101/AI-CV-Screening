@@ -1,0 +1,248 @@
+@page "/admin/ai-usage"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Contracts
+@inject AdminOperationsApiClient AdminOps
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Giám sát AI & lịch sử chấm · SCApp</PageTitle>
+<div class="op-shell op-ai-history">
+    <header class="op-header">
+        <div>
+            <div class="op-eyebrow"><span class="op-dot op-coral-bg"></span> SYSTEM AI INTELLIGENCE</div>
+            <h1>Giám sát AI <span class="op-spark">✦</span></h1>
+            <p>Lịch sử chấm từ SQL Server, quota vận hành và tình trạng thu thập token — ba nguồn dữ liệu độc lập, không suy diễn.</p>
+        </div>
+        <a class="op-button op-button-plain" href="/admin/dashboard">← Dashboard</a>
+    </header>
+
+    <nav class="op-toolbar" aria-label="Phạm vi thời gian lịch sử đánh giá">
+        <span>Khoảng thời gian</span>
+        @foreach (var option in Periods)
+        {
+            <button type="button" disabled="@busy" aria-pressed="@(period == option.Value)"
+                    class="op-pill @(period == option.Value ? "selected" : "")"
+                    @onclick="() => ChangePeriodAsync(option.Value)">@option.Label</button>
+        }
+        <button type="button" disabled="@busy" class="op-button op-button-plain" @onclick="ReloadAsync">↻ Làm mới</button>
+    </nav>
+
+    @if (busy && history is null && quota is null)
+    {
+        <div class="op-loading" role="status">Đang đọc lịch sử đánh giá và quota từ database…</div>
+    }
+
+    @if (historyError is not null)
+    {
+        <div class="op-alert" role="alert"><strong>Không tải được lịch sử đánh giá.</strong><p>@historyError</p>
+            <button type="button" class="op-button" disabled="@busy" @onclick="ReloadAsync">Thử lại</button></div>
+    }
+    else if (history is { } h)
+    {
+        <section class="op-ai-section-head" aria-labelledby="op-ai-history-title">
+            <div>
+                <div class="op-eyebrow"><span class="op-dot"></span> 01 · DỮ LIỆU LỊCH SỬ</div>
+                <h2 id="op-ai-history-title">Kết quả chấm được SCApp lưu</h2>
+                <p>@HistoryScope(h) · ngày theo UTC+7 · chụp lúc @VnTime(h.CapturedAtUtc)</p>
+            </div>
+            <span class="op-mini-tag">EVALUATION RUNS + EVALUATIONS</span>
+        </section>
+
+        <section class="op-kpis op-ai-kpis" aria-label="Kết quả chấm lịch sử">
+            <div class="op-kpi op-azure"><div class="op-kpi-label">Lượt chấm <span>▤</span></div>
+                <strong>@Fmt(h.TotalRuns)</strong><p>@Fmt(h.CompletedRuns) hoàn tất · @Fmt(h.FailedRuns) lượt thất bại</p></div>
+            <div class="op-kpi op-violet"><div class="op-kpi-label">Bản ghi đánh giá <span>▣</span></div>
+                <strong>@Fmt(h.TotalEvaluations)</strong><p>@Fmt(h.ScreeningEvaluations) Screening · @Fmt(h.PromptTestEvaluations) PromptTest</p></div>
+            <div class="op-kpi op-teal"><div class="op-kpi-label">Combined <span>✓</span></div>
+                <strong>@Fmt(h.CombinedEvaluations)</strong><p>@Pct(h.CombinedEvaluations, h.TotalEvaluations) · có kết quả AI và Keyword</p></div>
+            <div class="op-kpi op-amber"><div class="op-kpi-label">KeywordOnly <span>⚑</span></div>
+                <strong>@Fmt(h.KeywordOnlyEvaluations)</strong><p>@Pct(h.KeywordOnlyEvaluations, h.TotalEvaluations) · kết quả dự phòng khi không dùng được AI</p></div>
+            <div class="op-kpi op-coral"><div class="op-kpi-label">Evaluation lỗi <span>!</span></div>
+                <strong>@Fmt(h.FailedEvaluations)</strong><p>@Pct(h.FailedEvaluations, h.TotalEvaluations) · khác trạng thái Run</p></div>
+        </section>
+        <p class="op-footnote">Trường <code>AiScore</code> được lưu ở <strong>@Fmt(h.EvaluationsWithAiScore)</strong> đánh giá. Đây là điểm AI trong dữ liệu SCApp, không phải số request thực tế gửi Gemini. "Run Completed" có thể vẫn chứa Evaluation lỗi.</p>
+
+        @if (h.OtherEvaluations > 0 || h.ActiveRuns > 0)
+        {
+            <div class="op-info" role="status">Có @Fmt(h.OtherEvaluations) Evaluation ở trạng thái khác/chưa hoàn tất và @Fmt(h.ActiveRuns) Run đang chờ hoặc đang xử lý. Không gộp chúng vào Combined, KeywordOnly hoặc Failed.</div>
+        }
+        @if (h.TotalRuns == 0)
+        {
+            <div class="op-info">Chưa có lượt chấm nào trong phạm vi đang chọn. Thử chọn <strong>Toàn bộ lịch sử</strong>. Số quota bằng 0 không có nghĩa là Gemini chưa từng chạy.</div>
+        }
+        else
+        {
+            <section class="op-card">
+                <div class="op-card-top"><h2>Xu hướng đánh giá</h2>
+                    <span class="op-mini-tag">@(h.ChartBucket == "month" ? "THEO THÁNG" : "THEO NGÀY") · UTC+7</span></div>
+                <p class="op-footnote">Phân nhóm theo ngày tạo lượt chấm, không phải ngày Google tính phí. Trong chế độ toàn bộ lịch sử, biểu đồ chỉ có các tháng phát sinh đánh giá.</p>
+                <div class="op-chart-wrap"><canvas @ref="historyCanvas" tabindex="0" role="img"
+                    aria-label="Biểu đồ Combined, KeywordOnly và Failed theo thời gian; số liệu chi tiết trong bảng bên dưới"></canvas></div>
+                <div class="op-chart-legend">
+                    <span><i class="op-legend-teal"></i> Combined</span>
+                    <span><i class="op-legend-violet"></i> KeywordOnly</span>
+                    <span><i class="op-legend-coral"></i> Failed</span>
+                    @if (h.OtherEvaluations > 0) { <span><i class="op-legend-gray"></i> Khác</span> }
+                </div>
+                <details class="op-details"><summary>Xem dữ liệu biểu đồ dưới dạng bảng</summary>
+                    <div class="op-table-scroll"><table class="op-table">
+                        <thead><tr><th>@(h.ChartBucket == "month" ? "Tháng" : "Ngày")</th><th>Combined</th><th>KeywordOnly</th><th>Failed</th><th>Khác</th><th>Tổng</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in h.Trend.Reverse())
+                            { <tr><td>@Bucket(p.Bucket, h.ChartBucket)</td><td>@Fmt(p.Combined)</td><td>@Fmt(p.KeywordOnly)</td><td>@Fmt(p.Failed)</td><td>@Fmt(p.Other)</td><td><strong>@Fmt(p.Total)</strong></td></tr> }
+                        </tbody>
+                    </table></div>
+                </details>
+            </section>
+        }
+
+        <section class="op-card">
+            <div class="op-card-top"><h2>Phân bố theo model</h2><span class="op-mini-tag">TẤT CẢ WORKSPACE · SỐ LIỆU TỔNG HỢP</span></div>
+            <p class="op-footnote">Model là tên được lưu trên lượt chấm, không xác nhận phiên đó đã gọi Google thật. Không trả về tên ứng viên hoặc nội dung CV.</p>
+            <div class="op-table-scroll"><table class="op-table op-ai-model-table">
+                <thead><tr><th>Model</th><th>Run</th><th>Evaluation</th><th>Combined</th><th>KeywordOnly</th><th>Failed</th><th>Chỉ số AI</th></tr></thead>
+                <tbody>
+                @foreach (var m in h.Models)
+                {
+                    <tr><td><strong>@m.Model</strong><small>@Fmt(m.CompletedRuns) Run Completed · @Fmt(m.FailedRuns) Run Failed</small></td>
+                        <td>@Fmt(m.Runs)</td><td>@Fmt(m.Evaluations)</td>
+                        <td><span class="op-ai-number ok">@Fmt(m.Combined)</span></td>
+                        <td><span class="op-ai-number caution">@Fmt(m.KeywordOnly)</span></td>
+                        <td><span class="op-ai-number error">@Fmt(m.Failed)</span></td>
+                        <td><strong>@Fmt(m.WithAiScore)</strong><small>AiScore không NULL</small></td></tr>
+                }
+                @if (h.Models.Count == 0) { <tr><td colspan="7" class="op-empty">Chưa có model nào trong phạm vi này.</td></tr> }
+                </tbody>
+            </table></div>
+            <p class="op-footnote">Thống kê <strong>Toàn bộ lịch sử</strong> không bị giới hạn 14 ngày, giúp kiểm tra các lượt chấm trước khi có cơ chế quota mới.</p>
+        </section>
+    }
+
+    <section class="op-ai-section-head" aria-labelledby="op-ai-quota-title">
+        <div>
+            <div class="op-eyebrow"><span class="op-dot op-violet-bg"></span> 02 · QUOTA VẬN HÀNH</div>
+            <h2 id="op-ai-quota-title">Đơn vị quota nội bộ</h2>
+            <p>Đọc đúng từ <code>AiUsageEntries</code>, không suy ra từ Evaluation hoặc Gemini API.</p>
+        </div>
+        <span class="op-mini-tag op-tag-warning">@(period == "all" ? "QUOTA 90 NGÀY GẦN NHẤT" : "QUOTA " + period + " NGÀY")</span>
+    </section>
+    @if (quotaError is not null)
+    { <div class="op-alert" role="alert"><strong>Không tải được quota nội bộ.</strong><p>@quotaError</p></div> }
+    else if (quota is { } q)
+    {
+        <section class="op-kpis op-kpis-four">
+            <div class="op-kpi op-coral"><div class="op-kpi-label">Tổng quota <span>✧</span></div><strong>@Fmt(q.TotalReservedUnits)</strong><p>Giữ chỗ trừ phần đã hoàn</p></div>
+            <div class="op-kpi op-violet"><div class="op-kpi-label">Screening <span>▤</span></div><strong>@Fmt(q.Points.Sum(p => p.ScreeningUnits))</strong><p>Quota theo Screening</p></div>
+            <div class="op-kpi op-azure"><div class="op-kpi-label">PromptTest <span>▣</span></div><strong>@Fmt(q.Points.Sum(p => p.PromptTestUnits))</strong><p>Quota theo PromptTest</p></div>
+            <div class="op-kpi op-amber"><div class="op-kpi-label">Preview <span>◉</span></div><strong>@Fmt(q.Points.Sum(p => p.PreviewUnits))</strong><p>Quota theo chấm thử</p></div>
+        </section>
+        @if (q.TotalReservedUnits == 0)
+        { <div class="op-info">Ledger quota hiện chưa có đơn vị nào trong phạm vi hiển thị. Điều này <strong>không phủ định dữ liệu chấm lịch sử ở phần 01</strong>. Những lượt chấm cũ không được tự gán quota.</div> }
+        <section class="op-card">
+            <div class="op-card-top"><h2>Xu hướng giữ chỗ quota</h2><span class="op-mini-tag">@q.Days NGÀY · UTC+7</span></div>
+            <div class="op-chart-wrap"><canvas @ref="quotaCanvas" tabindex="0" role="img" aria-label="Quota Screening, PromptTest và Preview theo ngày; xem bảng chi tiết bên dưới"></canvas></div>
+            <div class="op-chart-legend"><span><i class="op-legend-coral"></i> Screening</span><span><i class="op-legend-violet"></i> PromptTest</span><span><i class="op-legend-blue"></i> Preview</span></div>
+            <details class="op-details"><summary>Xem bảng quota theo ngày</summary>
+                <div class="op-table-scroll"><table class="op-table"><thead><tr><th>Ngày</th><th>Screening</th><th>PromptTest</th><th>Preview</th><th>Tổng</th></tr></thead>
+                <tbody>@foreach (var p in q.Points.Reverse()) { <tr><td>@p.Date.ToString("dd/MM/yyyy")</td><td>@Fmt(p.ScreeningUnits)</td><td>@Fmt(p.PromptTestUnits)</td><td>@Fmt(p.PreviewUnits)</td><td>@Fmt(p.Total)</td></tr> }</tbody></table></div>
+            </details>
+        </section>
+    }
+
+    <section class="op-columns">
+        <div class="op-card">
+            <div class="op-card-top"><h2>Gemini token & chi phí</h2><span class="op-mini-tag op-tag-warning">CHƯA THU THẬP</span></div>
+            <p>SCApp chưa lưu <code>usageMetadata</code> từng request. Input/output token và chi phí không thể khôi phục chính xác từ lịch sử điểm AI hoặc quota.</p>
+            <div class="op-unsupported"><strong>—</strong><span>Input tokens</span><strong>—</strong><span>Output tokens</span><strong>—</strong><span>Chi phí ước tính</span></div>
+        </div>
+        <div class="op-card">
+            <div class="op-card-top"><h2>Quota từ Google</h2><span class="op-mini-tag op-tag-warning">KHÔNG TỰ ĐỒNG ĐỒNG BỘ</span></div>
+            <p>Quota của SCApp khác RPM/TPM/RPD của Google. Kiểm tra mức sử dụng nhà cung cấp ở Google AI Studio; không hiển thị giá trị giả lập.</p>
+            <a class="op-link" href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer">Mở Google AI Studio ↗</a>
+        </div>
+    </section>
+</div>
+
+@code {
+    private static readonly (string Value, string Label)[] Periods =
+    [ ("7", "7 ngày"), ("14", "14 ngày"), ("30", "30 ngày"), ("90", "90 ngày"), ("all", "Toàn bộ lịch sử") ];
+
+    private ElementReference historyCanvas, quotaCanvas;
+    private AdminAiHistoryDto? history;
+    private AdminAiUsageDto? quota;
+    private string period = "all";
+    private string? historyError, quotaError;
+    private bool busy, disposed, historyDirty, quotaDirty;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ChangePeriodAsync(string selected)
+    {
+        if (busy || period == selected) return;
+        period = selected;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true;
+        historyError = null; quotaError = null;
+        try
+        {
+            var quotaDays = period == "all" ? 90 : int.Parse(period, System.Globalization.CultureInfo.InvariantCulture);
+            var historyTask = AdminOps.GetAiHistoryAsync(period, lifetime.Token);
+            var quotaTask = AdminOps.GetAiUsageAsync(quotaDays, lifetime.Token);
+            await Task.WhenAll(historyTask, quotaTask);
+            if (disposed) return;
+            var h = await historyTask;
+            var q = await quotaTask;
+            if (h.IsSuccess && h.Data is not null) { history = h.Data; historyDirty = true; }
+            else { history = null; historyError = h.ErrorMessage ?? "API không trả dữ liệu lịch sử."; }
+            if (q.IsSuccess && q.Data is not null) { quota = q.Data; quotaDirty = true; }
+            else { quota = null; quotaError = q.ErrorMessage ?? "API không trả dữ liệu quota."; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            if (!disposed)
+            {
+                history = null; quota = null;
+                historyError = "Không kết nối được máy chủ thống kê.";
+                quotaError = "Không kết nối được máy chủ thống kê.";
+            }
+        }
+        finally { if (!disposed) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (disposed) return;
+        if (historyDirty && history is not null)
+        {
+            historyDirty = false;
+            try { await JS.InvokeVoidAsync("scAdminOps.historyChart", historyCanvas, history.Trend, history.ChartBucket); }
+            catch (JSDisconnectedException) { }
+        }
+        if (quotaDirty && quota is not null)
+        {
+            quotaDirty = false;
+            try { await JS.InvokeVoidAsync("scAdminOps.chart", quotaCanvas, quota.Points); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private static string HistoryScope(AdminAiHistoryDto x) => x.Period == "all"
+        ? "Tất cả lượt chấm đã lưu"
+        : $"Từ {x.FromDate:dd/MM/yyyy} đến {x.ToDate:dd/MM/yyyy}";
+    private static string Bucket(DateOnly date, string unit) =>
+        date.ToString(unit == "month" ? "MM/yyyy" : "dd/MM/yyyy");
+    private static string Fmt(long n) => n.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+    private static string Pct(long part, long all) => all <= 0 ? "—" :
+        (100.0 * part / all).ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) + "%";
+    private static string VnTime(DateTime utc) =>
+        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm") + " (UTC+7)";
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

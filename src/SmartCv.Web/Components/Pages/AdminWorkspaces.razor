@@ -1,0 +1,151 @@
+@page "/admin/workspaces"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Contracts
+@inject AdminOperationsApiClient AdminOps
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Workspace & quota · SCApp</PageTitle>
+<div class="op-shell">
+    <header class="op-header">
+        <div><div class="op-eyebrow"><span class="op-dot op-violet-bg"></span> WORKSPACE GOVERNANCE</div>
+            <h1>Workspace & hạn mức</h1>
+            <p>Quản trị tài nguyên của từng không gian. Không mở CV hay đánh giá tuyển dụng.</p></div>
+        <a class="op-button op-button-plain" href="/admin/dashboard">← Dashboard</a>
+    </header>
+    <div class="op-card">
+        <form class="op-search" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <label for="op-workspace-search">Tìm workspace</label>
+            <input id="op-workspace-search" @bind="query" maxlength="60" placeholder="Tên workspace…" autocomplete="off" />
+            <button class="op-button" type="submit" disabled="@busy">Tìm kiếm</button>
+            <button class="op-button op-button-plain" type="button" disabled="@busy" @onclick="ResetSearchAsync">Xóa lọc</button>
+        </form>
+        @if (error is not null)
+        { <div class="op-alert" role="alert"><strong>Không lấy được danh sách workspace.</strong><p>@error</p><button class="op-button" @onclick="ReloadAsync">Thử lại</button></div> }
+        else if (busy && data is null) { <div class="op-loading" role="status">Đang tải workspace…</div> }
+        else if (data is { } d)
+        {
+            <div class="op-table-meta"><span>@Fmt(d.Total) workspace phù hợp</span><span>Trang @d.Page / @Math.Max(1, (int)Math.Ceiling(d.Total / (double)d.PageSize))</span></div>
+            <div class="op-table-scroll"><table class="op-table" id="op-workspace-table">
+                <thead><tr><th>Workspace</th><th>Loại</th><th>Trạng thái</th><th>AI hôm nay</th><th>CV còn lưu</th><th>Chức năng</th></tr></thead>
+                <tbody>
+                @foreach (var row in d.Items)
+                {
+                    <tr>
+                        <td><strong>@row.Name</strong><small>Mã #@row.WorkspaceId · @Fmt(row.TotalRuns) lượt chấm</small></td>
+                        <td><span class="op-mini-tag">@(row.Kind == "Personal" ? "Cá nhân" : "Nội bộ")</span></td>
+                        <td><span class="op-state @(row.IsActive ? "ok" : "off")">@(row.IsActive ? "Hoạt động" : "Đã dừng")</span></td>
+                        <td><strong>@Fmt(row.UsedAiUnitsToday)</strong><small>/ @(row.DailyAiEvaluationLimit?.ToString() ?? "Không giới hạn") lượt/ngày</small></td>
+                        <td><strong>@Fmt(row.StoredCvs)</strong><small>/ @(row.MaxCvCount?.ToString() ?? "Không giới hạn") CV</small></td>
+                        <td>@if (row.Kind == "Personal" && row.IsActive)
+                            { <button class="op-button op-button-plain op-small" @onclick="() => OpenEditor(row)">Chỉnh quota</button> }
+                            else { <span class="op-muted">Chỉ xem</span> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table></div>
+            @if (d.Items.Count == 0) { <p class="op-empty">Không có workspace phù hợp bộ lọc.</p> }
+            <div class="op-pager"><button class="op-button op-button-plain" disabled="@(busy || d.Page <= 1)" @onclick="() => PageAsync(d.Page - 1)">← Trước</button><span>20 workspace mỗi trang</span><button class="op-button op-button-plain" disabled="@(busy || (long)d.Page * d.PageSize >= d.Total)" @onclick="() => PageAsync(d.Page + 1)">Tiếp →</button></div>
+        }
+    </div>
+    <div class="op-info">Giới hạn <strong>0</strong> nghĩa là chặn lượt mới; không xóa CV hoặc lượt chấm cũ. Đơn vị AI sử dụng được tính theo sổ giữ chỗ của SCApp, không phải token nhà cung cấp.</div>
+</div>
+@if (selected is { } ws)
+{
+    <div class="op-modal-backdrop" role="presentation" @onclick="CloseEditor">
+        <section class="op-modal" role="dialog" aria-modal="true" aria-label="Thay đổi quota workspace" @onclick:stopPropagation="true">
+            <header><div><div class="op-eyebrow">THAY ĐỔI HẠN MỨC</div><h2>@ws.Name</h2><p>Workspace #@ws.WorkspaceId · cá nhân</p></div><button type="button" class="op-modal-x" aria-label="Đóng" data-op-close @onclick="CloseEditor">×</button></header>
+            @if (saveError is not null) { <p class="op-alert" role="alert">@saveError</p> }
+            @if (!confirming)
+            {
+                <div class="op-fields"><label>AI/ngày <input type="number" min="0" max="10000" @bind="aiLimit" /><small>Hiện tại: @(ws.DailyAiEvaluationLimit?.ToString() ?? "Không giới hạn"). Tối đa 10.000.</small></label>
+                <label>Số CV tối đa <input type="number" min="0" max="100000" @bind="cvLimit" /><small>Đang lưu: @Fmt(ws.StoredCvs) CV. Tối đa 100.000.</small></label>
+                <label>Lý do thay đổi <select @bind="reason"><option value="Capacity">Điều chỉnh năng lực</option><option value="Trial">Dùng thử</option><option value="Incident">Ứng phó sự cố</option><option value="Correction">Sửa cấu hình</option></select></label></div>
+                <div class="op-modal-actions"><button type="button" class="op-button op-button-plain" @onclick="CloseEditor">Hủy</button><button type="button" class="op-button" disabled="@saving" @onclick="ReviewChange">Kiểm tra thay đổi →</button></div>
+            }
+            else
+            {
+                <div class="op-review"><strong>Xác nhận cập nhật hạn mức</strong><p>AI: <b>@(ws.DailyAiEvaluationLimit?.ToString() ?? "Không giới hạn") → @aiLimit</b> lượt/ngày</p><p>CV: <b>@(ws.MaxCvCount?.ToString() ?? "Không giới hạn") → @cvLimit</b> CV</p><p>Nguyên nhân: <b>@ReasonLabel(reason)</b></p>
+                    @if (ws.StoredCvs > cvLimit || ws.UsedAiUnitsToday > aiLimit) { <p class="op-warning">Giới hạn mới thấp hơn mức đang sử dụng; dữ liệu cũ vẫn giữ nguyên, yêu cầu mới sẽ bị chặn theo quota.</p> }
+                </div>
+                <div class="op-modal-actions"><button class="op-button op-button-plain" disabled="@saving" @onclick="() => confirming = false">Quay lại</button><button class="op-button op-button-danger" disabled="@saving" @onclick="SaveAsync">@(saving ? "Đang lưu…" : "Xác nhận lưu")</button></div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private AdminWorkspacePageDto? data;
+    private AdminWorkspaceRowDto? selected;
+    private string query = "", appliedQuery = "", reason = "Capacity";
+    private string? error, saveError;
+    private int page = 1, aiLimit, cvLimit;
+    private bool busy, saving, confirming, disposed;
+    private readonly CancellationTokenSource lifecycle = new();
+    protected override Task OnInitializedAsync() => ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null;
+        try
+        {
+            var res = await AdminOps.GetWorkspacesAsync(page, appliedQuery, lifecycle.Token);
+            if (disposed) return;
+            if (res.IsSuccess) data = res.Data;
+            else { data = null; error = res.ErrorMessage ?? "Không có dữ liệu."; }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { if (!disposed) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+    private async Task SearchAsync() { page = 1; appliedQuery = query.Trim(); await ReloadAsync(); }
+    private async Task ResetSearchAsync() { query = appliedQuery = ""; page = 1; await ReloadAsync(); }
+    private async Task PageAsync(int next) { page = next; await ReloadAsync(); }
+    private async Task OpenEditor(AdminWorkspaceRowDto row)
+    {
+        if (row.Kind != "Personal" || !row.IsActive) return;
+        selected = row; aiLimit = row.DailyAiEvaluationLimit ?? 0; cvLimit = row.MaxCvCount ?? 0;
+        reason = "Capacity"; confirming = false; saveError = null;
+        try { await JS.InvokeVoidAsync("scAdminOps.lockModal", true); }
+        catch (JSDisconnectedException) { }
+    }
+    private async Task CloseEditor()
+    {
+        if (saving) return;
+        selected = null; confirming = false; saveError = null;
+        try { await JS.InvokeVoidAsync("scAdminOps.lockModal", false); }
+        catch (JSDisconnectedException) { }
+    }
+    private void ReviewChange()
+    {
+        saveError = null;
+        if (aiLimit is < 0 or > 10000 || cvLimit is < 0 or > 100000)
+        { saveError = "AI/ngày phải từ 0–10.000; CV tối đa từ 0–100.000."; return; }
+        confirming = true;
+    }
+    private async Task SaveAsync()
+    {
+        if (selected is not { } row || saving || !confirming) return;
+        saving = true; saveError = null;
+        try
+        {
+            var change = new AdminQuotaChangeRequest(row.DailyAiEvaluationLimit, row.MaxCvCount, aiLimit, cvLimit, reason);
+            var res = await AdminOps.ChangeQuotaAsync(row.WorkspaceId, change, lifecycle.Token);
+            if (disposed) return;
+            if (!res.IsSuccess) { saveError = res.StatusCode == 409 ? "Quota đã thay đổi đồng thời. Đóng hộp thoại và tải lại trước khi lưu." : res.ErrorMessage ?? "Không lưu được quota."; return; }
+            selected = null; confirming = false;
+            await JS.InvokeVoidAsync("scAdminOps.lockModal", false);
+            await ReloadAsync();
+            await JS.InvokeVoidAsync("scAdminOps.toast", res.Data?.Status == "unchanged"
+                ? "Không có thay đổi quota; không ghi nhật ký thay đổi."
+                : "Hạn mức đã cập nhật và ghi Audit Log.");
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        catch (JSDisconnectedException) { }
+        finally { saving = false; if (!disposed) await InvokeAsync(StateHasChanged); }
+    }
+    private static string ReasonLabel(string v) => v switch
+    { "Capacity" => "Điều chỉnh năng lực", "Trial" => "Dùng thử", "Incident" => "Ứng phó sự cố", "Correction" => "Sửa cấu hình", _ => "Khác" };
+    private static string Fmt(long n) => n.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}

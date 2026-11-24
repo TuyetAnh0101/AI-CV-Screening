@@ -1,4 +1,5 @@
-@page "/admin/dashboard"
+@* Legacy component kept only for B30 compatibility tests.
+   Public route /admin/dashboard is served by AdminOperationsDashboard.razor. *@
 @attribute [Authorize(Policy = AccessRules.AdminPolicy)]
 @implements IDisposable
 @using SmartCv.Core.Contracts

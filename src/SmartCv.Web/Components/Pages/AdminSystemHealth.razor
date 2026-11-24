@@ -1,0 +1,65 @@
+@page "/admin/system-health"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Contracts
+@using SmartCv.Core.Ops
+@inject HealthApiClient HealthApi
+@implements IDisposable
+<PageTitle>Trạng thái hệ thống · SCApp</PageTitle>
+<div class="op-shell">
+    <header class="op-header">
+        <div><div class="op-eyebrow"><span class="op-dot"></span> SYSTEM RELIABILITY</div>
+            <h1>Trạng thái hệ thống</h1>
+            <p>Đọc trực tiếp các phép kiểm tra sẵn có; không đánh đồng cấu hình sẵn sàng với kết nối Gemini thành công.</p></div>
+        <div class="op-toolbar"><button class="op-button op-button-plain" disabled="@busy" @onclick="ReloadAsync">↻ Kiểm tra lại</button><a class="op-button op-button-plain" href="/admin/dashboard">← Dashboard</a></div>
+    </header>
+    @if (busy && data is null) { <div class="op-loading" role="status">Đang kiểm tra các phụ thuộc…</div> }
+    else if (error is not null) { <div class="op-alert" role="alert"><strong>Không thể xác minh sức khỏe hệ thống.</strong><p>@error</p><button class="op-button" @onclick="ReloadAsync">Thử lại</button></div> }
+    else if (data is { } health)
+    {
+        <div class="op-info" role="status">
+            Kết quả kiểm tra: <strong>@(health.Status == "ok" ? "API và các phụ thuộc được báo cáo sẵn sàng" : "Có phụ thuộc cần kiểm tra")</strong>.
+            Đây là phản hồi từ endpoint readiness, không phải phép thử thực tế gửi CV/Gemini/SMTP.
+        </div>
+        <section class="op-card">
+            <div class="op-card-top"><h2>Các phụ thuộc và trạng thái</h2><span class="op-mini-tag">READINESS API</span></div>
+            <div class="op-health-grid">
+                @foreach (var check in health.Checks)
+                {
+                    <article class="op-health-row"><span class="op-health-icon">@(check.Ok ? "✓" : "!")</span>
+                        <div><h3>@Friendly(check.Name)</h3><p>@check.Message</p></div>
+                        <span class="op-state @(check.Ok ? "ok" : "off")">@(check.Ok ? "Sẵn sàng" : "Cần kiểm tra")</span>
+                    </article>
+                }
+            </div>
+        </section>
+        <section class="op-columns">
+            <div class="op-card"><h2>AI Worker</h2><p>Readiness hiện tại không chứng minh worker chấm điểm đang chạy. Trạng thái có thể xem thêm qua lịch sử lượt chấm và cấu hình <code>Scoring:WorkerEnabled</code>.</p><span class="op-state off">Chưa có heartbeat worker</span></div>
+            <div class="op-card"><h2>Google Gemini</h2><p>API key đã cấu hình không bảo đảm model hợp lệ hoặc quota nhà cung cấp còn. Hãy kiểm tra ở trang Tích hợp và lịch sử lỗi AI.</p><a class="op-link" href="/admin/integrations">Xem cấu hình provider →</a></div>
+        </section>
+    }
+</div>
+
+@code {
+    private HealthReportDto? data;
+    private string? error;
+    private bool busy, disposed;
+    private readonly CancellationTokenSource lifecycle = new();
+    protected override Task OnInitializedAsync() => ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null;
+        try
+        {
+            var res = await HealthApi.GetReadinessAsync(lifecycle.Token);
+            if (disposed) return;
+            if (res.IsSuccess) data = res.Data;
+            else { data = null; error = res.ErrorMessage ?? "Không đọc được readiness."; }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { if (!disposed) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+    private static string Friendly(string name) => name switch
+    { "database" => "Cơ sở dữ liệu và schema", "uploads" => "Kho tệp CV", "ocr" => "Tài nguyên OCR", "email" => "Cấu hình Email", _ => name };
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}
