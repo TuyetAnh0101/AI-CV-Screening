@@ -6,6 +6,7 @@
 @inject HrRecruitmentReportApiClient ReportsApi
 @inject JobApiClient JobsApi
 @inject FileDownloadService Downloads
+@inject AuthSession Session
 @inject IJSRuntime Js
 @implements IAsyncDisposable
 
@@ -14,7 +15,7 @@
         <div><div class="hrr-eyebrow">RECRUITMENT INTELLIGENCE · SCAPP</div>
             <h2 id="hrr-heading">Báo cáo tuyển dụng tổng hợp <span class="hrr-spark">✦</span></h2>
             <p>Chỉ dữ liệu workspace hiện hành · Một dòng = một lượt ứng tuyển · Không tính PromptTest.</p></div>
-        <span class="hrr-chip">EXCEL · BẢO VỆ WORKSPACE</span>
+        <span class="hrr-chip">EXCEL + PDF · WORKSPACE VERIFIED</span>
     </div>
 
     <div class="hrr-filters" aria-label="Bộ lọc báo cáo HR">
@@ -56,7 +57,7 @@
         <label class="hrr-check"><input type="checkbox" @bind="anonymous" /> <span>Ẩn danh khi xem và xuất (khuyến nghị)</span></label>
         <div class="hrr-buttons">
             <button type="button" class="hrr-btn hrr-ghost" @onclick="ResetAsync" disabled="@busy">Xóa bộ lọc</button>
-            <button type="button" class="hrr-btn hrr-primary" @onclick="ApplyAsync" disabled="@busy">@(busy ? "Đang tổng hợp…" : "Áp dụng & làm mới")</button>
+            <button type="button" class="hrr-btn hrr-primary" data-hrr-apply @onclick="ApplyAsync" disabled="@busy">@(busy ? "Đang tổng hợp…" : "Áp dụng & làm mới")</button>
         </div>
     </div>
 
@@ -65,6 +66,7 @@
     @if (!string.IsNullOrWhiteSpace(error)) { <div class="hrr-error" role="alert">@error</div> }
     @if (!string.IsNullOrWhiteSpace(notice)) { <div class="hrr-success" role="status">@notice</div> }
 
+    @if (busy) { <div class="hrr-export-note" role="status" aria-live="polite">Đang tổng hợp dữ liệu từ workspace…</div> }
     @if (summary is { } s)
     {
         <div class="hrr-metrics" aria-label="Thống kê đúng đơn vị đếm">
@@ -102,8 +104,9 @@
 
     <div class="hrr-table-head"><div><h3>Chi tiết theo lượt ứng tuyển</h3><p>Mỗi hàng là một Application; phân trang ở server theo bộ lọc.</p></div>
         <div class="hrr-buttons">
-            <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || summary is null)" @onclick="PreviewAsync">Xem trước xuất</button>
-            <button type="button" class="hrr-btn hrr-primary" disabled="@(busy || summary is null)" @onclick="DownloadAsync">Xuất Excel tổng hợp</button>
+            <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || summary is null)" @onclick="PreviewAsync">Xem phạm vi</button>
+            <button type="button" class="hrr-btn hrr-primary" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("xlsx")'>Xuất Excel</button>
+            <button type="button" class="hrr-btn hrr-pdf" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("pdf")'>Xuất PDF</button>
         </div>
     </div>
     @if (preview is { } pre)
@@ -114,12 +117,20 @@
     }
     @if (page is { } p)
     {
+        <p class="hrr-table-meta">Sắp xếp trên <strong>toàn bộ phạm vi báo cáo</strong> tại API, trước khi phân trang. Mỗi hàng là một Application.</p>
         <div class="hrr-table-scroll"><table class="hrr-table">
-            <thead><tr><th>Hồ sơ</th><th>Job</th><th>Giai đoạn</th><th>Điểm</th><th>Mức</th><th>Nguồn điểm</th><th>Đạt ngưỡng</th></tr></thead>
+            <thead><tr>
+                <th scope="col" aria-sort="@(AriaSort("applicant"))"><button type="button" class="hrr-sort" @onclick='() => SortAsync("applicant")'>Hồ sơ <span>@Indicator("applicant")</span></button></th>
+                <th scope="col" aria-sort="@(AriaSort("appliedAt"))"><button type="button" class="hrr-sort" @onclick='() => SortAsync("appliedAt")'>Ngày nộp <span>@Indicator("appliedAt")</span></button></th>
+                <th scope="col" aria-sort="@(AriaSort("job"))"><button type="button" class="hrr-sort" @onclick='() => SortAsync("job")'>Job <span>@Indicator("job")</span></button></th>
+                <th scope="col" aria-sort="@(AriaSort("stage"))"><button type="button" class="hrr-sort" @onclick='() => SortAsync("stage")'>Giai đoạn <span>@Indicator("stage")</span></button></th>
+                <th scope="col" aria-sort="@(AriaSort("score"))"><button type="button" class="hrr-sort" @onclick='() => SortAsync("score")'>Điểm <span>@Indicator("score")</span></button></th>
+                <th scope="col">Mức</th><th scope="col">Nguồn điểm</th><th scope="col">Đạt ngưỡng</th>
+            </tr></thead>
             <tbody>
             @foreach (var item in p.Items)
             {
-                <tr><td>@item.Applicant</td><td>@item.JobTitle</td><td>@item.StageText</td>
+                <tr><td>@item.Applicant</td><td>@item.AppliedAtUtc.AddHours(7).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)</td><td>@item.JobTitle</td><td>@item.StageText</td>
                     <td>@(item.FinalScore?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—")</td>
                     <td>@(item.FitLabel ?? "—")</td><td>@(item.ScoreSource ?? "Chưa có")</td><td>@(item.PassedScore switch { true => "Đạt", false => "Dưới ngưỡng", _ => "Chưa có điểm" })</td></tr>
             }
@@ -130,7 +141,32 @@
             <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || pageNumber >= p.TotalPages)" @onclick="() => ChangePageAsync(pageNumber + 1)">Trang sau</button>
         </div>
     }
-    <div class="hrr-footer">Excel tuyển dụng tổng hợp khác Excel bảng xếp hạng tại <a href="/results">Kết quả</a>. PDF chưa có API; không cung cấp nút tải PDF. Audit ghi mỗi lần xuất Excel thành công.</div>
+    @if (pendingFormat is not null && preview is { } check)
+    {
+        <div class="hrr-dialog-overlay" role="presentation">
+            <section class="hrr-dialog" role="dialog" aria-modal="true" aria-labelledby="hrr-confirm-title" aria-describedby="hrr-confirm-help">
+                <span class="hrr-dialog-kicker">SCAPP · EXPORT APPROVAL</span>
+                <h3 id="hrr-confirm-title">Xác nhận xuất @(pendingFormat == "pdf" ? "PDF" : "Excel")</h3>
+                <p id="hrr-confirm-help">Kiểm tra dữ liệu sẽ xuất. Hệ thống ghi Audit sau khi tạo file thành công; không tạo file nếu vượt giới hạn.</p>
+                <dl>
+                    <dt>Người thực hiện</dt><dd>@Exporter</dd>
+                    <dt>Workspace</dt><dd>@(Session.User?.Workspace?.Name ?? "Chưa xác định")</dd>
+                    <dt>Phạm vi</dt><dd>@pendingScope</dd>
+                    <dt>Số bản ghi</dt><dd>@check.TotalRows / tối đa @check.MaxExportRows lượt ứng tuyển</dd>
+                    <dt>Chế độ</dt><dd>@(check.Anonymous ? "Ẩn danh (mã HS-...)" : "Có thể chứa tên ứng viên")</dd>
+                    <dt>Định dạng</dt><dd>@(pendingFormat == "pdf" ? "PDF in ấn · đầy đủ các dòng trong phạm vi" : "Excel · 3 sheet tổng hợp")</dd>
+                </dl>
+                @if (!check.Anonymous) { <p class="hrr-dialog-warning">File có thể chứa dữ liệu cá nhân. Chỉ chia sẻ với người được phép trong workspace.</p> }
+                @if (!check.CanExport) { <p class="hrr-dialog-warning">@check.BlockReason</p> }
+                <div class="hrr-dialog-actions">
+                    <button type="button" class="hrr-btn hrr-ghost" data-hrr-dialog-close disabled="@busy" @onclick="CloseExport">Hủy</button>
+                    <button type="button" class="hrr-btn @(pendingFormat == "pdf" ? "hrr-pdf" : "hrr-primary")"
+                            disabled="@(busy || !check.CanExport)" @onclick="ConfirmExportAsync">@(busy ? "Đang tạo file..." : "Xác nhận & tải file")</button>
+                </div>
+            </section>
+        </div>
+    }
+    <div class="hrr-footer">Excel và PDF tổng hợp sử dụng cùng bộ lọc, quyền workspace và Audit. Xuất ranking tại <a href="/results">Kết quả</a> là nghiệp vụ khác.</div>
 </section>
 
 @code {
@@ -143,6 +179,19 @@
     private string evaluationInput = "all";
     private bool anonymous = true;
     private int pageNumber = 1;
+    private string sortKey = "appliedAt";
+    private bool descending = true;
+    private string? pendingFormat;
+    private string pendingQuery = "";
+    private string pendingScope = "";
+    private IJSObjectReference? premiumModule;
+    private string Exporter => Session.User?.FullName ?? "HR (phiên hiện hành)";
+    private string Indicator(string key) => sortKey != key ? "↕" : descending ? "↓" : "↑";
+    private string AriaSort(string key) => sortKey != key ? "none" : descending ? "descending" : "ascending";
+    private string ScopeDescription => $"Job: {(jobIdInput == "" ? "Tất cả" : jobOptions.FirstOrDefault(j => j.JobId.ToString(CultureInfo.InvariantCulture) == jobIdInput)?.Title ?? jobIdInput)}; " +
+        $"Run: {(runIdInput == "" ? "Screening mới nhất / hồ sơ" : runIdInput)}; " +
+        $"Từ: {(fromInput == "" ? "Tất cả" : fromInput)}; Đến: {(toInput == "" ? "Tất cả" : toInput)}; " +
+        $"Giai đoạn: {stageInput}; Kết quả: {evaluationInput}; Sắp xếp: {sortKey} {(descending ? "giảm" : "tăng")}";
     private bool busy;
     private string? error;
     private string? notice;
@@ -166,6 +215,8 @@
         {
             module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/hr-report-ui.js");
             await module.InvokeVoidAsync("setup", "hr-report-center");
+            premiumModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/hr-report-premium.js");
+            await premiumModule.InvokeVoidAsync("attach", "hr-report-center");
         }
         catch (Exception e) when (e is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException) { }
     }
@@ -186,13 +237,14 @@
         }
         if (fromInput.Length > 0 && toInput.Length > 0 && string.CompareOrdinal(fromInput, toInput) > 0) { error = "Ngày bắt đầu không thể sau ngày kết thúc."; return false; }
         query = HrRecruitmentReportApiClient.Query(job, run, fromInput, toInput, stageInput, evaluationInput, pageNumber, 20, anonymous);
+        query += "&sort=" + sortKey + "&direction=" + (descending ? "desc" : "asc");
         return true;
     }
 
     private async Task LoadAsync()
     {
         if (busy) return;
-        busy = true; error = null; notice = null; preview = null; summary = null; page = null;
+        busy = true; error = null; notice = null; preview = null; pendingFormat = null; summary = null; page = null;
         try
         {
             if (!TryQuery(out var query)) return;
@@ -221,11 +273,20 @@
         await LoadAsync();
     }
     private async Task ApplyAsync() { pageNumber = 1; await LoadAsync(); }
+    private async Task SortAsync(string key)
+    {
+        if (busy || !new[] { "applicant", "job", "stage", "score", "appliedAt" }.Contains(key)) return;
+        if (sortKey == key) descending = !descending;
+        else { sortKey = key; descending = key is "score" or "appliedAt"; }
+        pageNumber = 1;
+        await LoadAsync();
+    }
     private async Task ChangePageAsync(int next) { pageNumber = next; await LoadAsync(); }
     private async Task ResetAsync()
     {
         jobIdInput = runIdInput = fromInput = toInput = "";
         stageInput = evaluationInput = "all"; anonymous = true; pageNumber = 1;
+        sortKey = "appliedAt"; descending = true;
         await LoadAsync();
     }
     private async Task PreviewAsync()
@@ -243,36 +304,69 @@
         catch (Exception) { error = "Không xem trước được báo cáo."; }
         finally { busy = false; await InvokeAsync(StateHasChanged); }
     }
-    private async Task DownloadAsync()
+    private async Task OpenExportAsync(string format)
     {
-        if (busy) return;
-        busy = true; error = null; notice = null;
+        if (busy || summary is null || format is not ("xlsx" or "pdf")) return;
+        busy = true; error = null; notice = null; pendingFormat = null;
         try
         {
             if (!TryQuery(out var query)) return;
             var check = await ReportsApi.PreviewAsync(query, lifetime.Token);
-            if (!check.IsSuccess || check.Data is null) { error = check.ErrorMessage ?? "Không kiểm tra được giới hạn xuất."; return; }
+            if (!check.IsSuccess || check.Data is null) { error = check.ErrorMessage ?? "Không xác minh được phạm vi xuất."; return; }
             preview = check.Data;
-            if (!preview.CanExport) { error = preview.BlockReason ?? "Vượt giới hạn xuất."; return; }
-            var file = await ReportsApi.ExportAsync(query, lifetime.Token);
-            if (!file.IsSuccess || file.Data is null) { error = file.ErrorMessage ?? "Xuất Excel thất bại."; return; }
-            await using (file.Data)
-            {
-                // Existing authenticated Excel stream helper; no ranking API is called.
-                await Downloads.SaveRankingAsync(file.Data, lifetime.Token);
-            }
-            notice = "Đã gửi file Excel đến trình duyệt. Hãy kiểm tra tệp đã tải.";
+            pendingFormat = format;
+            pendingQuery = query; // frozen exactly as previewed; no hidden filter changes
+            pendingScope = ScopeDescription;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception) { error = "Chưa thể tải Excel. Vui lòng thử lại."; }
+        catch (Exception) { error = "Không kiểm tra được phạm vi xuất."; }
         finally { busy = false; await InvokeAsync(StateHasChanged); }
     }
+
+    private void CloseExport() { if (!busy) { pendingFormat = null; pendingQuery = ""; } }
+
+    private async Task ConfirmExportAsync()
+    {
+        if (busy || pendingFormat is null || preview?.CanExport != true) return;
+        var format = pendingFormat;
+        var query = pendingQuery;
+        busy = true; error = null; notice = null;
+        try
+        {
+            // Revalidate the selected cohort immediately before requesting the file.
+            var live = await ReportsApi.PreviewAsync(query, lifetime.Token);
+            if (!live.IsSuccess || live.Data is null) { error = live.ErrorMessage ?? "Phạm vi xuất không còn hợp lệ."; return; }
+            preview = live.Data;
+            if (!preview.CanExport) { error = preview.BlockReason ?? "Vượt giới hạn xuất."; return; }
+            var file = format == "pdf"
+                ? await ReportsApi.ExportPdfAsync(query, lifetime.Token)
+                : await ReportsApi.ExportAsync(query, lifetime.Token);
+            if (!file.IsSuccess || file.Data is null) { error = file.ErrorMessage ?? "Không xuất được báo cáo."; return; }
+            await using (file.Data)
+            {
+                if (format == "pdf") await Downloads.SaveReportPdfAsync(file.Data, lifetime.Token);
+                else await Downloads.SaveRankingAsync(file.Data, lifetime.Token);
+            }
+            pendingFormat = null;
+            pendingQuery = "";
+            notice = "Đã gửi file báo cáo đến trình duyệt. Kiểm tra thư mục Downloads và Audit Log.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { error = "Không hoàn thành xuất báo cáo. Kiểm tra kết nối và thử lại."; }
+        finally { busy = false; await InvokeAsync(StateHasChanged); }
+    }
+
     public async ValueTask DisposeAsync()
     {
         lifetime.Cancel(); lifetime.Dispose();
         if (module is not null)
         {
             try { await module.InvokeVoidAsync("dispose", "hr-report-center"); await module.DisposeAsync(); }
+            catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException or ObjectDisposedException) { }
+        }
+        if (premiumModule is not null)
+        {
+            try { await premiumModule.InvokeVoidAsync("detach", "hr-report-center"); await premiumModule.DisposeAsync(); }
             catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException or ObjectDisposedException) { }
         }
     }

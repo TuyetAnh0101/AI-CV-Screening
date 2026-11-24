@@ -11,7 +11,7 @@ public static class HrRecruitmentReportExcelWriter
     public const string ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     public static byte[] Write(HrReportSummaryDto summary, IReadOnlyList<HrReportRowDto> rows,
-        string scope, bool anonymous, DateTime utcNow)
+        string scope, bool anonymous, DateTime utcNow, string? actor = null)
     {
         using var book = new XLWorkbook();
         book.Properties.Author = "SCApp";
@@ -22,6 +22,7 @@ public static class HrRecruitmentReportExcelWriter
         overview.Cell(2, 1).Value = Safe(scope);
         overview.Cell(3, 1).Value = $"Xuất lúc {utcNow.AddHours(7):dd/MM/yyyy HH:mm} UTC+7; ẩn danh: {(anonymous ? "Có" : "Không")}";
         overview.Cell(4, 1).Value = "Kết quả AI hỗ trợ, quyết định tuyển dụng thuộc HR. Không bao gồm PromptTest.";
+        overview.Cell(5, 1).Value = $"Người xuất: {Safe(actor)}; tổng số dòng: {rows.Count}; chế độ ẩn danh: {(anonymous ? "Có" : "Không")}";
         var metrics = new (string Label, object Value)[]
         {
             ("Lượt ứng tuyển", summary.Applications),

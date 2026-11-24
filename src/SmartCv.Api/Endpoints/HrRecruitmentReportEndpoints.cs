@@ -20,6 +20,7 @@ public static class HrRecruitmentReportEndpoints
         group.MapGet("/rows", RowsAsync).WithName("HrRecruitmentReportRows");
         group.MapGet("/preview", PreviewAsync).WithName("HrRecruitmentReportPreview");
         group.MapGet("/export", ExportAsync).WithName("HrRecruitmentReportExcel");
+        group.MapGet("/export/pdf", ExportPdfAsync).WithName("HrRecruitmentReportPdf");
         return app;
     }
 
@@ -39,7 +40,8 @@ public static class HrRecruitmentReportEndpoints
         var (rows, status, error) = await HrReportReader.ReadAsync(db, filter, ct);
         if (rows is null) return Problem(status, "Không thể tải bảng", error);
         var count = rows.Count;
-        var items = rows.Skip((long)(filter.Page - 1) * filter.PageSize > count ? count : (filter.Page - 1) * filter.PageSize)
+        var ordered = HrReportSort.Order(rows, filter.Sort, filter.Direction == "desc");
+        var items = ordered.Skip((long)(filter.Page - 1) * filter.PageSize > count ? count : (filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize).Select(r => HrReportRollup.Row(r, filter.Anonymous)).ToArray();
         return Results.Ok(new HrReportPageDto(filter.Page, filter.PageSize, count,
             (int)Math.Ceiling((decimal)count / filter.PageSize), filter.Anonymous, items));
@@ -70,17 +72,57 @@ public static class HrRecruitmentReportEndpoints
         if (rows.Count > HrReportFilter.MaxExportRows)
             return Problem(413, "Báo cáo vượt giới hạn", $"Tối đa {HrReportFilter.MaxExportRows} dòng. Thu hẹp Job hoặc thời gian.");
         var summary = HrReportRollup.Summary(rows);
-        var detail = rows.Select(x => HrReportRollup.Row(x, filter.Anonymous)).ToArray();
+        var ordered = HrReportSort.Order(rows, filter.Sort, filter.Direction == "desc");
+        var detail = ordered.Select(x => HrReportRollup.Row(x, filter.Anonymous)).ToArray();
         var now = time.GetUtcNow().UtcDateTime;
-        var file = HrRecruitmentReportExcelWriter.Write(summary, detail, filter.Scope, filter.Anonymous, now);
+        var exporter = http.User.FindFirst("name")?.Value;
+        if (string.IsNullOrWhiteSpace(exporter)) return Problem(403, "Không xác định người xuất", "Cần phiên HR hợp lệ để xuất.");
+        var file = HrRecruitmentReportExcelWriter.Write(summary, detail, filter.Scope, filter.Anonymous, now, exporter);
         // Do not use ExportLogs: that schema requires a single RunId+JobId, not a multi-job cohort.
-        audit.Stage(db, "hr.recruitment_report_exported", null, http.User, outcome: "AccessGranted");
+        var excelAudit = audit.Stage(db, "hr.recruitment_report_exported", null, http.User, outcome: "AccessGranted");
+        excelAudit.SafeSummary = AuditSummary("Excel", rows.Count, filter);
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
         audit.ConfirmCommitted();
         return Results.File(file, HrRecruitmentReportExcelWriter.ContentType,
             HrRecruitmentReportExcelWriter.Filename(now));
     }
+
+    /// <summary>PDF of the same authorized cohort and scope as Excel; a separate audited export action.</summary>
+    private static async Task<IResult> ExportPdfAsync(HttpRequest request, HttpContext http,
+        SmartCvDbContext db, AuditTrail audit, TimeProvider time, CancellationToken ct)
+    {
+        var (filter, invalid) = HrReportFilter.Parse(request.Query);
+        if (filter is null) return Problem(400, "Bộ lọc không hợp lệ", invalid);
+        await using var tx = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct) : null;
+        var (rows, status, error) = await HrReportReader.ReadAsync(db, filter, ct);
+        if (rows is null) return Problem(status, "Không thể xuất PDF", error);
+        if (rows.Count > HrReportFilter.MaxExportRows)
+            return Problem(413, "Báo cáo vượt giới hạn", $"Tối đa {HrReportFilter.MaxExportRows} dòng. Thu hẹp Job hoặc thời gian.");
+        var ordered = HrReportSort.Order(rows, filter.Sort, filter.Direction == "desc");
+        var detail = ordered.Select(x => HrReportRollup.Row(x, filter.Anonymous)).ToArray();
+        var now = time.GetUtcNow().UtcDateTime;
+        var actor = http.User.FindFirst("name")?.Value;
+        if (string.IsNullOrWhiteSpace(actor)) return Problem(403, "Không xác định người xuất", "Cần phiên HR hợp lệ để xuất.");
+        // Render before writing the mandatory audit event; never report success for a failed PDF.
+        var bytes = HrRecruitmentReportPdfWriter.Write(HrReportRollup.Summary(rows), detail,
+            filter.Scope, filter.Anonymous, actor, now);
+        var pdfAudit = audit.Stage(db, "hr.recruitment_report_pdf_exported", null, http.User, outcome: "AccessGranted");
+        pdfAudit.SafeSummary = AuditSummary("PDF", rows.Count, filter);
+        await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
+        audit.ConfirmCommitted();
+        return Results.File(bytes, HrRecruitmentReportPdfWriter.ContentType,
+            HrRecruitmentReportPdfWriter.Filename(now));
+    }
+
+    // Sanitized, bounded, payload-free details; AuditEvents.SafeSummary is nvarchar(300).
+    private static string AuditSummary(string format, int rows, HrReportFilter filter) =>
+        $"Xuất {format} tuyển dụng; {rows} Application; Job={filter.JobId?.ToString() ?? "all"}; " +
+        $"Run={filter.RunId?.ToString() ?? "latest"}; Stage={filter.Stage}; Eval={filter.Evaluation}; " +
+        $"Ẩn danh={filter.Anonymous}; Từ={filter.Period.From?.ToString("yyyy-MM-dd") ?? "all"}; " +
+        $"Đến={filter.Period.To?.ToString("yyyy-MM-dd") ?? "all"}";
 
     private static IResult Problem(int status, string title, string? detail) =>
         Results.Problem(statusCode: status, title: title, detail: detail,

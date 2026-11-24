@@ -49,6 +49,26 @@ public sealed class FileDownloadService : IAsyncDisposable
         using var stream = new DotNetStreamReference(file.Content, leaveOpen: true);
         await module.InvokeAsync<bool>("open", ct, stream, file.ContentType, file.FileName, false);
     }
+    /// <summary>Dedicated authorized report download; independent of CV preview privacy toggle.</summary>
+    public async Task SaveReportPdfAsync(DownloadedFile file, CancellationToken ct = default)
+    {
+        var token = session.Token;
+        void Check()
+        {
+            ct.ThrowIfCancellationRequested();
+            if (disposed || token != session.Token || !session.IsSignedIn || !session.IsVerified || session.MustChangePassword)
+                throw new InvalidOperationException("Phiên đăng nhập đã thay đổi.");
+        }
+        Check();
+        if (file.ContentType != "application/pdf" || !file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Máy chủ chưa cung cấp file PDF hợp lệ.");
+        importing ??= js.InvokeAsync<IJSObjectReference>("import", "./js/smartcv-files.js").AsTask();
+        module = await importing;
+        Check();
+        using var stream = new DotNetStreamReference(file.Content, leaveOpen: true);
+        await module.InvokeAsync<bool>("open", ct, stream, file.ContentType, file.FileName, false);
+    }
+
     private void Navigated(object? sender, LocationChangedEventArgs args) => _ = CloseAsync();
     private void SessionChanged() { if (!session.IsSignedIn || !session.IsVerified || session.MustChangePassword) _ = CloseAsync(); }
     private void PrivacyChanged() { if (privacy.Enabled) _ = CloseAsync(); }

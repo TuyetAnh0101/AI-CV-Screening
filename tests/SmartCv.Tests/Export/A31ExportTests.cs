@@ -125,7 +125,7 @@ public class A31ExportTests
     {
         using var factory = Factory(maxRows: 1); var actor = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
         var id = await Seed(factory); var running = await Seed(factory, "Running"); using var http = A29AuthorizationTests.Client(factory, actor);
-        foreach (var query in new[] { "format=docx", "format=pdf", "jobId=0", "jobId=abc", "stage=Hired", "fit=xyz", "anonymous=1", "search=", "search=" + new string('a', 101), "fit=all&fit=pass", "actor=forged" })
+        foreach (var query in new[] { "format=docx", "jobId=0", "jobId=abc", "stage=Hired", "fit=xyz", "anonymous=1", "search=", "search=" + new string('a', 101), "fit=all&fit=pass", "actor=forged" })
         {
             using var response = await http.GetAsync($"/api/runs/{id}/ranking/export?{query}");
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -156,7 +156,7 @@ public class A31ExportTests
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await http.GetAsync("/api/exports")).StatusCode);
         var settings = (await http.GetFromJsonAsync<ExportSettingsDto>("/api/exports/settings"))!;
-        Assert.False(settings.CanViewLogs); Assert.False(settings.PdfEnabled); Assert.True(settings.CanExport);
+        Assert.False(settings.CanViewLogs); Assert.True(settings.PdfEnabled); Assert.Contains("pdf", settings.Formats); Assert.True(settings.CanExport);
     }
 
     [Fact]

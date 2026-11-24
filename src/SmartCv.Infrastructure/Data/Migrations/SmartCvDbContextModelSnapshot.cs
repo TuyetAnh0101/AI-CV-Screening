@@ -1126,7 +1126,7 @@ namespace SmartCv.Infrastructure.Data.Migrations
 
                             t.HasCheckConstraint("CK_ExportLogs_Fit", "[Fit] COLLATE Latin1_General_100_BIN2 IN ('all','pass','notpass','unscored','excellent','good','potential','poor','issue')");
 
-                            t.HasCheckConstraint("CK_ExportLogs_Format", "[Format] COLLATE Latin1_General_100_BIN2 = 'xlsx'");
+                            t.HasCheckConstraint("CK_ExportLogs_Format", "[Format] COLLATE Latin1_General_100_BIN2 IN ('xlsx','pdf')");
 
                             t.HasCheckConstraint("CK_ExportLogs_Rows", "[RowCount] > 0 AND [RowCount] <= 5000");
 

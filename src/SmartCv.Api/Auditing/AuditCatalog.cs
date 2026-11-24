@@ -56,6 +56,7 @@ public static class AuditCatalog
         Add("POST /api/runs", "runs.started", "Ai", "EvaluationRun", "Khởi tạo lượt chấm CV", null);
         Add("GET /api/runs/{id:int}/ranking/export", "runs.ranking_exported", "Recruitment", "EvaluationRun", "Chuẩn bị và cấp quyền xuất bảng xếp hạng", required: true);
         Add("GET /api/hr/reports/export", "hr.recruitment_report_exported", "Recruitment", "HrReport", "Xuất báo cáo tuyển dụng tổng hợp", null, required: true);
+        Add("GET /api/hr/reports/export/pdf", "hr.recruitment_report_pdf_exported", "Recruitment", "HrReport", "Xuất báo cáo PDF tuyển dụng tổng hợp", null, required: true);
         Add("POST /api/prompts", "prompts.created", "Ai", "PromptVersion", "Tạo phiên bản System Prompt", null);
         Add("POST /api/prompts/{id:int}/activate", "prompts.activated", "Ai", "PromptVersion", "Kích hoạt phiên bản System Prompt");
         Add("POST /api/prompts/assembled-preview", "prompts.previewed", "Ai", "PromptVersion", "Xem trước nội dung ghép prompt", null);

@@ -53,6 +53,7 @@
             @if (state != ViewState.NoRuns)
             {
                 <div class="hero-actions">
+                    <a href="/reports/recruitment" class="btn sc-btn-secondary">↗ Báo cáo tuyển dụng</a>
                     <button type="button" class="btn sc-btn-secondary" @onclick="RefreshAsync" disabled="@(state == ViewState.Loading || stageInteractionBusy)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
                         @(state == ViewState.Loading ? "Đang tải..." : "Làm mới")

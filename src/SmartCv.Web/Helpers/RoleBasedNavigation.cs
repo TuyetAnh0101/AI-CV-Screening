@@ -69,7 +69,7 @@ public static class RoleBasedNavigation
         path == "/admin" || path.StartsWith("/admin/", StringComparison.Ordinal);
 
     private static bool IsBusinessPath(string path) =>
-        new[] { "/upload", "/candidates", "/cvs", "/jobs", "/results", "/runs", "/prompts", "/evaluation-sets" }
+        new[] { "/upload", "/candidates", "/cvs", "/jobs", "/results", "/runs", "/prompts", "/evaluation-sets", "/reports/recruitment" }
             .Any(prefix => path == prefix || path.StartsWith(prefix + "/", StringComparison.Ordinal));
 
     public static string TopbarTitle(ClaimsPrincipal? user) => PersonaFor(user) switch
@@ -127,7 +127,7 @@ public static class RoleBasedNavigation
     [
         new(personal ? "Không gian của tôi" : "Tổng quan tuyển dụng", [
             new(personal ? "Dashboard cá nhân" : "Dashboard tuyển dụng", "dashboard", DashboardIcon, NavLinkMatch.All),
-            new(personal ? "Báo cáo & dữ liệu của tôi" : "Báo cáo tuyển dụng", "reports", ReportIcon, NavLinkMatch.All)
+            new(personal ? "Báo cáo & dữ liệu của tôi" : "Báo cáo tuyển dụng", personal ? "reports" : "reports/recruitment", ReportIcon, NavLinkMatch.All)
         ]),
         new("Quản lý tuyển dụng", [
             new("Vị trí tuyển dụng", "jobs", JobIcon),

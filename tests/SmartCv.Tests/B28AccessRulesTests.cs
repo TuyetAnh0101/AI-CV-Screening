@@ -237,7 +237,7 @@ public class B28AccessRulesTests
     {
         var hrefs = AppNavigation.For(ValidHr()).SelectMany(g => g.Items).Select(i => i.Href).ToList();
         Assert.Contains("dashboard", hrefs);
-        Assert.Contains("reports", hrefs);
+        Assert.Contains("reports/recruitment", hrefs);
         Assert.Contains("jobs", hrefs);
         Assert.Contains("results", hrefs);
         Assert.DoesNotContain("account", hrefs);
