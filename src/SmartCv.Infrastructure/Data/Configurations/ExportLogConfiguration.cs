@@ -12,7 +12,7 @@ public sealed class ExportLogConfiguration : IEntityTypeConfiguration<ExportLog>
         {
             t.HasTrigger("TR_ExportLogs_NoChange"); t.UseSqlOutputClause(false);
             t.HasCheckConstraint("CK_ExportLogs_Rows", "[RowCount] > 0 AND [RowCount] <= 5000");
-            t.HasCheckConstraint("CK_ExportLogs_Format", "[Format] COLLATE Latin1_General_100_BIN2 = 'xlsx'");
+            t.HasCheckConstraint("CK_ExportLogs_Format", "[Format] COLLATE Latin1_General_100_BIN2 IN ('xlsx','pdf')");
             t.HasCheckConstraint("CK_ExportLogs_Stage", "[Stage] COLLATE Latin1_General_100_BIN2 IN ('all','New','Reviewing','Shortlisted','Interview','Rejected','OnHold')");
             t.HasCheckConstraint("CK_ExportLogs_Fit", "[Fit] COLLATE Latin1_General_100_BIN2 IN ('all','pass','notpass','unscored','excellent','good','potential','poor','issue')");
         });

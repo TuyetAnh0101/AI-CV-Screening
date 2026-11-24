@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCv.Api.Auditing;
 using SmartCv.Api.Auth;
+using SmartCv.Api.Reports;
 using SmartCv.Core.Auditing;
 using SmartCv.Core.Constants;
 using SmartCv.Core.Contracts;
@@ -23,7 +24,7 @@ public static class ExportEndpoints
         if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled) return app;
         var group = app.MapGroup("/api/exports").WithTags("Export");
         group.MapGet("/settings", (HttpContext http, IOptions<ExportOptions> options) => Results.Ok(new ExportSettingsDto
-            { MaxRows = options.Value.MaxRows, CanViewLogs = http.User.IsAdmin() })).WithName("ExportSettings")
+            { MaxRows = options.Value.MaxRows, CanViewLogs = http.User.IsAdmin(), PdfEnabled = true, Formats = ["xlsx", "pdf"] })).WithName("ExportSettings")
             .RequireAuthorization(AuthPolicies.BusinessOperator);
         group.MapGet("/", ListAsync).RequireAuthorization(AuthPolicies.SystemAdmin).WithName("ListExports");
         app.MapGet("/api/runs/{id:int}/ranking/export", DownloadAsync).WithTags("Export").WithName("ExportRanking").RequireAuthorization(AuthPolicies.BusinessOperator)
@@ -46,7 +47,6 @@ public static class ExportEndpoints
         if (id <= 0) return Problem(400, "export_invalid_id", "Mã lượt chấm phải là số nguyên dương.");
         var (query, errors) = RankingExportQuery.Parse(Input(http));
         if (query is null) return Invalid(errors);
-        if (query.Format == "pdf") return Problem(400, "export_pdf_disabled", "Chưa bật xuất PDF. Hãy chọn Excel.");
         try
         {
             // Stable read of scores, current HR stages, flags and skills, without requiring SNAPSHOT DB configuration.
@@ -74,7 +74,9 @@ public static class ExportEndpoints
                     g => string.Join(", ", g.Select(s => s.DisplayName).Distinct().OrderBy(s => s, StringComparer.Ordinal)));
             var now = clock.GetUtcNow().UtcDateTime;
             ct.ThrowIfCancellationRequested();
-            var bytes = ExcelRankingWriter.Write(ranking, rows, skills, query, http.User.ActorName(), now);
+            var bytes = query.Format == "pdf"
+                ? RankingPdfWriter.Write(ranking, rows, skills, query, http.User.ActorName(), now)
+                : ExcelRankingWriter.Write(ranking, rows, skills, query, http.User.ActorName(), now);
             ct.ThrowIfCancellationRequested();
             // One transaction and one SaveChanges for A31 metadata + B43's verified actor/time event.
             var action = audit.Stage(db, "runs.ranking_exported", id.ToString(CultureInfo.InvariantCulture), http.User, outcome: "AccessGranted");
@@ -87,7 +89,9 @@ public static class ExportEndpoints
             await db.SaveChangesAsync(ct);
             if (tx is not null) await tx.CommitAsync(ct);
             audit.ConfirmCommitted();
-            return Results.File(bytes, ExcelRankingWriter.ContentType, ExcelRankingWriter.FileName(id, ranking.JobId, now));
+            return query.Format == "pdf"
+                ? Results.File(bytes, RankingPdfWriter.ContentType, RankingPdfWriter.FileName(id, ranking.JobId, now))
+                : Results.File(bytes, ExcelRankingWriter.ContentType, ExcelRankingWriter.FileName(id, ranking.JobId, now));
         }
         catch (Exception error) when (AuthProblems.IsDatabaseFailure(error))
         {

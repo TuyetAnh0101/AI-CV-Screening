@@ -18,7 +18,7 @@ else
 <div class="dashboard" data-interactive="@RendererInfo.IsInteractive.ToString().ToLowerInvariant()" aria-busy="@(workspace.Loading ? "true" : "false")">
     <header class="dashboard-heading">
         <div><p class="eyebrow">@(IsPersonal ? "Không gian cá nhân" : "Không gian tuyển dụng nội bộ")</p><h1>@(IsPersonal ? "Tuyển dụng của tôi" : "Tổng quan tuyển dụng")</h1><p>@(IsPersonal ? "Quản lý CV, công việc, quota và đánh giá trong workspace của riêng bạn." : "Theo dõi hồ sơ, tiến độ và những quyết định cần ưu tiên trong workspace nội bộ.")</p></div>
-        <div class="heading-actions"><button type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button><a href="/upload" class="btn sc-btn-primary"><span aria-hidden="true">+</span> Tải CV lên</a></div>
+        <div class="heading-actions"><a href="/reports/recruitment" class="btn sc-btn-secondary">↗ Báo cáo tuyển dụng</a><button type="button" class="btn sc-btn-secondary" disabled="@workspace.Loading" @onclick="RefreshAsync"><span aria-hidden="true">↻</span> Làm mới</button><a href="/upload" class="btn sc-btn-primary"><span aria-hidden="true">+</span> Tải CV lên</a></div>
     </header>
     <RoleWorkspacePanel />
     <OnboardingChecklist />

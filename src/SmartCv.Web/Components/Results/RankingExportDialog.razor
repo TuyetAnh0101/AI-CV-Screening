@@ -14,8 +14,8 @@
             </label>
             <p class="export-help">@(scope == RankingExportScope.Shortlisted ? "Hồ sơ đã được HR chuyển sang Qua vòng CV, không phải dự đoán Đạt của AI." : scope == RankingExportScope.All ? "Toàn bộ hồ sơ trong vị trí và lượt chấm này; bỏ qua bộ lọc của bảng." : "Giữ tìm kiếm, dự đoán AI, giai đoạn, Cần xem kỹ và Cờ HR đang áp dụng trên bảng.")</p>
             <div class="export-field"><span id="export-format-label">Định dạng</span><div class="export-formats" role="radiogroup" aria-labelledby="export-format-label">
-                <label class="format-option selected"><input type="radio" name="export-format" checked value="xlsx" />Excel <small>.xlsx</small></label>
-                <label class="format-option unavailable"><input type="radio" name="export-format" disabled value="pdf" />PDF <small>Chưa hỗ trợ</small></label>
+                <label class="format-option @(format == "xlsx" ? "selected" : "")"><input type="radio" name="export-format" checked="@(format == "xlsx")" value="xlsx" @onchange="FormatChangedAsync" />Excel <small>.xlsx</small></label>
+                <label class="format-option @(!PdfAvailable ? "unavailable" : format == "pdf" ? "selected" : "")"><input type="radio" name="export-format" checked="@(format == "pdf")" disabled="@(!PdfAvailable)" value="pdf" @onchange="FormatChangedAsync" />PDF <small>@(PdfAvailable ? ".pdf" : "Chưa hỗ trợ")</small></label>
             </div></div>
             <label class="export-privacy"><input id="export-anonymous" type="checkbox" checked="@anonymous" @onchange="AnonymousChangedAsync" /><span>Ẩn danh ứng viên<small>@(anonymous ? "Dùng bí danh; không xuất tên và tên file CV." : "File sẽ chứa thông tin nhận diện ứng viên. Cân nhắc nơi lưu và người nhận.")</small></span></label>
         </fieldset>
@@ -35,6 +35,8 @@
     [Parameter, EditorRequired] public RankingExportContext Context { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
     private RankingExportScope scope = RankingExportScope.Shortlisted;
+    private string format = "xlsx";
+    private bool PdfAvailable => settings?.PdfEnabled == true && settings.Formats.Contains("pdf");
     private bool anonymous = true, checking, downloading, disposed, retryable;
     private ExportSettingsDto? settings;
     private RankingExportPreviewDto? preview;
@@ -66,6 +68,14 @@
         if (downloading || !Enum.TryParse<RankingExportScope>(e.Value?.ToString(), out var value) || !Enum.IsDefined(value)) return;
         scope = value; await PreviewAsync();
     }
+    private async Task FormatChangedAsync(ChangeEventArgs e)
+    {
+        var selected = e.Value?.ToString();
+        if (downloading || selected is not ("xlsx" or "pdf") || settings?.CanExport != true ||
+            !settings.Formats.Contains(selected) || (selected == "pdf" && !settings.PdfEnabled)) return;
+        format = selected;
+        await PreviewAsync();
+    }
     private async Task AnonymousChangedAsync(ChangeEventArgs e) { if (!downloading) { anonymous = e.Value is true; await PreviewAsync(); } }
     private async Task PreviewAsync()
     {
@@ -77,6 +87,10 @@
         {
             var (query, validation) = Context.Build(scope, anonymous);
             if (query is null) { error = validation; return; }
+            if (format is not ("xlsx" or "pdf") || settings is null ||
+                !settings.Formats.Contains(format) || (format == "pdf" && !settings.PdfEnabled))
+            { error = "Máy chủ chưa hỗ trợ định dạng xuất đã chọn."; return; }
+            query = query with { Format = format };
             if (settings is null || !settings.CanExport) { error = "Chưa kiểm tra được quyền xuất. Hãy thử kiểm tra lại."; retryable = true; return; }
             if (!settings.Stages.Contains(query.Stage) || !settings.Fits.Contains(query.Fit)) { error = "Máy chủ chưa hỗ trợ bộ lọc này. Hãy chọn phạm vi khác; hệ thống không tự mở rộng phạm vi xuất."; return; }
             var result = await ExportApi.PreviewAsync(Context.RunId, query, ct);
@@ -117,7 +131,8 @@
             if (!result.IsSuccess) { error = RankingExportContext.Error(result); retryable = true; return; }
             await using var file = result.Data!;
             if (disposed || token != Session.Token || !Session.IsVerified || Session.MustChangePassword) return;
-            await Files.SaveRankingAsync(file, lifetime.Token);
+            if (query.Format == "pdf") await Files.SaveReportPdfAsync(file, lifetime.Token);
+            else await Files.SaveRankingAsync(file, lifetime.Token);
             if (!disposed) success = $"Đã chuyển file {file.FileName} tới trình duyệt.";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

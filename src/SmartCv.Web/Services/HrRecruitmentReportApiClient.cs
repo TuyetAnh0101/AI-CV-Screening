@@ -35,4 +35,6 @@ public sealed class HrRecruitmentReportApiClient(HttpClient http, ILogger<HrRecr
         GetPrivateAsync<HrReportPreviewDto>(Root + "/preview" + query, "HR recruitment report preview", ct);
     public Task<ApiResult<DownloadedFile>> ExportAsync(string query, CancellationToken ct = default) =>
         GetFileAsync(Root + "/export" + query, ct);
+    public Task<ApiResult<DownloadedFile>> ExportPdfAsync(string query, CancellationToken ct = default) =>
+        GetFileAsync(Root + "/export/pdf" + query, ct);
 }

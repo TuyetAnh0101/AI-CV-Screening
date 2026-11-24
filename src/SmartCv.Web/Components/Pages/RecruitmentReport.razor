@@ -1,0 +1,25 @@
+@page "/reports/recruitment"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
+@using SmartCv.Web.Components.Reports
+@inject AuthSession Session
+
+<PageTitle>Báo cáo tuyển dụng · SCApp</PageTitle>
+
+<main class="hrrv-page" aria-labelledby="hrrv-title">
+    <nav class="hrrv-breadcrumb" aria-label="Đường dẫn trang">
+        <a href="/dashboard">Dashboard</a><span aria-hidden="true">/</span>
+        <a href="/reports">Trung tâm báo cáo</a><span aria-hidden="true">/</span>
+        <strong>Báo cáo tuyển dụng</strong>
+    </nav>
+    <header class="hrrv-hero">
+        <div>
+            <p class="hrrv-kicker">SCAPP / RECRUITMENT INTELLIGENCE <span>● LIVE WORKSPACE</span></p>
+            <h1 id="hrrv-title">Từ hồ sơ đến <em>quyết định.</em></h1>
+            <p>Theo dõi tỷ lệ tuyển dụng, giai đoạn HR và hiệu quả sàng lọc trong đúng workspace đang đăng nhập. Không dùng số liệu minh họa.</p>
+            <div class="hrrv-hero-links"><a href="/results">Kết quả &amp; xếp hạng</a><a href="/dashboard">Tổng quan tuyển dụng</a></div>
+        </div>
+        <div class="hrrv-watermark" aria-hidden="true"><span>SC</span><small>04 / INSIGHTS</small></div>
+    </header>
+    <HrRecruitmentReportPanel />
+    <p class="hrrv-security">Báo cáo chỉ được tạo từ API có kiểm tra workspace. AI hỗ trợ sàng lọc; quyết định tuyển dụng do HR thực hiện.</p>
+</main>

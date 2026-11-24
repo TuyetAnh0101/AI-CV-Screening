@@ -50,6 +50,7 @@ public sealed class RoleNavigationExperienceTests
         Assert.DoesNotContain("account", owner);
         Assert.DoesNotContain("upload", admin);
         Assert.DoesNotContain("jobs", admin);
+        Assert.Contains("reports/recruitment", hr);
         Assert.Contains("upload", hr);
         Assert.Contains("jobs", hr);
         Assert.Contains("results", owner);
@@ -66,6 +67,8 @@ public sealed class RoleNavigationExperienceTests
     [InlineData("/upload?tab=cv", "Admin", null, null, "/admin/dashboard")]
     [InlineData("/admin/ai-usage", "Admin", null, null, "/admin/ai-usage")]
     [InlineData("/reports", "Admin", null, null, "/reports")]
+    [InlineData("/reports/recruitment", "Admin", null, null, "/admin/dashboard")]
+    [InlineData("/reports/recruitment", "HR", "Internal", "Member", "/reports/recruitment")]
     [InlineData("/admin/dashboard", "HR", "Personal", "Owner", "/dashboard")]
     [InlineData("/users", "HR", "Internal", "Member", "/dashboard")]
     [InlineData("/results?runId=12", "HR", "Personal", "Owner", "/results?runId=12")]

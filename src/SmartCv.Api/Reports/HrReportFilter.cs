@@ -7,13 +7,13 @@ namespace SmartCv.Api.Reports;
 /// <summary>Validated query. Dates filter Application.CreatedAt, not evaluation or decision date.</summary>
 public sealed record HrReportFilter(
     int? JobId, int? RunId, DashboardPeriod Period, string Stage, string Evaluation,
-    int Page, int PageSize, bool Anonymous)
+    int Page, int PageSize, bool Anonymous, string Sort = "appliedAt", string Direction = "desc")
 {
     public const int MaxApplicationsToAggregate = 20_000;
     public const int MaxExportRows = 2_000;
     public static readonly string[] EvaluationFilters = ["all", "Combined", "KeywordOnly", "Failed", "Unscored"];
     private static readonly HashSet<string> Allowed = new(StringComparer.OrdinalIgnoreCase)
-        { "jobId", "runId", "from", "to", "stage", "evaluation", "page", "pageSize", "anonymous" };
+        { "jobId", "runId", "from", "to", "stage", "evaluation", "page", "pageSize", "anonymous", "sort", "direction" };
 
     public static (HrReportFilter? Filter, string? Error) Parse(IQueryCollection query)
     {
@@ -34,7 +34,15 @@ public sealed record HrReportFilter(
             return (null, "Trang phải từ 1 đến 100000; kích thước trang từ 1 đến 100.");
         var anonym = query["anonymous"].ToString();
         if (anonym.Length != 0 && anonym is not ("true" or "false")) return (null, "anonymous chỉ nhận true hoặc false.");
-        return (new HrReportFilter(jobId, runId, period, stage, evaluation, page, size, anonym != "false"), null);
+        var sort = query["sort"].ToString();
+        if (sort.Length == 0) sort = "appliedAt";
+        if (!HrReportSort.Allowed.Contains(sort, StringComparer.Ordinal))
+            return (null, "Trường sắp xếp không hợp lệ.");
+        var direction = query["direction"].ToString();
+        if (direction.Length == 0) direction = "desc";
+        if (direction is not ("asc" or "desc"))
+            return (null, "direction chỉ nhận asc hoặc desc.");
+        return (new HrReportFilter(jobId, runId, period, stage, evaluation, page, size, anonym != "false", sort, direction), null);
     }
 
     private static bool Positive(string input, out int? value)
