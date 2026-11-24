@@ -120,7 +120,6 @@ public static class RoleBasedNavigation
         new("Bảo mật & vận hành", [
             new("Tài khoản", "users", UsersIcon, AdminOnly: true),
             new("Audit Log", "admin/activity-logs", AuditIcon, AdminOnly: true),
-            new("Tài khoản của tôi", "account", AccountIcon, NavLinkMatch.All)
         ])
     ];
 
@@ -142,7 +141,6 @@ public static class RoleBasedNavigation
             new("Bộ dữ liệu đánh giá", "evaluation-sets", DataIcon)
         ]),
         new("Tài khoản & quyền", [
-            new("Tài khoản của tôi", "account", AccountIcon, NavLinkMatch.All),
             new("Quyền truy cập", "permissions", ShieldIcon, NavLinkMatch.All)
         ])
     ];

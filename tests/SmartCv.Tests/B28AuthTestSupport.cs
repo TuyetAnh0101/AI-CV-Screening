@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartCv.Core.Contracts;
 using web::SmartCv.Web.Services;
+using web::SmartCv.Web.Helpers;
 namespace SmartCv.Tests;
 
 /// <summary>B28: trạng thái đăng nhập cố định cho test giao diện (HtmlRenderer / Renderer tự viết). Không có token, không gọi API.</summary>
@@ -76,6 +77,23 @@ internal static class B28Auth
     /// Đăng ký trạng thái đăng nhập cascade cho component (giống AddSmartCvWebAuth của Web, nhưng trạng thái cố định).
     /// Mặc định Admin để các test giao diện tuần trước (viết khi chưa phân quyền) vẫn thấy đủ thao tác như cũ.
     /// </summary>
+    /// <summary>
+    /// A verified HR fixture for business-page interaction tests. Never use Admin to
+    /// grant business permissions: Admin intentionally lacks recruitment access.
+    /// The workspace assertions stay in AccessRules, just as they do in production.
+    /// </summary>
+    public static ClaimsPrincipal VerifiedInternalHr()
+    {
+        var principal = Principal("HR");
+        if (principal.Identity is not ClaimsIdentity identity)
+            throw new InvalidOperationException("Expected test identity not created.");
+        identity.AddClaim(new Claim(AccessRules.WorkspaceKindClaim, "Internal"));
+        identity.AddClaim(new Claim(AccessRules.WorkspaceRoleClaim, "Member"));
+        if (!AccessRules.CanOperateBusiness(principal))
+            throw new InvalidOperationException("Test HR fixture is not authorized for business pages.");
+        return principal;
+    }
+
     public static IServiceCollection AddB28Auth(this IServiceCollection services, string role = "Admin") =>
         services.AddB28Auth(Principal(role));
 

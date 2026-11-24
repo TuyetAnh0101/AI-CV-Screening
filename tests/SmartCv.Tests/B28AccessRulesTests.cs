@@ -240,7 +240,7 @@ public class B28AccessRulesTests
         Assert.Contains("reports", hrefs);
         Assert.Contains("jobs", hrefs);
         Assert.Contains("results", hrefs);
-        Assert.Contains("account", hrefs);
+        Assert.DoesNotContain("account", hrefs);
         Assert.DoesNotContain("admin/dashboard", hrefs);
     }
 

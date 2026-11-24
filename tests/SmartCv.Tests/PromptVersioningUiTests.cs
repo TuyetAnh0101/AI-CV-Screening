@@ -177,9 +177,11 @@ public class PromptVersioningUiTests
         services.AddLogging();
         services.AddSingleton<NavigationManager>(new PromptNavigationManager());
         services.AddSingleton<IJSRuntime>(new NoopJsRuntime());
-        services.AddB28Auth(); // B28: Admin lưu / kích hoạt được như trước
+        services.AddB28Auth(B28Auth.VerifiedInternalHr()); // HR có workspace nội bộ mới được sửa Prompt.
         var http = new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
+        // QuotaNotice is now rendered by the Prompt page and needs this client even when hidden.
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance));
         var provider = services.BuildServiceProvider();
         var renderer = new TestRenderer(provider);
         await renderer.StartAsync();

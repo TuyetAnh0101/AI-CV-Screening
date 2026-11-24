@@ -211,9 +211,11 @@ public class PromptActivationUiTests
         var services = new ServiceCollection().AddLogging();
         services.AddSingleton<NavigationManager>(new PromptNavigationManager());
         services.AddSingleton<IJSRuntime>(new NoopJsRuntime());
-        services.AddB28Auth(); // B28: Admin lưu / kích hoạt được như trước
-        services.AddSingleton(new PromptApiClient(new HttpClient(api, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") },
-            NullLogger<PromptApiClient>.Instance));
+        services.AddB28Auth(B28Auth.VerifiedInternalHr()); // Chính sách mới: chỉ HR có workspace.
+        var http = new HttpClient(api, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") };
+        services.AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
+        // Shared QuotaNotice is rendered by Prompts and requires the workspace client.
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance));
         var provider = services.BuildServiceProvider();
         var renderer = new TestRenderer(provider);
         await renderer.StartAsync();

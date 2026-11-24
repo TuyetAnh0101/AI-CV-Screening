@@ -29,6 +29,7 @@ public static class SmartCvApi
         api.MapApplicationStageEndpoints();
         api.MapManualFlagEndpoints();
         api.MapDashboardEndpoints();
+        api.MapHrRecruitmentReportEndpoints();
         api.MapScoringPreviewEndpoints();
         api.MapAiPreviewEndpoints();
         api.MapJobEndpoints();

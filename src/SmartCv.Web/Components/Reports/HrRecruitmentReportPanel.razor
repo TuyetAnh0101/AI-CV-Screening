@@ -1,0 +1,279 @@
+@using System.Globalization
+@using Microsoft.JSInterop
+@using SmartCv.Core.Constants
+@using SmartCv.Core.Contracts
+@using SmartCv.Web.Services
+@inject HrRecruitmentReportApiClient ReportsApi
+@inject JobApiClient JobsApi
+@inject FileDownloadService Downloads
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<section class="hrr-root" data-hr-report id="hr-report-center" aria-labelledby="hrr-heading">
+    <div class="hrr-head">
+        <div><div class="hrr-eyebrow">RECRUITMENT INTELLIGENCE · SCAPP</div>
+            <h2 id="hrr-heading">Báo cáo tuyển dụng tổng hợp <span class="hrr-spark">✦</span></h2>
+            <p>Chỉ dữ liệu workspace hiện hành · Một dòng = một lượt ứng tuyển · Không tính PromptTest.</p></div>
+        <span class="hrr-chip">EXCEL · BẢO VỆ WORKSPACE</span>
+    </div>
+
+    <div class="hrr-filters" aria-label="Bộ lọc báo cáo HR">
+        <label>Vị trí tuyển dụng
+            <select @bind="jobIdInput" data-hr-quickfind>
+                <option value="">Tất cả Job</option>
+                @foreach (var job in jobOptions) { <option value="@job.JobId">@job.Title</option> }
+            </select>
+        </label>
+        <label>Lượt chấm Screening (tùy chọn)
+            <input type="number" min="1" step="1" inputmode="numeric" @bind="runIdInput" placeholder="Mới nhất từng hồ sơ" />
+        </label>
+        <label>Từ ngày (UTC+7)<input type="date" value="@fromInput" @onchange="e => fromInput = e.Value?.ToString() ?? string.Empty" /></label>
+        <label>Đến ngày (UTC+7)<input type="date" value="@toInput" @onchange="e => toInput = e.Value?.ToString() ?? string.Empty" /></label>
+        <label>Giai đoạn HR hiện tại
+            <select @bind="stageInput">
+                <option value="all">Tất cả giai đoạn</option>
+                @foreach (var stage in ApplicationStages.All) { <option value="@stage">@ApplicationStages.DisplayName(stage)</option> }
+            </select>
+        </label>
+        <label>Trạng thái kết quả
+            <select @bind="evaluationInput">
+                <option value="all">Tất cả</option>
+                <option value="Combined">Combined · Keyword + AI</option>
+                <option value="KeywordOnly">Chỉ Keyword</option>
+                <option value="Failed">Đánh giá lỗi</option>
+                <option value="Unscored">Chưa có điểm hoàn tất</option>
+            </select>
+        </label>
+    </div>
+    <div class="hrr-presets" role="group" aria-label="Chọn nhanh khoảng ngày Việt Nam">
+        <span>Khoảng nhanh</span>
+        <button type="button" disabled="@busy" @onclick="() => SetPeriodAsync(7)">7 ngày</button>
+        <button type="button" disabled="@busy" @onclick="() => SetPeriodAsync(30)">30 ngày</button>
+        <button type="button" disabled="@busy" @onclick="() => SetPeriodAsync(90)">90 ngày</button>
+        <button type="button" disabled="@busy" @onclick="() => SetPeriodAsync(null)">Tất cả</button>
+    </div>
+    <div class="hrr-actions">
+        <label class="hrr-check"><input type="checkbox" @bind="anonymous" /> <span>Ẩn danh khi xem và xuất (khuyến nghị)</span></label>
+        <div class="hrr-buttons">
+            <button type="button" class="hrr-btn hrr-ghost" @onclick="ResetAsync" disabled="@busy">Xóa bộ lọc</button>
+            <button type="button" class="hrr-btn hrr-primary" @onclick="ApplyAsync" disabled="@busy">@(busy ? "Đang tổng hợp…" : "Áp dụng & làm mới")</button>
+        </div>
+    </div>
+
+    @if (!anonymous) { <div class="hrr-export-note" role="status"><strong>Lưu ý riêng tư:</strong> bạn đang chọn hiển thị tên ứng viên nếu hồ sơ vẫn được phép nhận diện; file tải xuống có thể chứa dữ liệu cá nhân.</div> }
+    <div class="hrr-explain"><strong>Quy ước:</strong> lọc ngày theo lúc hồ sơ ứng tuyển (UTC+7), giai đoạn là trạng thái HR hiện tại, điểm lấy Screening mới nhất của mỗi hồ sơ trong phạm vi Run đã chọn. Tỷ lệ qua vòng HR tính theo lịch sử đã từng Shortlisted/Interview.</div>
+    @if (!string.IsNullOrWhiteSpace(error)) { <div class="hrr-error" role="alert">@error</div> }
+    @if (!string.IsNullOrWhiteSpace(notice)) { <div class="hrr-success" role="status">@notice</div> }
+
+    @if (summary is { } s)
+    {
+        <div class="hrr-metrics" aria-label="Thống kê đúng đơn vị đếm">
+            <article class="hrr-stat hrr-coral"><span>Lượt ứng tuyển</span><strong>@s.Applications</strong><small>Applications</small></article>
+            <article class="hrr-stat hrr-violet"><span>Ứng viên xác định</span><strong>@s.KnownUniqueCandidates</strong><small>@s.ApplicationsWithoutCandidate lượt chưa gắn Candidate</small></article>
+            <article class="hrr-stat hrr-sky"><span>CV duy nhất</span><strong>@s.UniqueCvs</strong><small>Distinct CvId trong bộ lọc</small></article>
+            <article class="hrr-stat hrr-teal"><span>Điểm Screening TB</span><strong>@(s.AverageFinalScore?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—")</strong><small>@s.EvaluatedApplications hồ sơ có điểm</small></article>
+            <article class="hrr-stat hrr-amber"><span>Qua vòng CV (HR)</span><strong>@s.EverPassedCvRound</strong><small>@s.HrPassedPercent% · đã từng qua vòng</small></article>
+            <article class="hrr-stat hrr-rose"><span>Cần xử lý</span><strong>@s.NeedsAction</strong><small>Mới / Đang xem / cờ mở</small></article>
+        </div>
+        <div class="hrr-panels">
+            <article class="hrr-panel">
+                <h3>Phân bố giai đoạn HR</h3><p>Trạng thái hiện tại của lượt ứng tuyển, không phải dự đoán của AI.</p>
+                <div class="hrr-bars" data-hr-chart>
+                    @foreach (var st in s.Stages)
+                    {
+                        <div class="hrr-bar-row"><span>@st.Label</span><div class="hrr-bar-track"><i style="width:@(s.Applications == 0 ? "0" : Math.Round(100m * st.Count / s.Applications, 2).ToString(CultureInfo.InvariantCulture))%"></i></div><strong>@st.Count</strong></div>
+                    }
+                </div>
+            </article>
+            <article class="hrr-panel">
+                <h3>Kết quả và quyết định</h3><p>Đạt ngưỡng điểm không đồng nghĩa HR đã tuyển.</p>
+                <div class="hrr-breakdown"><div><span>Đạt ngưỡng AI</span><b>@s.PassedScore</b></div><div><span>Dưới ngưỡng</span><b>@s.BelowThreshold</b></div><div><span>KeywordOnly</span><b>@s.KeywordOnly</b></div><div><span>Không có điểm hoàn tất</span><b>@s.NoCompletedEvaluation</b></div><div><span>Đang ở giai đoạn loại</span><b>@s.CurrentRejectedPercent%</b></div><div><span>TB giờ đến quyết định đầu</span><b>@(s.AverageHoursToFirstDecision?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—")</b></div></div>
+                <details class="hrr-reasons"><summary>Mức phù hợp của kết quả Screening</summary>
+                    @if (s.Fits.Count == 0) { <p>Chưa có mức phù hợp từ kết quả Screening.</p> }
+                    @foreach (var fit in s.Fits) { <p>@fit.Fit: <strong>@fit.Count</strong></p> }
+                </details>
+                <details class="hrr-reasons"><summary>Lý do loại phổ biến</summary>
+                    @if (s.RejectReasons.Count == 0) { <p>Chưa có hồ sơ bị loại với lý do được ghi nhận.</p> }
+                    @foreach (var reason in s.RejectReasons) { <p>@reason.Label: <strong>@reason.Count</strong></p> }
+                </details>
+            </article>
+        </div>
+    }
+
+    <div class="hrr-table-head"><div><h3>Chi tiết theo lượt ứng tuyển</h3><p>Mỗi hàng là một Application; phân trang ở server theo bộ lọc.</p></div>
+        <div class="hrr-buttons">
+            <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || summary is null)" @onclick="PreviewAsync">Xem trước xuất</button>
+            <button type="button" class="hrr-btn hrr-primary" disabled="@(busy || summary is null)" @onclick="DownloadAsync">Xuất Excel tổng hợp</button>
+        </div>
+    </div>
+    @if (preview is { } pre)
+    {
+        <div class="hrr-export-note" role="status">
+            Số dòng: <strong>@pre.TotalRows</strong> / tối đa @pre.MaxExportRows · @(pre.Anonymous ? "Ẩn danh" : "Có tên ứng viên") · @(pre.CanExport ? "Đủ điều kiện xuất" : pre.BlockReason)
+        </div>
+    }
+    @if (page is { } p)
+    {
+        <div class="hrr-table-scroll"><table class="hrr-table">
+            <thead><tr><th>Hồ sơ</th><th>Job</th><th>Giai đoạn</th><th>Điểm</th><th>Mức</th><th>Nguồn điểm</th><th>Đạt ngưỡng</th></tr></thead>
+            <tbody>
+            @foreach (var item in p.Items)
+            {
+                <tr><td>@item.Applicant</td><td>@item.JobTitle</td><td>@item.StageText</td>
+                    <td>@(item.FinalScore?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—")</td>
+                    <td>@(item.FitLabel ?? "—")</td><td>@(item.ScoreSource ?? "Chưa có")</td><td>@(item.PassedScore switch { true => "Đạt", false => "Dưới ngưỡng", _ => "Chưa có điểm" })</td></tr>
+            }
+            </tbody>
+        </table></div>
+        <div class="hrr-pager"><span>@p.TotalRows hồ sơ · Trang @p.Page / @Math.Max(1, p.TotalPages)</span>
+            <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || pageNumber <= 1)" @onclick="() => ChangePageAsync(pageNumber - 1)">Trang trước</button>
+            <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || pageNumber >= p.TotalPages)" @onclick="() => ChangePageAsync(pageNumber + 1)">Trang sau</button>
+        </div>
+    }
+    <div class="hrr-footer">Excel tuyển dụng tổng hợp khác Excel bảng xếp hạng tại <a href="/results">Kết quả</a>. PDF chưa có API; không cung cấp nút tải PDF. Audit ghi mỗi lần xuất Excel thành công.</div>
+</section>
+
+@code {
+    private List<JobDto> jobOptions = [];
+    private string jobIdInput = "";
+    private string runIdInput = "";
+    private string fromInput = "";
+    private string toInput = "";
+    private string stageInput = "all";
+    private string evaluationInput = "all";
+    private bool anonymous = true;
+    private int pageNumber = 1;
+    private bool busy;
+    private string? error;
+    private string? notice;
+    private HrReportSummaryDto? summary;
+    private HrReportPageDto? page;
+    private HrReportPreviewDto? preview;
+    private IJSObjectReference? module;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var jobsResult = await JobsApi.GetJobsAsync(false, lifetime.Token);
+        if (jobsResult.IsSuccess && jobsResult.Data is not null) jobOptions = jobsResult.Data;
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/hr-report-ui.js");
+            await module.InvokeVoidAsync("setup", "hr-report-center");
+        }
+        catch (Exception e) when (e is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException) { }
+    }
+
+    private bool TryQuery(out string query)
+    {
+        query = "";
+        int? job = null, run = null;
+        if (jobIdInput.Length > 0)
+        {
+            if (!int.TryParse(jobIdInput, NumberStyles.None, CultureInfo.InvariantCulture, out var j) || j <= 0) { error = "Job không hợp lệ."; return false; }
+            job = j;
+        }
+        if (runIdInput.Length > 0)
+        {
+            if (!int.TryParse(runIdInput, NumberStyles.None, CultureInfo.InvariantCulture, out var r) || r <= 0) { error = "Run phải là số nguyên dương."; return false; }
+            run = r;
+        }
+        if (fromInput.Length > 0 && toInput.Length > 0 && string.CompareOrdinal(fromInput, toInput) > 0) { error = "Ngày bắt đầu không thể sau ngày kết thúc."; return false; }
+        query = HrRecruitmentReportApiClient.Query(job, run, fromInput, toInput, stageInput, evaluationInput, pageNumber, 20, anonymous);
+        return true;
+    }
+
+    private async Task LoadAsync()
+    {
+        if (busy) return;
+        busy = true; error = null; notice = null; preview = null; summary = null; page = null;
+        try
+        {
+            if (!TryQuery(out var query)) return;
+            var a = await ReportsApi.SummaryAsync(query, lifetime.Token);
+            if (!a.IsSuccess || a.Data is null) { error = a.ErrorMessage ?? "Chưa lấy được báo cáo tổng hợp."; return; }
+            summary = a.Data;
+            var b = await ReportsApi.RowsAsync(query, lifetime.Token);
+            if (!b.IsSuccess || b.Data is null) { error = b.ErrorMessage ?? "Chưa lấy được chi tiết."; return; }
+            page = b.Data;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { error = "Không thể tải báo cáo. Kiểm tra kết nối và thử lại."; }
+        finally { busy = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    private async Task SetPeriodAsync(int? days)
+    {
+        if (days is int d)
+        {
+            var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).Date);
+            fromInput = today.AddDays(1 - d).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            toInput = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+        else fromInput = toInput = "";
+        pageNumber = 1;
+        await LoadAsync();
+    }
+    private async Task ApplyAsync() { pageNumber = 1; await LoadAsync(); }
+    private async Task ChangePageAsync(int next) { pageNumber = next; await LoadAsync(); }
+    private async Task ResetAsync()
+    {
+        jobIdInput = runIdInput = fromInput = toInput = "";
+        stageInput = evaluationInput = "all"; anonymous = true; pageNumber = 1;
+        await LoadAsync();
+    }
+    private async Task PreviewAsync()
+    {
+        if (busy) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            if (!TryQuery(out var query)) return;
+            var r = await ReportsApi.PreviewAsync(query, lifetime.Token);
+            if (r.IsSuccess && r.Data is not null) preview = r.Data;
+            else error = r.ErrorMessage ?? "Không xem trước được phạm vi xuất.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { error = "Không xem trước được báo cáo."; }
+        finally { busy = false; await InvokeAsync(StateHasChanged); }
+    }
+    private async Task DownloadAsync()
+    {
+        if (busy) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            if (!TryQuery(out var query)) return;
+            var check = await ReportsApi.PreviewAsync(query, lifetime.Token);
+            if (!check.IsSuccess || check.Data is null) { error = check.ErrorMessage ?? "Không kiểm tra được giới hạn xuất."; return; }
+            preview = check.Data;
+            if (!preview.CanExport) { error = preview.BlockReason ?? "Vượt giới hạn xuất."; return; }
+            var file = await ReportsApi.ExportAsync(query, lifetime.Token);
+            if (!file.IsSuccess || file.Data is null) { error = file.ErrorMessage ?? "Xuất Excel thất bại."; return; }
+            await using (file.Data)
+            {
+                // Existing authenticated Excel stream helper; no ranking API is called.
+                await Downloads.SaveRankingAsync(file.Data, lifetime.Token);
+            }
+            notice = "Đã gửi file Excel đến trình duyệt. Hãy kiểm tra tệp đã tải.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { error = "Chưa thể tải Excel. Vui lòng thử lại."; }
+        finally { busy = false; await InvokeAsync(StateHasChanged); }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        lifetime.Cancel(); lifetime.Dispose();
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("dispose", "hr-report-center"); await module.DisposeAsync(); }
+            catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException or ObjectDisposedException) { }
+        }
+    }
+}
