@@ -1,3 +1,4 @@
+using SmartCv.Api.Auth;
 using SmartCv.Api.Endpoints;
 using SmartCv.Api.Ops;
 
@@ -10,15 +11,20 @@ public static class SmartCvApi
     {
         app.MapReadinessEndpoint();
         app.MapAuthEndpoints();
-        app.MapControllers().RequireAuthorization();
-        var api = app.MapGroup("").RequireAuthorization();
+        app.MapAdminOperationsEndpoints();
+        app.MapControllers().RequireAuthorization(AuthPolicies.SystemAdmin);
+        var api = app.MapGroup("").RequireAuthorization(AuthPolicies.BusinessOperator);
         api.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
+        // Administrative routes MUST NOT inherit BusinessOperator from api.
+        // Keep the same audit filter for the separated operational routes.
+        var operational = app.MapGroup("");
+        operational.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
         api.MapEvaluationEndpoints();
         api.MapRunEndpoints();
-        api.MapExportEndpoints();
+        operational.MapExportEndpoints();
         api.MapCvEndpoints();
         api.MapCandidateEndpoints();
-        api.MapRetentionEndpoints();
+        operational.MapRetentionEndpoints();
         api.MapApplicationEndpoints();
         api.MapApplicationStageEndpoints();
         api.MapManualFlagEndpoints();
@@ -30,9 +36,9 @@ public static class SmartCvApi
         api.MapPromptEndpoints();
         api.MapEvaluationSetEndpoints();
         api.MapPromptTestEndpoints();
-        api.MapUserEndpoints();
-        api.MapAuditEndpoints();
-        api.MapAdminEmailEndpoints();
+        operational.MapUserEndpoints();
+        operational.MapAuditEndpoints();
+        operational.MapAdminEmailEndpoints();
         api.MapWorkspaceEndpoints();
         
         return app;

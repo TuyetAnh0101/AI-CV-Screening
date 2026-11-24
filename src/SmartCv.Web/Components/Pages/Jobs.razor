@@ -1,4 +1,5 @@
 @page "/jobs"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @using SmartCv.Core.Constants
 @implements IDisposable
 @inject JobApiClient JobApi

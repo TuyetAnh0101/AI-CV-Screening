@@ -1,0 +1,128 @@
+@page "/permissions"
+@using Microsoft.JSInterop
+@using SmartCv.Web.Helpers
+@inject AuthSession Session
+@inject IJSRuntime Js
+
+<PageTitle>Quyền truy cập · SCApp</PageTitle>
+
+<main class="rb-page" aria-labelledby="rb-title">
+    <header class="rb-hero">
+        <div class="rb-intro">
+            <span class="rb-overline"><span class="rb-live-dot"></span> Phân quyền theo trách nhiệm</span>
+            <h1 id="rb-title">Quyền truy cập của bạn</h1>
+            <p>Quyền hệ thống và quyền thao tác tuyển dụng được tách riêng. Quyết định cấp quyền thực tế luôn được xác minh lại tại API.</p>
+            <div class="rb-tags">
+                <span class="rb-tag rb-tag-slate">@AccountRole</span>
+                <span class="rb-tag rb-tag-teal">@WorkspaceLabel</span>
+            </div>
+        </div>
+        <div class="rb-icon-panel" aria-hidden="true"><span>SC</span><span>ACCESS</span></div>
+    </header>
+
+    <section class="rb-stats" aria-label="Tổng quan quyền">
+        <div class="rb-stat rb-stat-teal"><span>Được phép</span><strong>@Capabilities.Count(Can)</strong><small>chức năng trong danh mục</small></div>
+        <div class="rb-stat rb-stat-purple"><span>Giới hạn</span><strong>@Capabilities.Count(x => !Can(x))</strong><small>từ chối theo trách nhiệm</small></div>
+        <div class="rb-stat rb-stat-amber"><span>Phạm vi dữ liệu</span><strong>@(IsAdmin ? "Hệ thống" : "Workspace")</strong><small>@(IsAdmin ? "Chỉ API quản trị" : "Không truy cập chéo")</small></div>
+    </section>
+
+    <section class="rb-panel" aria-labelledby="rb-capabilities-title">
+        <header class="rb-panel-heading">
+            <div><span class="rb-overline">KHẢ NĂNG TRUY CẬP</span><h2 id="rb-capabilities-title">Danh mục chức năng</h2></div>
+            <button class="rb-copy" type="button" @onclick="CopySummaryAsync" disabled="@copying">
+                @(copied ? "Đã sao chép" : "Sao chép tóm tắt quyền")
+            </button>
+        </header>
+        <div class="rb-controls">
+            <label class="rb-search"><span class="visually-hidden">Tìm chức năng</span>
+                <input id="scapp-permissions-search" type="search" value="@search" @oninput="e => search = e.Value?.ToString() ?? string.Empty" maxlength="80" placeholder="Tìm chức năng, ví dụ: CV, báo cáo, audit…" aria-keyshortcuts="/" />
+            </label>
+            <div class="rb-filter" role="group" aria-label="Lọc theo quyền">
+                <button type="button" class="@(filter == "all" ? "selected" : null)" aria-pressed="@(filter == "all")" @onclick='() => filter = "all"'>Tất cả</button>
+                <button type="button" class="@(filter == "yes" ? "selected" : null)" aria-pressed="@(filter == "yes")" @onclick='() => filter = "yes"'>Được phép</button>
+                <button type="button" class="@(filter == "no" ? "selected" : null)" aria-pressed="@(filter == "no")" @onclick='() => filter = "no"'>Bị giới hạn</button>
+            </div>
+        </div>
+        <div class="rb-grid">
+            @foreach (var item in Visible)
+            {
+                var allowed = Can(item);
+                <article class="rb-capability rb-kind-@item.Kind">
+                    <div class="rb-capability-top"><span class="rb-accent" aria-hidden="true"></span><span class="rb-status @(allowed ? "rb-allowed" : "rb-blocked")">@(allowed ? "Được phép" : "Giới hạn")</span></div>
+                    <h3>@item.Title</h3>
+                    <p>@item.Description</p>
+                    <small>@item.Scope</small>
+                </article>
+            }
+        </div>
+        @if (!Visible.Any())
+        {
+            <div class="rb-empty" role="status">Không có chức năng nào khớp với bộ lọc hiện tại. Hãy đổi từ khóa hoặc trạng thái.</div>
+        }
+        <p class="rb-footnote">Danh mục này giúp hiểu quyền, không phải nút mở quyền. Việc có hoặc không có nút trên giao diện không thay thế kiểm tra 401/403/404 của API.</p>
+        @if (copied)
+        {
+            <p class="rb-toast" role="status">Đã sao chép bản tóm tắt không chứa dữ liệu CV.</p>
+        }
+    </section>
+</main>
+
+@code {
+    private sealed record Capability(string Key, string Title, string Description, string Scope, string Kind);
+    private static readonly Capability[] Capabilities =
+    [
+        new("accounts", "Quản lý tài khoản", "Tạo, khóa, mở khóa và quản lý tài khoản hệ thống.", "Hệ thống", "purple"),
+        new("audit", "Audit Log toàn hệ thống", "Xem nhật ký vận hành, kiểm tra trách nhiệm thao tác.", "Hệ thống", "purple"),
+        new("retention", "Retention và chẩn đoán", "Quản lý hạn lưu dữ liệu và thực hiện tác vụ bảo mật.", "Hệ thống", "purple"),
+        new("exports-audit", "Lịch sử xuất toàn hệ thống", "Kiểm tra lần xuất dữ liệu tại mọi workspace.", "Hệ thống", "purple"),
+        new("jobs", "Vị trí tuyển dụng", "Quản lý Job, kỹ năng, yêu cầu và trạng thái tuyển dụng.", "Workspace", "teal"),
+        new("cv", "Hồ sơ ứng viên", "Tiếp nhận CV, gán ứng viên và tổ chức hồ sơ.", "Workspace", "teal"),
+        new("scoring", "Chấm điểm và xếp hạng", "Khởi chạy đánh giá AI và xem kết quả theo vị trí.", "Workspace", "amber"),
+        new("decision", "Quyết định tuyển dụng", "Cập nhật giai đoạn, gắn cờ và ghi nhận lý do.", "Workspace", "amber"),
+        new("prompts", "System Prompt", "Quản lý phiên bản và thử nghiệm prompt trong workspace.", "Workspace", "teal"),
+        new("recruitment-export", "Xuất báo cáo tuyển dụng", "Xuất xếp hạng và kết quả của workspace hiện hành.", "Workspace", "teal"),
+        new("sample", "Tạo Job mẫu cá nhân", "Khởi tạo vị trí mẫu trong workspace Personal của chính Owner.", "Personal Owner", "amber")
+    ];
+
+    private string search = string.Empty;
+    private string filter = "all";
+    private bool copied;
+    private bool copying;
+    private bool IsAdmin => Session.User?.Role == "Admin";
+    private bool CanBusiness
+    {
+        get
+        {
+            var me = Session.User;
+            var ws = me?.Workspace;
+            return me?.Role == "HR" && ws is { Id: > 0 } &&
+                ((ws.Kind == "Internal" && ws.Role is "Member" or "Owner") ||
+                 (ws.Kind == "Personal" && ws.Role == "Owner"));
+        }
+    }
+    private bool CanPersonalOwner => CanBusiness && Session.User?.Workspace is { Kind: "Personal", Role: "Owner" };
+    private string AccountRole => IsAdmin ? "Quản trị viên hệ thống" : Session.User?.Role == "HR" ? "Nhân sự / Chủ workspace" : "Chưa xác định";
+    private string WorkspaceLabel => IsAdmin ? "Không có quyền tuyển dụng mặc định" :
+        Session.User?.Workspace is { } ws ? $"{ws.Name} · {ws.Kind}" : "Chưa có workspace";
+
+    private static bool IsSystem(Capability item) => item.Key is "accounts" or "audit" or "retention" or "exports-audit";
+    private bool Can(Capability item) => item.Key == "sample" ? CanPersonalOwner : IsSystem(item) ? IsAdmin : CanBusiness;
+    private IEnumerable<Capability> Visible => Capabilities.Where(x =>
+        (filter == "all" || (filter == "yes" ? Can(x) : !Can(x))) &&
+        (search.Length == 0 || x.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+         x.Description.Contains(search, StringComparison.OrdinalIgnoreCase) || x.Scope.Contains(search, StringComparison.OrdinalIgnoreCase)));
+
+    private async Task CopySummaryAsync()
+    {
+        if (copying) return;
+        copying = true;
+        try
+        {
+            var summary = "SCApp · Tóm tắt quyền\n" + AccountRole + "\n" + WorkspaceLabel + "\n" +
+                string.Join("\n", Capabilities.Select(c => $"{(Can(c) ? "ĐƯỢC PHÉP" : "GIỚI HẠN")}: {c.Title}"));
+            copied = await Js.InvokeAsync<bool>("scappRolePermissions.copy", summary);
+        }
+        catch (JSException) { copied = false; }
+        finally { copying = false; }
+    }
+}

@@ -1,4 +1,5 @@
 @page "/dashboard"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @page "/recruitment"
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.WebUtilities

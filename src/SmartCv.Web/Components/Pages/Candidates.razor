@@ -1,4 +1,5 @@
 @page "/candidates"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     B24: một trang "Ứng viên" thay cho "Kho CV", hai chế độ dùng chung layout:
       /candidates             → Ứng viên (theo con người: GET /api/candidates)

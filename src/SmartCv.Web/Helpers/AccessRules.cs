@@ -51,6 +51,10 @@ public static class AccessRules
 
     /// <summary>Tên chính sách dùng trong [Authorize(Policy = ...)] của trang Blazor (đăng ký ở WebAuthSetup).</summary>
     public const string AdminPolicy = "SmartCv.Admin";
+    public const string BusinessPolicy = "SmartCv.BusinessOperator";
+    // Trusted only for visual hints. The API independently validates OwnerUserId from DB.
+    public const string WorkspaceKindClaim = "scapp_workspace_kind";
+    public const string WorkspaceRoleClaim = "scapp_workspace_role";
     /// <summary>Đã xác minh, vai trò hợp lệ, KỂ CẢ đang phải đổi mật khẩu (dành cho trang đổi mật khẩu của B29).</summary>
     public const string SignedInPolicy = "SmartCv.SignedIn";
 
@@ -72,13 +76,22 @@ public static class AccessRules
 
     public static bool IsAdmin(ClaimsPrincipal? user) => Level(user) == AccessLevel.Admin;
 
+    public static bool CanOperateBusiness(ClaimsPrincipal? user)
+    {
+        if (Level(user) != AccessLevel.Hr) return false;
+        var kind = user!.FindFirst(WorkspaceKindClaim)?.Value;
+        var role = user.FindFirst(WorkspaceRoleClaim)?.Value;
+        return (kind == "Internal" && role is "Member" or "Owner") ||
+               (kind == "Personal" && role == "Owner");
+    }
+
     /// <summary>Quyền nghiệp vụ cần phiên Admin/HR hợp lệ; quyền quản trị vẫn chỉ dành cho Admin.</summary>
     public static bool Can(ClaimsPrincipal? user, AppPermission permission) => permission switch
     {
-        AppPermission.ManageJobs => CanUseApp(user),
-        AppPermission.ManagePromptVersions => CanUseApp(user),
-        AppPermission.PreviewAssembledPrompt => CanUseApp(user),
-        AppPermission.CreateEvaluationSet => CanUseApp(user),
+        AppPermission.ManageJobs => CanOperateBusiness(user),
+        AppPermission.ManagePromptVersions => CanOperateBusiness(user),
+        AppPermission.PreviewAssembledPrompt => CanOperateBusiness(user),
+        AppPermission.CreateEvaluationSet => CanOperateBusiness(user),
         AppPermission.ManageUsers => IsAdmin(user),
         AppPermission.ViewAudit => IsAdmin(user),
         _ => false

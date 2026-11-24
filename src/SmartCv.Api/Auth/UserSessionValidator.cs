@@ -34,12 +34,12 @@ public sealed class DbSessionStateStore(SmartCvDbContext db) : ISessionStateStor
                 u.IsActive, u.SecurityStamp, u.Role, u.MustChangePassword, u.FullName, u.Email,
                 Member = workspaceId == null ? null : db.WorkspaceMembers
                     .Where(m => m.UserId == u.UserId && m.WorkspaceId == workspaceId)
-                    .Select(m => new { m.WorkspaceId, m.Workspace.Name, m.Workspace.Kind, m.Role, m.Workspace.IsActive })
+                    .Select(m => new { m.WorkspaceId, m.Workspace.Name, m.Workspace.Kind, m.Role, m.Workspace.IsActive, m.Workspace.OwnerUserId })
                     .FirstOrDefault()
             })
             .FirstOrDefaultAsync(ct);
         if (row is null) return null;
-        var workspace = row.Member is { } m ? new WorkspaceSessionInfo(m.WorkspaceId, m.Name, m.Kind, m.Role) : null;
+        var workspace = row.Member is { } m ? new WorkspaceSessionInfo(m.WorkspaceId, m.Name, m.Kind, m.Role, m.OwnerUserId) : null;
         return new UserSessionState(row.IsActive, row.SecurityStamp, row.Role, row.MustChangePassword, row.FullName, row.Email,
             workspace, row.Member?.IsActive ?? true);
     }

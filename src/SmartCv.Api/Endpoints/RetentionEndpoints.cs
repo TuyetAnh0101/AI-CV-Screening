@@ -18,22 +18,23 @@ public static class RetentionEndpoints
         if (!app.ServiceProvider.GetRequiredService<IOptions<CvUploadEndpointOptions>>().Value.Enabled)
             return app; // Feature flag retained; MapSmartCvApi and Admin policies enforce authorization.
         var group = app.MapGroup("/api/retention").WithTags("Retention");
-        group.MapGet("/settings", (IOptions<RetentionOptions> options) => Results.Ok(new { options.Value.Months, options.Value.AutoAnonymize, options.Value.CheckIntervalHours, options.Value.BatchSize }));
-        group.MapPost("/run", RunAsync).RequireAuthorization(AuthPolicies.Admin);
-        app.MapPost("/api/cvs/{id:guid}/anonymize", AnonymizeAsync).WithTags("CVs").RequireAuthorization(AuthPolicies.Admin);
+        group.MapGet("/settings", (IOptions<RetentionOptions> options) => Results.Ok(new { options.Value.Months, options.Value.AutoAnonymize, options.Value.CheckIntervalHours, options.Value.BatchSize }))
+            .RequireAuthorization(AuthPolicies.SystemAdmin);
+        group.MapPost("/run", RunAsync).RequireAuthorization(AuthPolicies.SystemAdmin);
+        app.MapPost("/api/cvs/{id:guid}/anonymize", AnonymizeAsync).WithTags("CVs").RequireAuthorization(AuthPolicies.SystemAdmin);
         // A42: GET /api/cvs/{id}/text (chữ đã đọc + chất lượng) nằm ở CvEndpoints và vẫn trả 410 cho CV đã ẩn danh hóa.
         return app;
     }
 
     public static IResult Gone() => Results.Problem(statusCode: 410, title: "CV đã được ẩn danh hóa", detail: "File gốc và nội dung CV không còn được cung cấp. Điểm và lịch sử quyết định được giữ nguyên.");
 
-    private static async Task<IResult> AnonymizeAsync(Guid id, ClaimsPrincipal user, CvAnonymizer anonymizer, CancellationToken ct, [FromBody] AnonymizeRequest? request = null)
+    private static async Task<IResult> AnonymizeAsync(Guid id, ClaimsPrincipal user, AdminCvErasureService anonymizer, CancellationToken ct, [FromBody] AnonymizeRequest? request = null)
     {
         var actor = user.ActorName();
         AnonymizeAttempt result;
         try
         {
-            result = await anonymizer.AnonymizeAsync(id, actor, false, DateTime.UtcNow, ct);
+            result = await anonymizer.AnonymizeAsync(id, actor, DateTime.UtcNow, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

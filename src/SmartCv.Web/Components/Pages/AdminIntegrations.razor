@@ -1,0 +1,166 @@
+@page "/admin/integrations"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Contracts
+@inject AdminOperationsApiClient AdminOps
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Insight nhà cung cấp · SCApp</PageTitle>
+<div class="op-shell">
+    <header class="op-header">
+        <div>
+            <div class="op-eyebrow"><span class="op-dot op-violet-bg"></span> LIVE PROVIDER INSIGHTS</div>
+            <h1>Google &amp; AI Insights <span class="op-spark">✦</span></h1>
+            <p>Thống kê lấy từ dữ liệu SCApp đang lưu; kiểm tra Gemini trực tiếp theo yêu cầu Admin.</p>
+        </div>
+        <button class="op-button op-button-plain" type="button" disabled="@busy" @onclick="ReloadAsync">↻ Làm mới</button>
+    </header>
+
+    @if (busy && config is null)
+    {
+        <div class="op-loading" role="status">Đang tải dữ liệu vận hành thực tế…</div>
+    }
+    else if (error is not null)
+    {
+        <div class="op-alert" role="alert"><strong>Không tải được cấu hình tích hợp.</strong><p>@error</p><button class="op-button" @onclick="ReloadAsync">Thử lại</button></div>
+    }
+    else if (config is { } c)
+    {
+        <div class="op-info">
+            Dữ liệu từ API @VnTime(c.CapturedAtUtc).
+            <strong>Đã cấu hình ≠ đã gọi thành công.</strong>
+            Thống kê 7 ngày đọc từ database thật, không lấy từ Google Console.
+        </div>
+        <section class="op-columns">
+            <article class="op-card op-provider">
+                <div class="op-provider-header">
+                    <span class="op-provider-icon op-violet">✧</span>
+                    <div><h2>Gemini AI</h2><small>Model và tình hình sử dụng trong SCApp</small></div>
+                    <span class="op-state @(c.GeminiKeyConfigured ? "ok" : "off")">@(c.GeminiKeyConfigured ? "Có key" : "Chưa cấu hình")</span>
+                </div>
+                @if (insights is { } a)
+                {
+                    <div class="op-insights-metrics">
+                        <div class="op-insight-box violet"><span>Hồ sơ đã lưu điểm AI</span><strong>@Num(a.AiScoredEvaluations7Days)</strong><small>7 ngày · có thể gồm dữ liệu AI giả lập lịch sử</small></div>
+                        <div class="op-insight-box coral"><span>Đơn vị quota nội bộ</span><strong>@Num(a.AiReservedUnits7Days)</strong><small>7 ngày · không phải lần gọi hoặc token Google</small></div>
+                    </div>
+                }
+                <dl class="op-config-rows">
+                    <div><dt>Model hiện tại</dt><dd>@c.ScoringModel</dd></div>
+                    <div><dt>Chế độ</dt><dd>@(c.GeminiFakeMode ? "AI giả lập" : "Gemini thật (nếu worker hoặc preview gọi)")</dd></div>
+                    <div><dt>Kiểm tra Google API</dt><dd>
+                        @if (probe is null) { <span class="op-state off">Chưa kiểm tra trong phiên này</span> }
+                        else { <span class="op-state @(probe.State == "reachable" ? "ok" : "off")">@(probe.State == "reachable" ? "Google phản hồi" : "Không đạt")</span> }
+                    </dd></div>
+                    <div><dt>Timeout / nhịp gọi</dt><dd>@c.GeminiTimeoutSeconds giây / @c.GeminiMinDelayMs ms</dd></div>
+                </dl>
+                @if (probe is not null)
+                {
+                    <div class="op-live-result" role="status">
+                        <strong>@(probe.State == "reachable" ? "Đã xác minh truy cập model" : "Chưa xác minh được")</strong>
+                        <p>@probe.Detail</p>
+                        <small>@VnTime(probe.CheckedAtUtc) @(probe.ProviderHttpStatus is { } code ? $"· HTTP {code}" : "")</small>
+                    </div>
+                }
+                @if (probeError is not null) { <p class="op-insight-error" role="alert">@probeError</p> }
+                <div class="op-action-bar">
+                    <button type="button" class="op-button" disabled="@(checking || !c.GeminiKeyConfigured)" @onclick="CheckGeminiAsync">@(checking ? "Đang hỏi Google…" : "Kiểm tra model trực tiếp")</button>
+                    <a class="op-link" href="/admin/ai-usage">Xem xu hướng quota ↗</a>
+                </div>
+                <p class="op-insight-note">models.get kiểm tra model/key mà không chấm CV. Muốn biết token thật và chi phí phải lưu <code>usageMetadata</code> khi gọi generateContent.</p>
+            </article>
+
+            <article class="op-card op-provider">
+                <div class="op-provider-header">
+                    <span class="op-provider-icon op-coral">G</span>
+                    <div><h2>Google Sign-In</h2><small>Dữ liệu đăng nhập được SCApp ghi nhận</small></div>
+                    <span class="op-state @(c.GoogleLoginEnabled && c.GoogleClientConfigured ? "ok" : "off")">@(c.GoogleLoginEnabled && c.GoogleClientConfigured ? "Đã bật" : "Chưa sẵn sàng")</span>
+                </div>
+                @if (insights is { } g)
+                {
+                    <div class="op-insights-metrics">
+                        <div class="op-insight-box teal"><span>Tài khoản liên kết Google</span><strong>@Num(g.GoogleLinkedAccounts)</strong><small>Hiện có trong database</small></div>
+                        <div class="op-insight-box blue"><span>Callback đăng nhập thành công</span><strong>@Num(g.GoogleSuccessfulCallbacks7Days)</strong><small>7 ngày · sự kiện audit thành công</small></div>
+                        <div class="op-insight-box coral"><span>Callback bị từ chối</span><strong>@Num(g.GoogleRejectedCallbacks7Days)</strong><small>7 ngày · không nhất thiết do cấu hình lỗi</small></div>
+                    </div>
+                }
+                <dl class="op-config-rows">
+                    <div><dt>Client ID</dt><dd>@(c.GoogleClientIdHint ?? "Chưa cấu hình")</dd></div>
+                    <div><dt>OAuth callback</dt><dd><code>@c.GoogleCallbackPath</code><button class="op-copy" title="Sao chép" type="button" @onclick="() => CopyAsync(c.GoogleCallbackPath)">Sao chép</button></dd></div>
+                    <div><dt>Tài khoản Google mới, 7 ngày</dt><dd>@(insights is null ? "—" : Num(insights.GoogleNewAccounts7Days))</dd></div>
+                    <div><dt>Đăng nhập gần nhất được ghi nhận</dt><dd>@(insights?.LastGoogleSuccessfulCallbackUtc is { } at ? VnTime(at) : "Chưa có trong nhật ký")</dd></div>
+                </dl>
+                <p class="op-insight-note">Các số liệu lấy từ <code>UserExternalLogins</code> và <code>AuditEvents</code> của SCApp. Đây không phải analytics do Google Cloud cung cấp. Không lưu Google access token.</p>
+                <a class="op-link" href="/admin/activity-logs">Xem Audit Log ↗</a>
+            </article>
+        </section>
+        @if (insightError is not null)
+        {
+            <div class="op-alert" role="alert"><strong>Không có số liệu lịch sử từ database.</strong><p>@insightError</p><button class="op-button" @onclick="ReloadAsync">Tải lại</button></div>
+        }
+        <section class="op-card">
+            <div class="op-card-top"><h2>Độ tin cậy và phạm vi insight</h2><span class="op-mini-tag">MINH BẠCH DỮ LIỆU</span></div>
+            <ul class="op-rules">
+                <li><strong>Đọc trực tiếp:</strong> các chỉ số login/quota/điểm AI lấy từ SQL Server, không dùng số liệu demo.</li>
+                <li><strong>Kiểm tra thực:</strong> nút kiểm tra Gemini gọi Google từ backend, không gửi API key xuống trình duyệt.</li>
+                <li><strong>Chưa thu thập:</strong> input/output token, tiền Google tính, RPM/TPM/RPD; không hiển thị số 0 giả.</li>
+                <li><strong>Giới hạn đo:</strong> điểm AI đã lưu có thể từ lượt chấm giả lập trước đây; không được gắn nhãn "Gemini request thành công".</li>
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    private AdminIntegrationSnapshotDto? config;
+    private AdminProviderInsightsDto? insights;
+    private AdminGeminiCheckDto? probe;
+    private bool busy, checking, disposed;
+    private string? error, insightError, probeError;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null; insightError = null;
+        try
+        {
+            var settingsTask = AdminOps.GetIntegrationsAsync(lifetime.Token);
+            var usageTask = AdminOps.GetProviderInsightsAsync(lifetime.Token);
+            await Task.WhenAll(settingsTask, usageTask);
+            if (disposed) return;
+            var settings = await settingsTask;
+            var usage = await usageTask;
+            if (settings.IsSuccess) config = settings.Data;
+            else { config = null; error = settings.ErrorMessage ?? "Không đọc được cấu hình."; }
+            if (usage.IsSuccess) insights = usage.Data;
+            else { insights = null; insightError = usage.ErrorMessage ?? "Không đọc được dữ liệu thống kê."; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+    private async Task CheckGeminiAsync()
+    {
+        if (checking || disposed) return;
+        checking = true; probeError = null;
+        try
+        {
+            var result = await AdminOps.CheckGeminiAsync(lifetime.Token);
+            if (disposed) return;
+            if (result.IsSuccess) probe = result.Data;
+            else probeError = result.ErrorMessage ?? "Không kiểm tra được Google.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) { checking = false; await InvokeAsync(StateHasChanged); } }
+    }
+    private async Task CopyAsync(string value)
+    {
+        try { await JS.InvokeVoidAsync("scAdminOps.copy", value); }
+        catch (JSDisconnectedException) { }
+    }
+    private static string Num(long n) => n.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+    private static string VnTime(DateTime utc) =>
+        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc))
+            .ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) + " (UTC+7)";
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

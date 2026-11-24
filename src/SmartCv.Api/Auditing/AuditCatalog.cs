@@ -68,6 +68,8 @@ public static class AuditCatalog
         Add("DELETE /api/evaluation-sets/{id:int}/labels/{applicationId:int}", "evaluation_sets.label_removed", "EvaluationSets", "EvaluationSet", "Bỏ nhãn HR");
         Add("POST /api/retention/run", "privacy.retention_requested", "Privacy", "Retention", "Yêu cầu quét hạn lưu CV", null);
         Add("POST /api/cvs/{id:guid}/anonymize", "cvs.anonymized", "Privacy", "Cv", "Ẩn danh hóa CV");
+        Add("PATCH /api/admin/ops/workspaces/{id:int}/quota", "workspace.quota_changed",
+            "Workspace", "Workspace", "Điều chỉnh hạn mức workspace", required: true);
         Add("POST /api/workspace/sample-job", "workspace.sample_job",
              "Workspace", "Job", "Tạo vị trí mẫu cho không gian cá nhân", null);
         return entries;

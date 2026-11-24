@@ -1,4 +1,5 @@
 @page "/runs/{Id:int}"
+@attribute [Authorize(Policy = AccessRules.BusinessPolicy)]
 @*
     B26: chi tiết một lượt chấm (A25).
       - GET /api/runs/{id}: trạng thái, số hồ sơ, thời gian và CẤU HÌNH ĐÃ LƯU của lượt (prompt, model, temperature,

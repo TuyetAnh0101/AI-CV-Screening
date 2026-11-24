@@ -26,6 +26,9 @@ public static class WebAuthSetup
             var business = BusinessPolicy();
             o.DefaultPolicy = business;
             o.AddPolicy(AccessRules.AdminPolicy, new AuthorizationPolicyBuilder(business).RequireRole(UserRoles.Admin).Build());
+            o.AddPolicy(AccessRules.BusinessPolicy, new AuthorizationPolicyBuilder(business)
+                .RequireRole(UserRoles.Hr)
+                .RequireAssertion(c => AccessRules.CanOperateBusiness(c.User)).Build());
             o.AddPolicy(AccessRules.SignedInPolicy, p => p.RequireAuthenticatedUser()
                 .RequireClaim(AccessRules.SessionClaim, AccessRules.Verified).RequireRole(UserRoles.Admin, UserRoles.Hr));
         });
