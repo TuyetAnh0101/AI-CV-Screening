@@ -191,7 +191,9 @@ else
     private void TogglePassword() => form.ShowPassword = !form.ShowPassword;
 
     /// <summary>B29: tài khoản dùng mật khẩu tạm vào thẳng trang đổi mật khẩu (giữ trang muốn mở để quay lại sau).</summary>
-    private string NextUrl => Session.MustChangePassword ? AuthText.ChangePasswordUrl(ReturnUrl) : AuthText.SafeReturnUrl(ReturnUrl);
+    private string NextUrl => Session.MustChangePassword ? AuthText.ChangePasswordUrl(ReturnUrl)
+        : Session.User is null ? AuthText.SafeReturnUrl(ReturnUrl)
+        : RoleBasedNavigation.Destination(ReturnUrl, Session.User.Role, Session.User.Workspace?.Kind, Session.User.Workspace?.Role);
 
     private async Task SubmitAsync()
     {

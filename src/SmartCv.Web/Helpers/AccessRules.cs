@@ -52,6 +52,7 @@ public static class AccessRules
     /// <summary>Tên chính sách dùng trong [Authorize(Policy = ...)] của trang Blazor (đăng ký ở WebAuthSetup).</summary>
     public const string AdminPolicy = "SmartCv.Admin";
     public const string BusinessPolicy = "SmartCv.BusinessOperator";
+    public const string ReportsPolicy = "SmartCv.ReportsViewer";
     // Trusted only for visual hints. The API independently validates OwnerUserId from DB.
     public const string WorkspaceKindClaim = "scapp_workspace_kind";
     public const string WorkspaceRoleClaim = "scapp_workspace_role";
@@ -117,7 +118,7 @@ public static class AccessRules
     public static string RoleName(ClaimsPrincipal? user) => Level(user) switch
     {
         AccessLevel.Admin => AuthText.RoleName(UserRoles.Admin),
-        AccessLevel.Hr => AuthText.RoleName(UserRoles.Hr),
+        AccessLevel.Hr => RoleBasedNavigation.DisplayRole(user),
         AccessLevel.PasswordChangeRequired => AuthText.RoleName(user!.IsInRole(UserRoles.Admin) ? UserRoles.Admin : UserRoles.Hr),
         _ => AuthText.RoleName(null)
     };

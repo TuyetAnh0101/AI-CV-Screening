@@ -1,0 +1,95 @@
+@using SmartCv.Core.Workspaces
+@inject AuthSession Session
+@inject WorkspaceApiClient WorkspaceApi
+@implements IDisposable
+
+@if (isPersonal)
+{
+    <section class="rx-workspace rx-personal" aria-label="Không gian làm việc của tôi">
+        <div class="rx-workspace-title">
+            <div><p class="rx-eyebrow">PERSONAL · QUẢN LÝ TRONG WORKSPACE</p><h2>Không gian tuyển dụng của tôi <span aria-hidden="true">✦</span></h2><p>Giới hạn và số liệu từ API workspace thật, không phải hạn mức của Google.</p></div>
+            <button type="button" class="rx-refresh" disabled="@loading" @onclick="LoadAsync">@(loading ? "Đang tải…" : "↻ Làm mới quota")</button>
+        </div>
+        @if (error is not null)
+        {
+            <p role="alert" class="rx-workspace-error">@error Bạn vẫn có thể xem Dashboard hoặc thử làm mới.</p>
+        }
+        else if (loading && data is null)
+        {
+            <p role="status">Đang đọc phạm vi, CV và quota của workspace…</p>
+        }
+        else if (data is { } x)
+        {
+            <div class="rx-workspace-stats">
+                <div><span>Workspace</span><strong>@x.Name</strong><small>Chủ sở hữu · Personal</small></div>
+                <div><span>Vị trí tuyển dụng</span><strong>@x.JobCount.ToString("N0")</strong><small>Trong workspace</small></div>
+                <div><span>CV còn lưu</span><strong>@x.CvCount.ToString("N0")</strong><small>@(x.MaxCvCount is { } cap ? $"Giới hạn {cap:N0} CV" : "Không đặt giới hạn CV nội bộ")</small></div>
+                <div><span>Đơn vị AI hôm nay</span><strong>@x.AiUsedToday.ToString("N0")@(x.DailyAiLimit is { } limit ? $" / {limit:N0}" : "")</strong><small>@(x.DailyAiLimit is null ? "Không đặt giới hạn nội bộ" : "Đặt lại: " + x.AiResetsAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM HH:mm") + " (UTC+7)")</small></div>
+            </div>
+            <div class="rx-workspace-foot">
+                <span>@(x.HasActivePrompt ? "✓ Đã có System Prompt hoạt động" : "! Chưa có System Prompt hoạt động")</span>
+                <a href="/reports">Báo cáo & dữ liệu của tôi ↗</a>
+            </div>
+        }
+    </section>
+}
+else if (isInternalHr)
+{
+    <section class="rx-workspace rx-internal" aria-label="Tài khoản nhân sự nội bộ">
+        <div class="rx-workspace-title"><div><p class="rx-eyebrow">INTERNAL · TUYỂN DỤNG</p><h2>Trung tâm nhân sự nội bộ <span aria-hidden="true">✦</span></h2><p>Những Job, CV và lượt chấm trong workspace nội bộ. Không bao gồm workspace cá nhân của người khác.</p></div><a href="/reports" class="rx-refresh">Báo cáo tuyển dụng ↗</a></div>
+    </section>
+}
+
+@code {
+    private bool isPersonal;
+    private bool isInternalHr;
+    private bool loading;
+    private bool disposed;
+    private WorkspaceDto? data;
+    private string? error;
+    private readonly CancellationTokenSource lifecycle = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var me = Session.User;
+        isPersonal = me?.Role == "HR" && me.Workspace is { Kind: "Personal", Role: "Owner", Id: > 0 };
+        isInternalHr = me?.Role == "HR" && me.Workspace is { Kind: "Internal", Role: "Owner" or "Member", Id: > 0 };
+        if (isPersonal) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!isPersonal || loading || disposed) return;
+        loading = true;
+        error = null;
+        try
+        {
+            var result = await WorkspaceApi.GetWorkspaceAsync(lifecycle.Token);
+            if (disposed) return;
+            if (result.IsSuccess && result.Data is { Kind: "Personal", Role: "Owner" } workspace)
+                data = workspace;
+            else
+            {
+                data = null;
+                error = result.IsSuccess ? "Workspace không còn hợp lệ." :
+                    "Không thể tải thông tin workspace từ API.";
+            }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally
+        {
+            if (!disposed)
+            {
+                loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+        lifecycle.Cancel();
+        lifecycle.Dispose();
+    }
+}

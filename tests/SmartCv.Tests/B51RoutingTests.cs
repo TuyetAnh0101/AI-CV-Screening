@@ -64,7 +64,7 @@ public sealed class B51RoutingTests
     public void Sidebar_dashboard_link_is_exact_and_does_not_match_jobs()
     {
         var dashboard = AppNavigation.Groups.Single(x => x.Title == "Tổng quan")
-            .Items.Single();
+            .Items.Single(i => i.Href == "dashboard");
         Assert.Equal("dashboard", dashboard.Href);
         Assert.Equal(NavLinkMatch.All, dashboard.Match);
     }

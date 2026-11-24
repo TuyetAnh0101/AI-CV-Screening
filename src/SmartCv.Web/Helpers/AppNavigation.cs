@@ -57,17 +57,7 @@ public static class AppNavigation
     ];
 
     /// <summary>Các nhóm và mục mà người dùng này được thấy; không bao giờ có nhóm rỗng. Chưa dùng được ứng dụng → rỗng.</summary>
-    public static IReadOnlyList<NavGroup> For(ClaimsPrincipal? user)
-    {
-        if (!AccessRules.CanUseApp(user)) return [];
-        var admin = AccessRules.IsAdmin(user);
-        return Groups
-            .Where(g => !admin || g.Title is "Tổng quan" or "Quản trị")
-            .Select(g => new NavGroup(g.Title, g.Items.Where(i => !i.AdminOnly || admin)
-                .Select(i => i.Href == "dashboard" ? i with { Text = admin ? "Dashboard quản trị" : "Dashboard tuyển dụng", Href = admin ? "admin/dashboard" : "dashboard" } : i).ToList()))
-            .Where(g => g.Items.Count > 0)
-            .ToList();
-    }
+    public static IReadOnlyList<NavGroup> For(ClaimsPrincipal? user) => RoleBasedNavigation.For(user);
 
     /// <summary>
     /// Mục menu "cha" của một đường dẫn (vd. "/jobs/new" → mục "Vị trí tuyển dụng") mà người dùng được mở, khác trang hiện tại.
