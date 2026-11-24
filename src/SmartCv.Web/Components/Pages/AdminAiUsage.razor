@@ -149,18 +149,8 @@
         </section>
     }
 
-    <section class="op-columns">
-        <div class="op-card">
-            <div class="op-card-top"><h2>Gemini token & chi phí</h2><span class="op-mini-tag op-tag-warning">CHƯA THU THẬP</span></div>
-            <p>SCApp chưa lưu <code>usageMetadata</code> từng request. Input/output token và chi phí không thể khôi phục chính xác từ lịch sử điểm AI hoặc quota.</p>
-            <div class="op-unsupported"><strong>—</strong><span>Input tokens</span><strong>—</strong><span>Output tokens</span><strong>—</strong><span>Chi phí ước tính</span></div>
-        </div>
-        <div class="op-card">
-            <div class="op-card-top"><h2>Quota từ Google</h2><span class="op-mini-tag op-tag-warning">KHÔNG TỰ ĐỒNG ĐỒNG BỘ</span></div>
-            <p>Quota của SCApp khác RPM/TPM/RPD của Google. Kiểm tra mức sử dụng nhà cung cấp ở Google AI Studio; không hiển thị giá trị giả lập.</p>
-            <a class="op-link" href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer">Mở Google AI Studio ↗</a>
-        </div>
-    </section>
+    <AdminGeminiTelemetryPanel Period="@period" />
+
 </div>
 
 @code {

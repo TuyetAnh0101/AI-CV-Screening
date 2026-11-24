@@ -9,6 +9,7 @@ using SmartCv.Core.Entities;
 using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
+using SmartCv.Infrastructure.Ai;
 using SmartCv.Infrastructure.Prompts;
 using SmartCv.Infrastructure.Workspaces;
 
@@ -38,7 +39,7 @@ public sealed class RunScoringProcessor(
     private readonly ScoringOptions _scoring = scoringOptions.Value;
     private readonly Dictionary<int, JobProfile> _jobCache = [];
 
-    private sealed record RunSettings(int RunId, int WorkspaceId, string ModelName, decimal Temperature, decimal KeywordWeight, decimal AiWeight, decimal PassThreshold, string SystemPrompt);
+    private sealed record RunSettings(int RunId, int WorkspaceId, string RunType, string ModelName, decimal Temperature, decimal KeywordWeight, decimal AiWeight, decimal PassThreshold, string SystemPrompt);
 
     /// <summary>
     /// Khóa để cả hệ thống chỉ một worker chấm tại một thời điểm, kể cả khi chạy nhiều instance API.
@@ -179,7 +180,7 @@ public sealed class RunScoringProcessor(
         }
 
         var settings = await db.EvaluationRuns.AsNoTracking().Where(r => r.RunId == runId)
-            .Select(r => new RunSettings(r.RunId, r.WorkspaceId, r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold,
+            .Select(r => new RunSettings(r.RunId, r.WorkspaceId, r.RunType, r.ModelName, r.Temperature, r.KeywordWeight, r.AiWeight, r.PassThreshold,
                 r.SystemPromptSnapshot ?? r.PromptVersion.SystemPrompt))
             .FirstAsync(ct);
 
@@ -256,6 +257,7 @@ public sealed class RunScoringProcessor(
                 {
                     // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che trong GeminiEvaluationService (A37).
                     mightHaveCalledAi = true; // Nếu evaluator ném exception, không hoàn quota vì có thể đã gửi Gemini.
+                    using var telemetryScope = GeminiTelemetryScope.Begin(run.RunType, run.RunId, evaluationId);
                     aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(run.ModelName, run.Temperature, run.SystemPrompt, job!,
                         info.ExtractedText!, info.CandidateName), ct);
                     mightHaveCalledAi = aiResult.Attempts > 0;

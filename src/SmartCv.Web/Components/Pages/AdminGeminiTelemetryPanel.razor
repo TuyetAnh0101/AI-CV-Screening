@@ -1,0 +1,147 @@
+@using SmartCv.Core.Contracts
+@using Microsoft.JSInterop
+@inject AdminOperationsApiClient Api
+@inject IJSRuntime JS
+@implements IDisposable
+
+<section class="gt-panel" aria-labelledby="gt-heading">
+    <div class="gt-head">
+        <div>
+            <div class="gt-kicker">03 · GEMINI API TELEMETRY</div>
+            <h2 id="gt-heading">Token, chi phí và mức gọi API <span class="gt-star">✦</span></h2>
+            <p>Chỉ ghi các request thực sự gửi tới Google từ sau migration. Mỗi lần thử lại là một request riêng.</p>
+        </div>
+        <button type="button" class="gt-reload" @onclick="ReloadAsync" disabled="@busy" aria-label="Tải lại thống kê Gemini">
+            @(busy ? "Đang tải…" : "↻ Làm mới")
+        </button>
+    </div>
+
+    @if (busy && data is null)
+    {
+        <div class="gt-notice" role="status">Đang tải dữ liệu request Gemini từ SQL Server…</div>
+    }
+    else if (error is not null)
+    {
+        <div class="gt-error" role="alert"><strong>Không tải được Gemini telemetry.</strong><p>@error</p></div>
+    }
+    else if (data is { } x)
+    {
+        <div class="gt-meta">
+            <span>Phạm vi: <strong>@(x.Period == "all" ? "Toàn bộ lịch sử telemetry" : x.Period + " ngày")</strong></span>
+            <span>@(x.FirstRecordedAtUtc is null ? "Chưa có request nào được ghi nhận" : "Bắt đầu ghi nhận: " + DateVn(x.FirstRecordedAtUtc.Value))</span>
+            <span>Đọc lúc @DateVn(x.CapturedAtUtc)</span>
+        </div>
+        <div class="gt-grid">
+            <article class="gt-kpi coral"><small>Request gửi Gemini</small><strong>@Fmt(x.Attempts)</strong><span>@Fmt(x.ScreeningAttempts) Screening · @Fmt(x.PromptTestAttempts) PromptTest · @Fmt(x.PreviewAttempts) Preview</span></article>
+            <article class="gt-kpi teal"><small>HTTP 2xx</small><strong>@Fmt(x.HttpOk)</strong><span>@Percent(x.HttpOk, x.Attempts) request nhận HTTP thành công</span></article>
+            <article class="gt-kpi violet"><small>Input tokens đã đo</small><strong>@NullableNumber(x.PromptTokens)</strong><span>Google promptTokenCount · không suy từ CV</span></article>
+            <article class="gt-kpi azure"><small>Output tokens đã đo</small><strong>@NullableNumber(x.CandidateTokens)</strong><span>Google candidatesTokenCount</span></article>
+            <article class="gt-kpi amber"><small>Thinking tokens</small><strong>@NullableNumber(x.ThoughtsTokens)</strong><span>Chỉ khi Google báo cáo</span></article>
+            <article class="gt-kpi emerald"><small>Tổng token đã ghi</small><strong>@NullableNumber(x.TotalTokens)</strong><span>@Fmt(x.WithUsageMetadata) / @Fmt(x.Attempts) request có totalTokenCount</span></article>
+        </div>
+        <div class="gt-columns">
+            <article class="gt-card">
+                <header><h3>Chi phí ước tính <span class="gt-tag lavender">USD</span></h3></header>
+                <div class="gt-cost">@(x.EstimatedCostUsd is null ? "—" : x.EstimatedCostUsd.Value.ToString("$0.00000000", System.Globalization.CultureInfo.InvariantCulture))</div>
+                @if (x.EstimatedCostUsd is null)
+                {
+                    <p>Chưa có giá tham chiếu hợp lệ cho model, hoặc request chưa có metadata. Cần khai báo <code>AiTelemetry:Pricing</code> từ bảng giá Google.</p>
+                }
+                else
+                {
+                    <p>Ước tính theo đơn giá cấu hình lúc request được ghi. Không phải số tiền Google đã xuất hóa đơn.</p>
+                }
+                <p><strong>@Fmt(x.WithEstimatedCost) / @Fmt(x.Attempts)</strong> request có ước tính chi phí. Không suy đoán các request còn lại.</p>
+                <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noopener noreferrer">Tra cứu bảng giá Gemini ↗</a>
+            </article>
+            <article class="gt-card">
+                <header><h3>Mức sử dụng quan sát được <span class="gt-tag amber">KHÔNG PHẢI GOOGLE QUOTA</span></h3></header>
+                <div class="gt-meter"><span>Request 60 giây qua</span><strong>@Fmt(x.ObservedRpm)</strong></div>
+                <div class="gt-meter"><span>Input token 60 giây qua</span><strong>@NullableNumber(x.ObservedTpm)</strong></div>
+                <div class="gt-meter"><span>Request 24 giờ qua</span><strong>@Fmt(x.ObservedRpd)</strong></div>
+                <p>SCApp chỉ quan sát các request do chính ứng dụng ghi. Các giá trị này không bao gồm ứng dụng khác dùng chung Google project. Google có hạn mức RPM/TPM/RPD riêng theo model và project.</p>
+                <a href="https://aistudio.google.com/usage" target="_blank" rel="noopener noreferrer">Xem hạn mức và sử dụng chính thức trong AI Studio ↗</a>
+            </article>
+        </div>
+        <div class="gt-card gt-chart">
+            <header><h3>Xu hướng request và lỗi</h3><span class="gt-tag">@(x.ChartBucket == "month" ? "THEO THÁNG" : "THEO NGÀY") · UTC+7</span></header>
+            @if (x.Trend.Count == 0)
+            { <p class="gt-notice">Chưa có bản ghi. Các kết quả chấm CV lịch sử không tự sinh ra token; hãy chạy một bài chấm thật sau khi migration để bắt đầu ghi nhận.</p> }
+            else
+            {
+                <div class="gt-canvas"><canvas @ref="canvas" role="img" aria-label="Biểu đồ request Gemini thành công và lỗi; có bảng chi tiết bên dưới"></canvas></div>
+                <div class="gt-legend"><span><i class="gt-ok"></i> HTTP 2xx</span><span><i class="gt-fail"></i> Lỗi gửi/HTTP</span></div>
+                <details><summary>Xem dữ liệu theo thời gian</summary>
+                    <div class="gt-scroll"><table><thead><tr><th>Ngày / Tháng</th><th>Request</th><th>HTTP 2xx</th><th>Lỗi</th><th>Token đo được</th><th>Ước tính USD</th></tr></thead>
+                        <tbody>@foreach (var p in x.Trend.Reverse())
+                        { <tr><td>@Bucket(p.Date,x.ChartBucket)</td><td>@Fmt(p.Attempts)</td><td>@Fmt(p.HttpOk)</td><td>@Fmt(p.Errors)</td><td>@NullableNumber(p.TotalTokens)</td><td>@(p.CostUsd?.ToString("0.00000000", System.Globalization.CultureInfo.InvariantCulture) ?? "—")</td></tr> }</tbody>
+                    </table></div>
+                </details>
+            }
+        </div>
+        <div class="gt-card">
+            <header><h3>Phân tích theo model</h3><span class="gt-tag lavender">REQUEST THẬT · KHÔNG PHẢI EVALUATION</span></header>
+            <div class="gt-scroll"><table><thead><tr><th>Model</th><th>Request</th><th>HTTP 2xx</th><th>Lỗi</th><th>Có metadata</th><th>Tổng token</th><th>Chi phí USD*</th></tr></thead>
+                <tbody>
+                @foreach (var m in x.Models)
+                { <tr><td><strong>@m.Model</strong></td><td>@Fmt(m.Attempts)</td><td>@Fmt(m.HttpOk)</td><td>@Fmt(m.Errors)</td><td>@Fmt(m.WithUsageMetadata)</td><td>@NullableNumber(m.TotalTokens)</td><td>@(m.CostUsd?.ToString("0.00000000", System.Globalization.CultureInfo.InvariantCulture) ?? "—")</td></tr> }
+                @if (x.Models.Count == 0) { <tr><td colspan="7" class="gt-center">Chưa có request Gemini nào được ghi nhận.</td></tr> }
+                </tbody></table></div>
+            <p class="gt-fine">*Tổng chi phí chỉ gồm các request có giá snapshot. Số liệu có thể thiếu nếu cơ sở dữ liệu không lưu được telemetry; API giữ luồng chấm hoạt động và ghi cảnh báo server.</p>
+        </div>
+        <div class="gt-notice">HTTP 2xx là kết nối thành công, không nhất thiết đồng nghĩa với kết quả chấm CV hợp lệ. Request lỗi/timeout có thể vẫn tiêu thụ token phía Google. Metadata thiếu phải hiển thị là “—”, không biến thành 0.</div>
+    }
+</section>
+
+@code {
+    [Parameter] public string Period { get; set; } = "all";
+    private AdminGeminiTelemetryDto? data;
+    private ElementReference canvas;
+    private string? error, lastPeriod;
+    private bool busy, disposed, drawPending;
+    private int generation;
+    private readonly CancellationTokenSource lifetime = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (lastPeriod == Period) return;
+        lastPeriod = Period;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (disposed) return;
+        var mine = ++generation;
+        busy = true; error = null;
+        try
+        {
+            var answer = await Api.GetGeminiTelemetryAsync(Period, lifetime.Token);
+            if (disposed || mine != generation) return;
+            if (answer.IsSuccess && answer.Data is { } value)
+            { data = value; drawPending = true; }
+            else { data = null; error = answer.ErrorMessage ?? "API không trả telemetry."; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        { if (!disposed && mine == generation) { data = null; error = "Không kết nối được máy chủ."; } }
+        finally { if (!disposed && mine == generation) { busy = false; await InvokeAsync(StateHasChanged); } }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (disposed || !drawPending || data is null || data.Trend.Count == 0) return;
+        drawPending = false;
+        try { await JS.InvokeVoidAsync("scGeminiTelemetry.draw", canvas, data.Trend, data.ChartBucket); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { } // accessible HTML table remains available if canvas is unsupported
+    }
+
+    private static string Fmt(long x) => x.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+    private static string NullableNumber(long? x) => x.HasValue ? Fmt(x.Value) : "—";
+    private static string Percent(long n, long total) => total == 0 ? "—" : (100.0 * n / total).ToString("0.#") + "%";
+    private static string DateVn(DateTime dt) => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
+        .ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm") + " UTC+7";
+    private static string Bucket(DateOnly x, string unit) => x.ToString(unit == "month" ? "MM/yyyy" : "dd/MM/yyyy");
+    public void Dispose() { disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
+}

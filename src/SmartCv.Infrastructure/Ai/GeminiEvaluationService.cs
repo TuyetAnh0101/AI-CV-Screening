@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
@@ -32,7 +33,8 @@ public sealed class GeminiEvaluationService(
     HttpClient http,
     GeminiRateLimiter rateLimiter,
     IOptions<GeminiOptions> options,
-    ILogger<GeminiEvaluationService> logger) : IAiEvaluator
+    ILogger<GeminiEvaluationService> logger,
+    IGeminiInvocationRecorder? recorder = null) : IAiEvaluator
 {
     private const decimal MaxYears = 60m;
     private const decimal MaxGpa = 4m;
@@ -67,6 +69,12 @@ public sealed class GeminiEvaluationService(
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             await rateLimiter.WaitTurnAsync(ct);
+            // Each HTTP attempt is billed/limited independently. Never count a queued request.
+            var callStartedUtc = DateTime.UtcNow;
+            var elapsed = Stopwatch.StartNew();
+            int? providerStatus = null;
+            string? usageBody = null;
+            var telemetryOutcome = "NetworkError";
             TimeSpan? serverDelay = null;
 
             try
@@ -75,7 +83,11 @@ public sealed class GeminiEvaluationService(
                 message.Headers.Add("x-goog-api-key", _options.ApiKey);   // gửi key qua header, không để lộ trên URL
 
                 using var response = await http.SendAsync(message, ct);
+                providerStatus = (int)response.StatusCode;
+                telemetryOutcome = response.IsSuccessStatusCode ? "HttpOk" : "HttpError";
                 var text = await response.Content.ReadAsStringAsync(ct);
+                // Usage metadata is top-level. Never store full provider response/CV/prompt.
+                if (response.IsSuccessStatusCode) usageBody = text;
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -94,12 +106,42 @@ public sealed class GeminiEvaluationService(
             }
             catch (HttpRequestException)
             {
+                telemetryOutcome = "NetworkError";
                 last = AiEvaluationResult.Failure(AiErrorKind.Network, "Không kết nối được Gemini", attempt);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
+                telemetryOutcome = "Timeout";
                 // HttpClient hết thời gian chờ. Nếu người gọi hủy thì ct đã bật và ngoại lệ được ném tiếp.
                 last = AiEvaluationResult.Failure(AiErrorKind.Timeout, $"Gemini không phản hồi sau {_options.TimeoutSeconds} giây", attempt);
+            }
+
+            finally
+            {
+                elapsed.Stop();
+                if (recorder is not null)
+                {
+                    var context = GeminiTelemetryScope.Snapshot;
+                    var outcome = ct.IsCancellationRequested && providerStatus is null
+                        ? "Cancelled" : telemetryOutcome;
+                    // Telemetry is best effort and isolated from the scoring transaction.
+                    // A failure must NEVER replay the Gemini call, and never logs private data.
+                    try
+                    {
+                        using var writeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                        await recorder.RecordAsync(new GeminiInvocation(
+                            callStartedUtc, request.Model, context.Source, context.RunId,
+                            context.EvaluationId, attempt,
+                            (int)Math.Min(int.MaxValue, elapsed.ElapsedMilliseconds),
+                            providerStatus, outcome, GeminiUsageParser.Parse(usageBody)),
+                            writeTimeout.Token);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        logger.LogWarning("Gemini telemetry not persisted. FailureType={FailureType}",
+                            ex.GetType().Name);
+                    }
+                }
             }
 
             if (attempt == maxAttempts) break;
