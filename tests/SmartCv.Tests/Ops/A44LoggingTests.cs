@@ -69,7 +69,8 @@ public class A44LoggingTests
         foreach (var key in new[] { "ConnectionStrings__SmartCvDb", "Jwt__Key", "Gemini__ApiKey", "CvUpload__BaseDirectory" }) Assert.Contains(key, error.Message);
         ProductionSetup.ValidateRequiredSettings(config, new Host("Development", TestSupport.TempRoot()));
         var supplied = Config(("ConnectionStrings:SmartCvDb", "SyntheticConnection"), ("Jwt:Key", "SyntheticSigningValue"),
-            ("Gemini:ApiKey", "SyntheticAiValue"), ("CvUpload:BaseDirectory", TestSupport.TempRoot()));
+            ("Gemini:ApiKey", "SyntheticAiValue"), ("CvUpload:BaseDirectory", TestSupport.TempRoot()),
+            ("DataProtection:KeysPath", Path.Combine(TestSupport.TempRoot(), "keys")));
         ProductionSetup.ValidateRequiredSettings(supplied, new Host("Production", TestSupport.TempRoot()));
         Assert.Equal("SyntheticSigningValue", supplied["Jwt:Key"]);
     }

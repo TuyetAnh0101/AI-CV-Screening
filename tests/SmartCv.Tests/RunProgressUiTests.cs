@@ -313,6 +313,8 @@ public class RunProgressUiTests
         services.AddSingleton(new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance));
         services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
         services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));
+        // The new shared QuotaNotice injects WorkspaceApiClient when the page renders.
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance));
         return services.BuildServiceProvider();
     }
 

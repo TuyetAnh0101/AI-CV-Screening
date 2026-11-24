@@ -330,10 +330,11 @@ public class B39PromptPlaygroundUiTests
         var http = new HttpClient(api, disposeHandler: false) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
         services.AddSingleton(new AiPreviewApiClient(http, NullLogger<AiPreviewApiClient>.Instance));
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance));
         var anonymity = new AnonymityState();
         if (!anonymous) await anonymity.SetAsync(false);   // tên hiển thị như khi HR tắt Ẩn danh
         services.AddSingleton(anonymity);
-        services.AddB28Auth(); // B28: Admin thấy Lưu / Nội dung gửi Gemini như trước
+        services.AddB28Auth(B28Auth.VerifiedInternalHr()); // Chấm thử bằng HR có workspace hợp lệ.
         var provider = services.BuildServiceProvider();
         return (new TestRenderer(provider), provider, js);
     }

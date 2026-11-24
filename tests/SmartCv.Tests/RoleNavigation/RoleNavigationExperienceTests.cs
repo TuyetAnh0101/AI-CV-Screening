@@ -45,6 +45,9 @@ public sealed class RoleNavigationExperienceTests
         Assert.Contains("admin/dashboard", admin);
         Assert.Contains("admin/ai-usage", admin);
         Assert.Contains("reports", admin);
+        Assert.DoesNotContain("account", admin);
+        Assert.DoesNotContain("account", hr);
+        Assert.DoesNotContain("account", owner);
         Assert.DoesNotContain("upload", admin);
         Assert.DoesNotContain("jobs", admin);
         Assert.Contains("upload", hr);

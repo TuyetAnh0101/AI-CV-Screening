@@ -116,7 +116,9 @@ public class A27MigrationTests
         Assert.Equal(new AddUsers().UpOperations.Select(o => o.GetType()), differences.Select(o => o.GetType()));
         Assert.False(db.Database.HasPendingModelChanges());
         Assert.Contains(Current, db.Database.GetMigrations());
-        Assert.Equal(A53JournalSqlTests.Current, db.Database.GetMigrations().Last());
+        // This is an A27 schema test, not a claim that A53 is the latest migration forever.
+        Assert.Contains(A53JournalSqlTests.Current, db.Database.GetMigrations());
+        Assert.Contains("20261123210000_AddGeminiInvocationLogs", db.Database.GetMigrations());
     }
 
     [Fact]

@@ -38,7 +38,7 @@ internal static class TestSupport
     {
         var report = await response.Content.ReadFromJsonAsync<SmartCv.Core.Ops.HealthReportDto>();
         Assert.NotNull(report);
-        Assert.Equal(new[] { "database", "uploads", "ocr" }, report.Checks.Select(c => c.Name));
+        Assert.Equal(new[] { "database", "uploads", "ocr", "email" }, report.Checks.Select(c => c.Name));
         var ready = report.Checks.All(c => c.Ok);
         Assert.Equal(ready ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal(ready ? "ok" : "error", report.Status);
@@ -115,7 +115,8 @@ internal static class TestSupport
             // A44 enables the real worker in Production. Test hosts remain isolated unless a test opts in.
             if (!string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase))
                 builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-                    { ["Scoring:WorkerEnabled"] = "false", ["CvUpload:BaseDirectory"] = TempRoot() }));
+                    { ["Scoring:WorkerEnabled"] = "false", ["CvUpload:BaseDirectory"] = TempRoot(),
+                      ["DataProtection:KeysPath"] = Path.Combine(TempRoot(), "keys") }));
             if (settings is not null)
             {
                 builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings));

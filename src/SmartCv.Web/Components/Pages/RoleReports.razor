@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = AccessRules.ReportsPolicy)]
 @using SmartCv.Web.Helpers
 @inject AuthSession Session
+@using SmartCv.Web.Components.Reports
 
 <PageTitle>Báo cáo &amp; dữ liệu · SCApp</PageTitle>
 
@@ -82,13 +83,18 @@
             else
             {
                 <article class="rx-card rx-amber">
-                    <div class="rx-card-top"><span>03 · BÁO CÁO NÂNG CAO</span><span class="rx-chip rx-planned">Đề xuất</span></div>
+                    <div class="rx-card-top"><span>03 · BÁO CÁO NÂNG CAO</span><span class="rx-chip rx-ready">Đã triển khai Excel</span></div>
                     <h2>Báo cáo tuyển dụng tổng hợp</h2>
-                    <p>File báo cáo tổng hợp nhiều lượt chấm, phễu tuyển dụng và thống kê theo kỳ chưa có endpoint xuất riêng. Hiện sử dụng Dashboard và Excel từng Run.</p>
+                    <p>Thống kê theo Job, kỳ tuyển dụng, Run Screening và giai đoạn HR. Excel riêng có ẩn danh, kiểm tra giới hạn và Audit.</p>
                     <span class="rx-muted">Không được nhầm với bản xuất toàn bộ dữ liệu workspace.</span>
                 </article>
             }
         </div>
+    }
+
+    @if (owner || internalHr)
+    {
+        <HrRecruitmentReportPanel />
     }
 
     <section class="rx-principles" aria-labelledby="rx-what-title">
