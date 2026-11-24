@@ -10,6 +10,7 @@ using SmartCv.Core.Options;
 using SmartCv.Core.Scoring;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Gemini;
+using SmartCv.Infrastructure.Ai;
 using SmartCv.Infrastructure.Scoring;
 using SmartCv.Infrastructure.Workspaces;
 
@@ -128,6 +129,7 @@ public static class AiPreviewEndpoints
 
             // Keyword (ở trên) dùng nội dung gốc; bản gửi Gemini được che thông tin cá nhân trong GeminiEvaluationService (A37)
             // bằng AiPromptAssembler, cùng hàm với POST /api/prompts/assembled-preview (A41).
+            using var telemetryScope = GeminiTelemetryScope.Begin("Preview");
             aiResult = await ai.EvaluateAsync(new AiEvaluationRequest(opt.ModelName, opt.Temperature, prompt.SystemPrompt, job,
                 application.ExtractedText, application.CandidateName), ct);
 

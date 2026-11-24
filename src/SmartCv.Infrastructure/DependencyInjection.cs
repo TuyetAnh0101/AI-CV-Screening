@@ -48,6 +48,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         // A10: chấm bằng AI. Chọn bản thật / giả lúc resolve để luôn đọc cấu hình đã hoàn chỉnh.
+        services.AddScoped<IGeminiInvocationRecorder, SqlGeminiInvocationRecorder>();
         services.AddSingleton<GeminiRateLimiter>();   // dùng chung một "cửa" cho mọi lần gọi Gemini trong ứng dụng
         services.AddHttpClient<GeminiEvaluationService>((sp, client) =>
         {

@@ -19,6 +19,12 @@ public sealed class AdminOperationsApiClient(HttpClient http, ILogger<AdminOpera
     public Task<ApiResult<AdminAiHistoryDto>> GetAiHistoryAsync(string period, CancellationToken ct = default) =>
         GetAsync<AdminAiHistoryDto>("api/admin/ops/ai-history?period=" + Uri.EscapeDataString(period), ct);
 
+    /// <summary>Recorded Gemini HTTP attempts, tokens and configured price snapshot.</summary>
+    public Task<ApiResult<AdminGeminiTelemetryDto>> GetGeminiTelemetryAsync(
+        string period, CancellationToken ct = default) =>
+        GetAsync<AdminGeminiTelemetryDto>(
+            "api/admin/ops/gemini-telemetry?period=" + Uri.EscapeDataString(period), ct);
+
     public Task<ApiResult<AdminWorkspacePageDto>> GetWorkspacesAsync(int page, string? search,
         CancellationToken ct = default) =>
         GetAsync<AdminWorkspacePageDto>($"api/admin/ops/workspaces?page={page}&search={Uri.EscapeDataString(search ?? string.Empty)}", ct);

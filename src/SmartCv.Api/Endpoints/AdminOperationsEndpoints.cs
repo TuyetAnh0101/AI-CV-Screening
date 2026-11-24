@@ -32,6 +32,8 @@ public static class AdminOperationsEndpoints
         group.MapGet("/overview", OverviewAsync).WithName("AdminOpsOverview");
         group.MapGet("/ai-usage", AiUsageAsync).WithName("AdminOpsAiUsage");
         group.MapGet("/ai-history", AiHistoryAsync).WithName("AdminOpsAiHistory");
+        group.MapGet("/gemini-telemetry", GeminiTelemetryEndpoints.ReadAsync)
+            .WithName("AdminOpsGeminiTelemetry");
         group.MapGet("/workspaces", WorkspacesAsync).WithName("AdminOpsWorkspaces");
         group.MapPatch("/workspaces/{id:int}/quota", ChangeQuotaAsync)
             .WithName("AdminOpsChangeWorkspaceQuota");
