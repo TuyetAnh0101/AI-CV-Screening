@@ -1,0 +1,350 @@
+@page "/admin/reports"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using System.Globalization
+@using Microsoft.JSInterop
+@using SmartCv.Core.Contracts
+@inject AdminOperationsReportApiClient ReportsApi
+@inject FileDownloadService Files
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<PageTitle>Báo cáo vận hành · SCApp</PageTitle>
+
+<main class="aor-page" aria-labelledby="aor-title">
+    <div class="aor-breadcrumb"><a href="/admin/dashboard">Trung tâm quản trị</a><span aria-hidden="true">/</span><strong>Báo cáo vận hành</strong></div>
+    <header class="aor-hero">
+        <div class="aor-hero-content">
+            <div class="aor-overline"><span class="aor-live-dot"></span> SYSTEM OPERATIONS · VERIFIED ADMIN</div>
+            <h1 id="aor-title">Một nền tảng. <em>Một bức tranh rõ ràng.</em></h1>
+            <p>Tổng hợp hoạt động hệ thống theo nguồn dữ liệu đã lưu, không truy cập CV, điểm ứng viên hoặc System Prompt riêng của workspace.</p>
+            <div class="aor-hero-tags"><span>GLOBAL METADATA</span><span>SQL-SOURCED</span><span>CSV · AUDITED</span></div>
+        </div>
+        <div class="aor-hero-art" aria-hidden="true"><span class="aor-orbit o1"></span><span class="aor-orbit o2"></span><span class="aor-orbit o3"></span><strong>SC<span>／</span>OPS</strong><small>PLATFORM INTELLIGENCE</small></div>
+    </header>
+
+    <section class="aor-filter-card" aria-labelledby="aor-filter-heading">
+        <div class="aor-filter-top"><div><h2 id="aor-filter-heading">Phạm vi báo cáo</h2><p>Ngày theo giờ Việt Nam (UTC+07), từ 1 đến 90 ngày. Thống kê tài khoản/workspace hiện tại không phụ thuộc khoảng ngày.</p></div><span class="aor-scope-badge">TOÀN NỀN TẢNG</span></div>
+        <div class="aor-filters">
+            <label>Từ ngày<input type="date" value="@fromText" max="@TodayText" @onchange="e => fromText = e.Value?.ToString() ?? string.Empty" disabled="@(busy || exportsLoading || previewing || downloading)" /></label>
+            <label>Đến ngày<input type="date" value="@toText" max="@TodayText" @onchange="e => toText = e.Value?.ToString() ?? string.Empty" disabled="@(busy || exportsLoading || previewing || downloading)" /></label>
+            <div class="aor-presets" role="group" aria-label="Chọn nhanh khoảng ngày">
+                <button type="button" disabled="@(busy || exportsLoading || previewing || downloading)" class="@(SelectedDays == 7 ? "active" : "")" @onclick="() => SelectPresetAsync(7)">7 ngày</button>
+                <button type="button" disabled="@(busy || exportsLoading || previewing || downloading)" class="@(SelectedDays == 14 ? "active" : "")" @onclick="() => SelectPresetAsync(14)">14 ngày</button>
+                <button type="button" disabled="@(busy || exportsLoading || previewing || downloading)" class="@(SelectedDays == 30 ? "active" : "")" @onclick="() => SelectPresetAsync(30)">30 ngày</button>
+                <button type="button" disabled="@(busy || exportsLoading || previewing || downloading)" class="@(SelectedDays == 90 ? "active" : "")" @onclick="() => SelectPresetAsync(90)">90 ngày</button>
+            </div>
+            <button type="button" class="aor-button aor-primary" data-aor-apply @onclick="ApplyAsync" disabled="@(busy || exportsLoading || previewing || downloading)">@(busy ? "Đang tổng hợp…" : "Áp dụng bộ lọc")</button>
+        </div>
+        @if (filterError is not null) { <div class="aor-alert" role="alert">@filterError</div> }
+        @if (summary is { } loaded) { <div class="aor-updated" role="status">Số liệu cập nhật @VnTime(loaded.Period.CapturedAtUtc) · Lọc kỳ @loaded.Period.From.ToString("dd/MM/yyyy") — @loaded.Period.To.ToString("dd/MM/yyyy") · Snapshot từng endpoint</div> }
+    </section>
+
+    @if (busy) { <div class="aor-loading" role="status"><span class="aor-spinner"></span>Đang đọc số liệu từ API quản trị…</div> }
+    @if (summaryError is not null) { <div class="aor-alert" role="alert"><strong>Thống kê chưa khả dụng.</strong> @summaryError <button type="button" @onclick="ApplyAsync" disabled="@busy">Thử lại</button></div> }
+
+    @if (summary is { } s)
+    {
+        <section aria-labelledby="aor-kpi-title">
+            <div class="aor-section-head"><div><span class="aor-index">01 / SNAPSHOT</span><h2 id="aor-kpi-title">Chỉ số nền tảng</h2><p>Các trạng thái hiện tại và các sự kiện phát sinh trong kỳ được phân biệt rõ ràng.</p></div></div>
+            <div class="aor-kpis">
+                <article class="aor-kpi aor-kpi-violet"><div class="aor-kpi-top"><span>Tài khoản đang được phép dùng</span><b>01</b></div><strong>@Num(s.Accounts.EnabledNow)</strong><small>@Num(s.Accounts.TotalNow) tổng · @Num(s.Accounts.LockedNow) đã khóa</small><p>IsActive, không phải người đang online</p></article>
+                <article class="aor-kpi aor-kpi-cyan"><div class="aor-kpi-top"><span>Workspace còn hoạt động</span><b>02</b></div><strong>@Num(s.Workspaces.ActiveNow)</strong><small>@Num(s.Workspaces.TotalNow) tổng · @Num(s.Workspaces.InactiveNow) ngừng</small><p>Personal và Internal trong toàn hệ thống</p></article>
+                <article class="aor-kpi aor-kpi-amber"><div class="aor-kpi-top"><span>Đơn vị AI đã giữ ròng</span><b>03</b></div><strong>@Num(s.Ai.NetReservedUnits)</strong><small>Screening @Num(s.Ai.ScreeningUnits) · Test @Num(s.Ai.PromptTestUnits)</small><p>Ledger quota, không phải token Gemini</p></article>
+                <article class="aor-kpi aor-kpi-coral"><div class="aor-kpi-top"><span>Lượt chấm thất bại</span><b>04</b></div><strong>@Num(s.Ai.FailedRuns)</strong><small>@Num(s.Ai.FailedEvaluations) bản ghi đánh giá lỗi</small><p>Kết quả hệ thống trong kỳ chọn</p></article>
+                <article class="aor-kpi aor-kpi-rose"><div class="aor-kpi-top"><span>Audit bị từ chối</span><b>05</b></div><strong>@Num(s.Security.DeniedAuditEvents)</strong><small>@Num(s.Security.FailedPasswordLogins) lần đăng nhập mật khẩu thất bại</small><p>Sự kiện đã ghi, không phải mọi HTTP 403</p></article>
+                <article class="aor-kpi aor-kpi-mint"><div class="aor-kpi-top"><span>Tệp ranking đã xuất</span><b>06</b></div><strong>@Num(s.Exports.RankingFiles)</strong><small>@Num(s.Exports.RankingRows) dòng xếp hạng đã ghi nhận</small><p>HR tổng hợp: @Num(s.Exports.HrAggregateFiles) tệp (không có row-count chuẩn)</p></article>
+            </div>
+        </section>
+
+        <section class="aor-two-col" aria-label="Nguồn AI và chất lượng số liệu">
+            <article class="aor-panel aor-accent-violet">
+                <div class="aor-panel-heading"><div><span class="aor-index">AI / TELEMETRY</span><h2>Lượt gọi Gemini</h2></div><span class="aor-soft-label">GHI NHẬN THẬT</span></div>
+                <div class="aor-provider-num">@(s.Ai.ProviderTelemetryAvailable ? Num(s.Ai.GeminiAttempts) : "Chưa có dữ liệu")</div>
+                <p>@(s.Ai.ProviderTelemetryAvailable ? $"HTTP thành công: {Num(s.Ai.GeminiHttpOk)} · Lỗi/timeout: {Num(s.Ai.GeminiErrorsOrTimeouts)} · Hủy: {Num(s.Ai.GeminiCancelled)}" : "Nguồn GeminiInvocationLogs chưa khả dụng; không coi đây là 0 lượt gọi.")</p>
+                <a href="/admin/ai-usage">Đi sâu vào telemetry &amp; chi phí dự tính →</a>
+            </article>
+            <article class="aor-panel aor-accent-amber">
+                <div class="aor-panel-heading"><div><span class="aor-index">DATA QUALITY</span><h2>Giới hạn quan sát</h2></div><span class="aor-soft-label">MINH BẠCH</span></div>
+                <div class="aor-availability"><span class="aor-availability-dot"></span>Vượt quota: @(s.Ai.QuotaExceededEvents is { } n ? Num(n) : "chưa có bộ đếm đáng tin cậy")</div>
+                <p>Sao lưu: <strong>@BackupLabel(s.Backup.Status)</strong>. Uptime và nhịp sống worker không được suy ra từ ảnh chụp readiness hoặc cờ cấu hình.</p>
+                <details class="aor-details"><summary>Kiểm tra nguồn và định nghĩa số liệu</summary><div class="aor-sources">@foreach (var src in s.Sources) { <div><b>@src.Metric</b><span>@src.Source</span><small>@src.Basis</small></div> }</div></details>
+            </article>
+        </section>
+
+        <section class="aor-panel aor-trend-panel" aria-labelledby="aor-trend-title">
+            <div class="aor-panel-heading"><div><span class="aor-index">02 / TIME SERIES</span><h2 id="aor-trend-title">Xu hướng theo ngày</h2><p>Chỉ số đọc từ ledger, EvaluationRuns và AuditEvents trong khoảng ngày đã chọn.</p></div>
+                <div class="aor-metric-switch" role="group" aria-label="Chỉ số biểu đồ">
+                    <button type="button" aria-pressed="@(chartMetric == "quota")" class="@(chartMetric == "quota" ? "selected" : "")" @onclick='() => ChangeMetricAsync("quota")'>Quota</button>
+                    <button type="button" aria-pressed="@(chartMetric == "fail")" class="@(chartMetric == "fail" ? "selected" : "")" @onclick='() => ChangeMetricAsync("fail")'>Lượt chấm lỗi</button>
+                    <button type="button" aria-pressed="@(chartMetric == "audit")" class="@(chartMetric == "audit" ? "selected" : "")" @onclick='() => ChangeMetricAsync("audit")'>Audit từ chối</button>
+                </div>
+            </div>
+            @if (trendError is not null) { <div class="aor-alert" role="alert">@trendError</div> }
+            else if (trend is { } t)
+            {
+                <div class="aor-chart-shell"><div id="aor-chart" class="aor-chart" role="img" aria-label="Biểu đồ theo ngày, xem bảng số liệu phía dưới để biết giá trị chính xác"></div></div>
+                <details class="aor-details aor-chart-data"><summary>Xem bảng số liệu gốc (@t.Points.Count ngày)</summary><div class="aor-table-scroll"><table><thead><tr><th>Ngày (UTC+7)</th><th>Quota ròng</th><th>Run lỗi</th><th>Audit từ chối</th></tr></thead><tbody>@foreach (var p in t.Points) { <tr><td>@p.Date.ToString("dd/MM/yyyy")</td><td>@Num(p.NetReservedUnits)</td><td>@Num(p.FailedRuns)</td><td>@Num(p.DeniedAuditEvents)</td></tr> }</tbody></table></div></details>
+            }
+            else if (!busy) { <p>Chưa có dữ liệu xu hướng từ API.</p> }
+        </section>
+
+        <section class="aor-two-col" aria-label="Bảng tổng hợp tài khoản và workspace">
+            <article class="aor-panel"><div class="aor-panel-heading"><div><span class="aor-index">03 / ACCOUNTS</span><h2>Tài khoản theo nguồn đăng ký</h2></div><a href="/users">Quản lý tài khoản →</a></div>
+                <div class="aor-mini-stats"><div><span>Đăng ký trong kỳ</span><strong>@Num(s.Accounts.CreatedInPeriod)</strong></div><div><span>Đăng nhập thất bại</span><strong>@Num(s.Security.FailedPasswordLogins)</strong></div></div>
+                <div class="aor-table-scroll"><table><thead><tr><th scope="col">Nguồn tạo</th><th scope="col">Số tài khoản</th></tr></thead><tbody>@foreach (var source in s.Accounts.BySignupSource) { <tr><td>@source.Code</td><td class="aor-num">@Num(source.Count)</td></tr> }</tbody></table></div>
+                <p class="aor-footnote">Nguồn tạo tài khoản ≠ nhà cung cấp đăng nhập đang liên kết. Không hiển thị email hay danh tính.</p>
+            </article>
+            <article class="aor-panel"><div class="aor-panel-heading"><div><span class="aor-index">04 / WORKSPACES</span><h2>Phân bố không gian</h2></div><a href="/admin/workspaces">Quản lý quota →</a></div>
+                <div class="aor-mini-stats"><div><span>Personal có quota AI</span><strong>@Num(s.Workspaces.PersonalWithDailyAiLimitNow)</strong></div><div><span>Personal có giới hạn CV</span><strong>@Num(s.Workspaces.PersonalWithCvLimitNow)</strong></div></div>
+                <div class="aor-table-scroll"><table><thead><tr><th scope="col">Loại workspace</th><th scope="col">Số lượng</th></tr></thead><tbody>@foreach (var kind in s.Workspaces.ByKind) { <tr><td>@kind.Code</td><td class="aor-num">@Num(kind.Count)</td></tr> }</tbody></table></div>
+                <p class="aor-footnote">Số lượng và hạn mức hiện tại; không liệt kê dữ liệu tuyển dụng của từng workspace.</p>
+            </article>
+        </section>
+    }
+
+    <section class="aor-panel aor-health-panel" aria-labelledby="aor-health-title">
+        <div class="aor-panel-heading"><div><span class="aor-index">05 / LIVE READINESS</span><h2 id="aor-health-title">Kiểm tra phụ thuộc</h2><p>Ảnh chụp tại một thời điểm; không phải tỷ lệ uptime hay kết quả kiểm thử SMTP/Gemini thực.</p></div><button type="button" class="aor-button aor-outline" disabled="@healthLoading" @onclick="RefreshHealthAsync">@(healthLoading ? "Đang kiểm tra…" : "Kiểm tra lại")</button></div>
+        @if (healthError is not null) { <div class="aor-alert" role="alert">@healthError</div> }
+        else if (health is { } h)
+        {
+            <div class="aor-health-intro"><span>Readiness: <strong class="@(h.ReadinessStatus == "ok" ? "aor-ok" : "aor-bad")">@(h.ReadinessStatus == "ok" ? "Sẵn sàng" : "Cần kiểm tra")</strong></span><span>Lần kiểm tra: @VnTime(h.CheckedAtUtc)</span></div>
+            <div class="aor-health-grid">@foreach (var check in h.Checks) { <article class="aor-health-item"><span class="aor-check-icon @(check.Ok ? "good" : "warn")">@(check.Ok ? "✓" : "!")</span><div><strong>@CheckName(check.Name)</strong><p>@check.Message</p></div></article> }</div>
+            <div class="aor-worker-grid">@foreach (var flag in h.WorkerConfiguration) { <div><strong>@flag.Name</strong><span class="@(flag.Enabled ? "aor-ok" : "aor-muted")">@(flag.Enabled ? "Cấu hình bật" : "Cấu hình tắt")</span><small>@flag.Meaning</small></div> }</div>
+            <p class="aor-footnote">@h.EmailCheckScope · Sao lưu: @BackupLabel(h.BackupStatus) · Uptime: chưa giám sát.</p>
+        }
+        else if (!busy && !healthLoading) { <p>Chưa kiểm tra được readiness tại thời điểm này.</p> }
+    </section>
+
+    <section class="aor-panel aor-exports-panel" aria-labelledby="aor-export-title">
+        <div class="aor-panel-heading"><div><span class="aor-index">06 / TRACEABILITY</span><h2 id="aor-export-title">Nhật ký xuất dữ liệu</h2><p>Chỉ metadata; nhật ký được ghi tại thời điểm hệ thống cấp quyền xuất file.</p></div>
+            <div class="aor-export-actions"><button type="button" class="aor-button aor-outline" disabled="@(busy || downloading || previewing)" @onclick="OpenPreviewAsync">Xem phạm vi CSV</button><button type="button" class="aor-button aor-primary" disabled="@(busy || downloading || previewing || summary is null || trend is null || exportPage is null)" @onclick="OpenPreviewAsync">Xuất CSV</button></div>
+        </div>
+        @if (exportError is not null) { <div class="aor-alert" role="alert">@exportError</div> }
+        @if (exportPage is { } exp)
+        {
+            <div class="aor-table-scroll"><table class="aor-export-table"><thead><tr><th scope="col">Thời gian (UTC+7)</th><th scope="col">Nhóm xuất</th><th scope="col">Định dạng</th><th scope="col">Người xuất</th><th scope="col">Workspace</th><th scope="col">Dòng</th><th scope="col">Ẩn danh</th></tr></thead>
+            <tbody>
+                @if (exp.Items.Count == 0) { <tr><td colspan="7" class="aor-empty">Chưa ghi nhận hoạt động xuất trong khoảng này.</td></tr> }
+                @foreach (var item in exp.Items)
+                { <tr><td>@VnTime(item.OccurredAtUtc)</td><td>@ExportCategory(item.Category)</td><td><span class="aor-filetype">@item.Format</span></td><td>@(item.ActorUserId is { } actor ? $"User #{actor}" : "Chưa xác định")<small>@(item.ActorRole ?? "—")</small></td><td>@(item.WorkspaceId is { } w ? $"#{w}" : "Toàn hệ thống / không ghi")</td><td>@(item.RowCount is { } rows ? Num(rows) : "Không ghi")</td><td>@(item.Anonymous is { } anon ? (anon ? "Có" : "Không") : "Không ghi")</td></tr> }
+            </tbody></table></div>
+            <div class="aor-pager"><div><strong>@Num(exp.Total)</strong> sự kiện trong kỳ · Trang @exp.Page / @Math.Max(1L, (exp.Total + exp.PageSize - 1) / exp.PageSize)</div>
+                <div><label>Hiển thị <select value="@pageSize" disabled="@exportsLoading" @onchange="ChangePageSizeAsync"><option value="10">10</option><option value="20">20</option><option value="50">50</option></select></label><button type="button" disabled="@(exportsLoading || exp.Page <= 1)" @onclick="() => ChangePageAsync(exp.Page - 1)">Trước</button><button type="button" disabled="@(exportsLoading || exp.Page * (long)exp.PageSize >= exp.Total)" @onclick="() => ChangePageAsync(exp.Page + 1)">Sau</button></div>
+            </div>
+        }
+        else if (exportsLoading) { <div class="aor-loading" role="status">Đang tải nhật ký xuất…</div> }
+    </section>
+
+    <div class="aor-footer-note">SCApp · Báo cáo quản trị chỉ hỗ trợ ra quyết định vận hành. Không thay thế hệ thống giám sát uptime, SLA hay công cụ sao lưu.</div>
+
+    @if (previewOpen)
+    {
+        <div class="aor-modal-backdrop" role="presentation">
+            <section class="aor-modal" role="dialog" aria-modal="true" aria-labelledby="aor-modal-title">
+                <div class="aor-modal-top"><span class="aor-modal-icon" aria-hidden="true">CSV</span><button type="button" aria-label="Đóng xem trước" data-aor-dialog-close disabled="@downloading" @onclick="ClosePreview">×</button></div>
+                <h2 id="aor-modal-title">Xuất báo cáo quản trị</h2>
+                <p>Tệp CSV tổng hợp metadata, không xuất CV, danh tính ứng viên, điểm cá nhân hoặc prompt.</p>
+                <div class="aor-modal-facts"><div><span>Phạm vi ngày</span><strong>@appliedFrom.ToString("dd/MM/yyyy") — @appliedTo.ToString("dd/MM/yyyy")</strong></div><div><span>Định dạng</span><strong>CSV (.csv)</strong></div><div><span>Quyền</span><strong>System Admin · Audit bắt buộc</strong></div></div>
+                @if (previewing) { <div class="aor-loading" role="status">Đang kiểm tra giới hạn xuất…</div> }
+                else if (preview is { } pre) { <div class="aor-preview-count"><strong>@Num(pre.ExportEventCount)</strong><span>sự kiện xuất · tối đa @Num(pre.MaxExportEvents)</span></div> }
+                @if (dialogError is not null) { <div class="aor-alert" role="alert">@dialogError</div> }
+                @if (downloadNotice is not null) { <div class="aor-confirm" role="status">@downloadNotice</div> }
+                <div class="aor-modal-buttons"><button type="button" class="aor-button aor-outline" disabled="@downloading" @onclick="ClosePreview">Đóng</button><button type="button" class="aor-button aor-primary" disabled="@(!CanDownload)" @onclick="DownloadAsync">@(downloading ? "Đang chuyển file…" : "Tải báo cáo CSV")</button></div>
+            </section>
+        </div>
+    }
+</main>
+
+@code {
+    private static readonly CultureInfo Vi = CultureInfo.GetCultureInfo("vi-VN");
+    private const int MaxDays = 90;
+    private static DateOnly Today() => DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).DateTime);
+    private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private string TodayText => Iso(Today());
+    private string fromText = Iso(Today().AddDays(-13));
+    private string toText = Iso(Today());
+    private DateOnly appliedFrom = Today().AddDays(-13), appliedTo = Today();
+    private AdminReportSummaryDto? summary;
+    private AdminReportTrendDto? trend;
+    private AdminReportExportPageDto? exportPage;
+    private AdminReportHealthDto? health;
+    private AdminReportExportPreviewDto? preview;
+    private string? summaryError, trendError, exportError, healthError, filterError, dialogError, downloadNotice;
+    private int page = 1, pageSize = 20;
+    private bool busy, disposed, healthLoading, exportsLoading, previewing, previewOpen, downloading, chartPending;
+    private string chartMetric = "quota";
+    private readonly CancellationTokenSource lifetime = new();
+
+    private int? SelectedDays => DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from) &&
+        DateOnly.TryParseExact(toText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var to) && to == Today()
+            ? to.DayNumber - from.DayNumber + 1 : null;
+    private bool CanDownload => !downloading && !busy && !previewing && dialogError is null && downloadNotice is null &&
+        preview is { CanDownload: true } p && p.Period.From == appliedFrom && p.Period.To == appliedTo;
+
+    protected override Task OnInitializedAsync() => ApplyAsync();
+
+    private async Task SelectPresetAsync(int days)
+    {
+        if (busy || disposed || exportsLoading || previewing || downloading || days is < 1 or > MaxDays) return;
+        var to = Today(); fromText = Iso(to.AddDays(1 - days)); toText = Iso(to);
+        await ApplyAsync();
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (busy || disposed || exportsLoading || previewing || downloading) return;
+        filterError = null;
+        if (!DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var from) ||
+            !DateOnly.TryParseExact(toText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var to) ||
+            from > to || to > Today() || to.DayNumber - from.DayNumber + 1 is < 1 or > MaxDays)
+        { filterError = "Chọn đủ hai ngày hợp lệ, tối đa 90 ngày và không vượt hôm nay (giờ Việt Nam)."; return; }
+        busy = true; appliedFrom = from; appliedTo = to; page = 1; previewOpen = false; preview = null;
+        summary = null; trend = null; exportPage = null;
+        summaryError = trendError = exportError = null; dialogError = downloadNotice = null;
+        try
+        {
+            var s = await ReportsApi.SummaryAsync(from, to, lifetime.Token);
+            if (disposed) return;
+            if (s.IsSuccess && s.Data is { } data && data.Period.From == from && data.Period.To == to) summary = data;
+            else summaryError = Error(s.IsSuccess ? null : s.ErrorMessage, s.StatusCode, "Không xác nhận được phạm vi báo cáo.");
+
+            var t = await ReportsApi.TrendAsync(from, to, lifetime.Token);
+            if (disposed) return;
+            if (t.IsSuccess && t.Data is { } td && td.Period.From == from && td.Period.To == to) { trend = td; chartPending = true; }
+            else trendError = Error(t.IsSuccess ? null : t.ErrorMessage, t.StatusCode, "Không tải được xu hướng hoặc phạm vi không khớp.");
+            await LoadExportsAsync(1);
+            await RefreshHealthAsync();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (HttpRequestException) { if (!disposed) summaryError ??= "Không kết nối được máy chủ báo cáo."; }
+        finally { if (!disposed) busy = false; }
+    }
+
+    private async Task LoadExportsAsync(int nextPage)
+    {
+        if (disposed || exportsLoading || nextPage < 1) return;
+        exportsLoading = true; exportError = null;
+        try
+        {
+            var result = await ReportsApi.ExportsAsync(appliedFrom, appliedTo, nextPage, pageSize, lifetime.Token);
+            if (disposed) return;
+            if (result.IsSuccess && result.Data is { } data && data.Period.From == appliedFrom && data.Period.To == appliedTo)
+            { exportPage = data; page = data.Page; }
+            else { exportError = Error(result.IsSuccess ? null : result.ErrorMessage, result.StatusCode, "Không tải được nhật ký xuất."); if (nextPage == 1) exportPage = null; }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) exportsLoading = false; }
+    }
+
+    private Task ChangePageAsync(int nextPage) => LoadExportsAsync(nextPage);
+    private async Task ChangePageSizeAsync(ChangeEventArgs e)
+    {
+        if (busy || disposed || exportsLoading || !int.TryParse(e.Value?.ToString(), out var size) || size is not (10 or 20 or 50)) return;
+        pageSize = size; await LoadExportsAsync(1);
+    }
+
+    private async Task RefreshHealthAsync()
+    {
+        if (disposed || healthLoading) return;
+        healthLoading = true; healthError = null;
+        try
+        {
+            var result = await ReportsApi.HealthAsync(lifetime.Token);
+            if (disposed) return;
+            if (result.IsSuccess && result.Data is not null) health = result.Data;
+            else { health = null; healthError = Error(result.ErrorMessage, result.StatusCode, "Không xác minh được readiness."); }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) healthLoading = false; }
+    }
+
+    private Task ChangeMetricAsync(string metric)
+    {
+        if (metric is "quota" or "fail" or "audit") { chartMetric = metric; chartPending = true; }
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (disposed || !chartPending || trend is null) return;
+        chartPending = false;
+        try
+        {
+            await Js.InvokeVoidAsync("scappAdminReports.draw", lifetime.Token, "aor-chart", chartMetric,
+                trend.Points.Select(p => new { date = Iso(p.Date), quota = p.NetReservedUnits,
+                    fail = p.FailedRuns, audit = p.DeniedAuditEvents }).ToArray());
+        }
+        catch (Exception e) when (e is JSException or JSDisconnectedException or TaskCanceledException or OperationCanceledException) { }
+    }
+
+    private async Task OpenPreviewAsync()
+    {
+        if (disposed || busy || previewing || downloading || summary is null || trend is null || exportPage is null) return;
+        previewOpen = true; previewing = true; preview = null; dialogError = downloadNotice = null;
+        try
+        {
+            var res = await ReportsApi.PreviewAsync(appliedFrom, appliedTo, lifetime.Token);
+            if (disposed || !previewOpen) return;
+            if (!res.IsSuccess || res.Data is not { } p) { dialogError = Error(res.ErrorMessage, res.StatusCode, "Không kiểm tra được phạm vi xuất."); return; }
+            if (p.Period.From != appliedFrom || p.Period.To != appliedTo) { dialogError = "Phạm vi máy chủ khác lựa chọn. Hãy tải lại trang."; return; }
+            preview = p;
+            if (!p.CanDownload) dialogError = $"Khoảng ngày có {Num(p.ExportEventCount)} sự kiện, giới hạn {Num(p.MaxExportEvents)}. Thu hẹp thời gian.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        finally { if (!disposed) previewing = false; }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (!CanDownload || preview is not { } shown) return;
+        downloading = true; dialogError = null;
+        try
+        {
+            // Preview again immediately before a file request. No automatic retry of an audited download.
+            var check = await ReportsApi.PreviewAsync(appliedFrom, appliedTo, lifetime.Token);
+            if (disposed) return;
+            if (!check.IsSuccess || check.Data is not { } fresh || !fresh.CanDownload ||
+                fresh.Period.From != appliedFrom || fresh.Period.To != appliedTo ||
+                fresh.ExportEventCount != shown.ExportEventCount)
+            { dialogError = "Phạm vi xuất vừa thay đổi hoặc không hợp lệ. Hãy đóng hộp thoại, kiểm tra lại rồi tải."; preview = null; return; }
+            var result = await ReportsApi.DownloadCsvAsync(appliedFrom, appliedTo, lifetime.Token);
+            if (disposed) return;
+            if (!result.IsSuccess || result.Data is null) { dialogError = Error(result.ErrorMessage, result.StatusCode, "Không lấy được CSV từ API."); return; }
+            await using var file = result.Data;
+            await Files.SaveAdminReportCsvAsync(file, lifetime.Token);
+            if (!disposed) downloadNotice = "Đã gửi CSV tới trình duyệt. Hãy kiểm tra thư mục Tải xuống.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception e) when (e is JSException or IOException or InvalidOperationException or OperationCanceledException)
+        { if (!disposed) dialogError = "Chưa xác nhận được việc tải CSV. Kiểm tra mục Tải xuống trước khi thử lại."; }
+        finally { if (!disposed) downloading = false; }
+    }
+    private void ClosePreview() { if (!downloading) { previewOpen = false; preview = null; dialogError = downloadNotice = null; } }
+
+    private static string Error(string? message, int? status, string fallback) => status switch
+    {
+        401 => "Phiên đăng nhập không còn hợp lệ. Hãy đăng nhập lại.",
+        403 => "Tài khoản không được quyền xem báo cáo quản trị. Chỉ System Admin được phép.",
+        400 => "Bộ lọc không được API chấp nhận. Hãy chọn lại khoảng ngày.",
+        413 => "Dữ liệu vượt giới hạn CSV. Thu hẹp thời gian.",
+        503 => "Dịch vụ thống kê đang không khả dụng. Không hiển thị số liệu cũ như số liệu mới.",
+        _ => string.IsNullOrWhiteSpace(message) ? fallback : message
+    };
+    private static string Num(long v) => v.ToString("N0", Vi);
+    private static string Num(long? v) => v is { } n ? Num(n) : "—";
+    private static string VnTime(DateTime value) => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        .ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm", Vi);
+    private static string CheckName(string name) => name switch
+    { "database" => "Database & schema", "uploads" => "Kho CV", "ocr" => "Tài nguyên OCR", "email" => "Cấu hình Email", _ => name };
+    private static string ExportCategory(string category) => category switch
+    { "runs.ranking_exported" => "Xếp hạng CV", "hr.recruitment_report_exported" => "Báo cáo HR Excel",
+      "hr.recruitment_report_pdf_exported" => "Báo cáo HR PDF", "admin.operations_report_exported" => "Báo cáo Admin",
+      "candidates.export_access_granted" => "Dữ liệu ứng viên", _ => category };
+    private static string BackupLabel(string status) => status switch
+    { "not_available_until_A62" => "Chưa có nguồn giám sát A62", "not_available" => "Chưa có nguồn", _ => status };
+    public ValueTask DisposeAsync()
+    {
+        disposed = true; lifetime.Cancel(); lifetime.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

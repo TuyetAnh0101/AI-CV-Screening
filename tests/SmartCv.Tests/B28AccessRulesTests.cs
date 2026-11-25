@@ -96,13 +96,20 @@ public class B28AccessRulesTests
         typeof(Error),
         typeof(Landing),
         typeof(Terms),
-        typeof(PrivacyPage)
+        typeof(PrivacyPage),
+        typeof(Register),
+        typeof(VerifyEmail),
+        typeof(VerifyEmailSent),
+        typeof(ForgotPassword),
+        typeof(ResetPassword),
+        typeof(ExternalCallback)
     ];
 
     // Các trang chỉ dành cho Admin.
     private static readonly Type[] AdminPages =
     [
         typeof(AdminOperationsDashboard),
+        typeof(AdminOperationsReport),
         typeof(AdminSystemHealth),
         typeof(AdminWorkspaces),
         typeof(AdminAiUsage),
@@ -148,7 +155,7 @@ public class B28AccessRulesTests
         foreach (var page in RoutablePages())
         {
             var expected = PublicPages.Contains(page)
-                || (page == typeof(web::SmartCv.Web.Components.Account.ChangePassword) ? state is "HR" or "Admin" or "mcp"   // B29: SignedIn
+                || ((page == typeof(web::SmartCv.Web.Components.Account.ChangePassword) || page == typeof(web::SmartCv.Web.Components.Account.AccountPage)) ? state is "HR" or "Admin" or "mcp"   // B29: SignedIn
                 : AdminPages.Contains(page) ? state == "Admin"
                 : page == typeof(RoleReports) ? state == "Admin"
                 : page.GetCustomAttributes<AuthorizeAttribute>().Any(a => a.Policy == AccessRules.BusinessPolicy) ? false

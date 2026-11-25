@@ -56,7 +56,7 @@ public static class ServiceCollectionExtensions
             clientBuilder.RedactLoggedHeaders(_ => true);
             // HttpClient's default logger includes the entire URI, including private search queries.
             // B29: tìm tài khoản theo email cũng là dữ liệu riêng tư.
-            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient) || typeof(TClient) == typeof(AuditApiClient) || typeof(TClient) == typeof(ExportApiClient) || typeof(TClient) == typeof(HrRecruitmentReportApiClient) || typeof(TClient) == typeof(AdminOperationsApiClient))
+            if (typeof(TClient) == typeof(CvApiClient) || typeof(TClient) == typeof(CandidateApiClient) || typeof(TClient) == typeof(UserApiClient) || typeof(TClient) == typeof(AuditApiClient) || typeof(TClient) == typeof(ExportApiClient) || typeof(TClient) == typeof(HrRecruitmentReportApiClient) || typeof(TClient) == typeof(AdminOperationsApiClient) || typeof(TClient) == typeof(AdminOperationsReportApiClient))
                 clientBuilder.RemoveAllLoggers();
             if (authenticated)
             {
@@ -84,6 +84,7 @@ public static class ServiceCollectionExtensions
         Add<UserApiClient>(TimeSpan.FromSeconds(20)); // B29: quản lý tài khoản (A30, chỉ Admin)
         Add<AuditApiClient>(TimeSpan.FromSeconds(20));
         Add<AdminOperationsApiClient>(TimeSpan.FromSeconds(25)); // Bảo mật JWT theo circuit.
+        Add<AdminOperationsReportApiClient>(TimeSpan.FromSeconds(35)); // Admin reports, JWT + safe URL logging.
         Add<ExportApiClient>(TimeSpan.FromSeconds(20));
         Add<HrRecruitmentReportApiClient>(TimeSpan.FromSeconds(60)); // Private workspace report, authenticated.
         Add<DashboardApiClient>(TimeSpan.FromSeconds(30)); // B19: A19 summary, read-only.

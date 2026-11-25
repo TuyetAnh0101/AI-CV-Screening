@@ -44,7 +44,7 @@ public sealed class RoleNavigationExperienceTests
         var owner = RoleBasedNavigation.For(Principal("HR", "Personal", "Owner")).SelectMany(g => g.Items).Select(i => i.Href).ToArray();
         Assert.Contains("admin/dashboard", admin);
         Assert.Contains("admin/ai-usage", admin);
-        Assert.Contains("reports", admin);
+        Assert.Contains("admin/reports", admin);
         Assert.DoesNotContain("account", admin);
         Assert.DoesNotContain("account", hr);
         Assert.DoesNotContain("account", owner);

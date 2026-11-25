@@ -108,7 +108,7 @@ public static class RoleBasedNavigation
     [
         new("Tổng quan hệ thống", [
             new("Dashboard quản trị", "admin/dashboard", DashboardIcon, NavLinkMatch.All, true),
-            new("Báo cáo vận hành", "reports", ReportIcon, NavLinkMatch.All, true),
+            new("Báo cáo vận hành", "admin/reports", ReportIcon, NavLinkMatch.All, true),
             new("Quyền truy cập", "permissions", ShieldIcon, NavLinkMatch.All)
         ]),
         new("Giám sát & tài nguyên", [
@@ -118,7 +118,6 @@ public static class RoleBasedNavigation
             new("Kết nối Google & AI", "admin/integrations", PromptIcon, AdminOnly: true)
         ]),
         new("Bảo mật & vận hành", [
-            new("Tài khoản", "users", UsersIcon, AdminOnly: true),
             new("Audit Log", "admin/activity-logs", AuditIcon, AdminOnly: true),
         ])
     ];

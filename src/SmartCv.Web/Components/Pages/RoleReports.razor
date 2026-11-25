@@ -49,10 +49,10 @@
                 <div class="rx-links"><a href="/admin/ai-usage" class="rx-link">Giám sát AI ↗</a><a href="/admin/activity-logs" class="rx-link">Audit Log ↗</a></div>
             </article>
             <article class="rx-card rx-amber">
-                <div class="rx-card-top"><span>03 · XUẤT BÁO CÁO</span><span class="rx-chip rx-planned">Chưa hỗ trợ</span></div>
-                <h2>Excel / CSV quản trị</h2>
-                <p>SCApp hiện có nhật ký và số liệu Admin, nhưng chưa có API xuất báo cáo vận hành Excel/CSV riêng. Không tạo nút tải tệp giả.</p>
-                <span class="rx-muted">Đề xuất triển khai ở nhánh báo cáo hệ thống riêng, kiểm thử phân quyền Admin và nhật ký xuất.</span>
+                <div class="rx-card-top"><span>03 · XUẤT BÁO CÁO</span><span class="rx-chip rx-ready">Đã hỗ trợ CSV</span></div>
+                <h2>CSV báo cáo quản trị</h2>
+                <p>API quản trị đã hỗ trợ tải CSV chỉ gồm metadata, xu hướng và số liệu tổng hợp. Không xuất CV, tên ứng viên hoặc System Prompt.</p>
+                <a href="/admin/reports" class="rx-link">Mở báo cáo quản trị · CSV ↗</a>
             </article>
         </div>
     }
@@ -110,7 +110,7 @@
 
 @code {
     private string CopyText => Session.User?.Role == "Admin"
-        ? "SCApp: Báo cáo quản trị chỉ gồm vận hành, sức khỏe, Audit, AI và workspace tổng hợp. Excel/CSV quản trị chưa triển khai."
+        ? "SCApp: Báo cáo quản trị chỉ gồm vận hành, sức khỏe, Audit, AI và workspace tổng hợp. CSV quản trị đã hỗ trợ; chỉ metadata và có Audit."
         : Session.User?.Workspace?.Kind == "Personal"
             ? "SCApp: Chỉ dữ liệu workspace cá nhân. Excel kết quả đang hỗ trợ; ZIP backup workspace chưa triển khai."
             : "SCApp: Chỉ dữ liệu tuyển dụng workspace nội bộ. Excel từng lượt chấm đang hỗ trợ.";
