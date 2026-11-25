@@ -228,7 +228,7 @@ public class A43EndpointTests
     [InlineData(null, 401)]
     [InlineData("Viewer", 401)]
     [InlineData("HR", 200)]
-    [InlineData("Admin", 200)]
+    [InlineData("Admin", 403)] // since #114 candidate data is HR-only business data; System Admin never reads it
     public async Task Configured_authentication_protects_export_journal_and_erase(string? role, int expected)
     {
         var (factory, client, seed) = await StartAsync(auth: true); using var f = factory; using var c = client;

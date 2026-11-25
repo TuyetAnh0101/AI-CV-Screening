@@ -89,7 +89,7 @@ public class EvaluationSetWorkspaceTests
     [Fact]
     public async Task Empty_manager_renders_working_creation_form_and_explains_existing_uploads()
     {
-        var server=new Server();using var services=new ServiceCollection().AddLogging().AddSingleton(Api(server)).AddB28Auth().BuildServiceProvider(); // B28: Admin tạo được bộ
+        var server=new Server();using var services=new ServiceCollection().AddLogging().AddSingleton(Api(server)).AddB28Auth(B28Auth.VerifiedInternalHr()).BuildServiceProvider(); // Since #114 only a business HR may create sets
         await using var renderer=new HtmlRenderer(services,services.GetRequiredService<ILoggerFactory>());
         var html=await renderer.Dispatcher.InvokeAsync(async()=>WebUtility.HtmlDecode((await renderer.RenderComponentAsync<EvaluationSetManager>()).ToHtmlString()));
         Assert.Contains("Chưa có bộ CV đánh giá",html);Assert.Contains("Tên bộ CV mới",html);Assert.Contains("Tạo bộ CV",html);

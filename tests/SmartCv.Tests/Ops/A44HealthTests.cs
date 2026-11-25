@@ -40,7 +40,7 @@ public class A44HealthTests
                 {
                     Assert.Equal(HttpStatusCode.OK, response.StatusCode); Assert.True(response.Headers.CacheControl?.NoStore);
                     var report = (await response.Content.ReadFromJsonAsync<HealthReportDto>())!;
-                    Assert.Equal("ok", report.Status); Assert.Equal(new[] { "database", "uploads", "ocr" }, report.Checks.Select(c => c.Name));
+                    Assert.Equal("ok", report.Status); Assert.Equal(new[] { "database", "uploads", "ocr", "email" }, report.Checks.Select(c => c.Name));
                     Assert.All(report.Checks, c => Assert.True(c.Ok));
                     Assert.DoesNotContain(ocr, await response.Content.ReadAsStringAsync());
                 }
@@ -152,7 +152,8 @@ public class A44HealthTests
             {
                 var actor = await A28TestSupport.Seed(factory, A28TestSupport.Password(), role);
                 using var http = A29AuthorizationTests.Client(factory, actor);
-                Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/runs")).StatusCode);
+                // Since #114 the System Admin is not a business operator: business API is HR-only, admin API Admin-only.
+                Assert.Equal(role == "Admin" ? HttpStatusCode.Forbidden : HttpStatusCode.OK, (await http.GetAsync("/api/runs")).StatusCode);
                 Assert.Equal(role == "Admin" ? HttpStatusCode.OK : HttpStatusCode.Forbidden, (await http.GetAsync("/api/admin/audit-events")).StatusCode);
             }
             var temporary = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR", mustChange: true);

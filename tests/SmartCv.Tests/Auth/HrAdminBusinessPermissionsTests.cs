@@ -44,10 +44,11 @@ public class HrAdminBusinessPermissionsTests
         });
     }
 
+    // Since #114 a System Admin is not a business operator: the Admin case is the 403 matrix of
+    // B57RoleBoundaryTests.R1 (every business route, no side effects), not a success case here.
     [Theory]
-    [InlineData("Admin")]
     [InlineData("HR")]
-    public async Task Both_roles_can_manage_jobs_skills_and_activation_with_trusted_audit(string role)
+    public async Task Hr_can_manage_jobs_skills_and_activation_with_trusted_audit(string role)
     {
         using var factory = B43AuditTests.Factory();
         var actor = await A28TestSupport.Seed(factory, A28TestSupport.Password(), role);
@@ -83,10 +84,11 @@ public class HrAdminBusinessPermissionsTests
         Assert.All(events, e => Assert.Equal((actor.UserId, role, "Succeeded"), (e.ActorUserId, e.ActorRoleSnapshot, e.Outcome)));
     }
 
+    // Since #114 a System Admin is not a business operator: the Admin case is the 403 matrix of
+    // B57RoleBoundaryTests.R1 (every business route, no side effects), not a success case here.
     [Theory]
-    [InlineData("Admin")]
     [InlineData("HR")]
-    public async Task Both_roles_can_upload_assign_author_prompts_label_manage_sets_and_start_tests(string role)
+    public async Task Hr_can_upload_assign_author_prompts_label_manage_sets_and_start_tests(string role)
     {
         using var factory = B43AuditTests.Factory();
         var originalAdmin = await A28TestSupport.Seed(factory, A28TestSupport.Password());

@@ -16,6 +16,16 @@ export function attach(id) {
       const close = node.querySelector('[data-hrr-dialog-close]');
       if (close) { event.preventDefault(); close.click(); }
     }
+    // B57/E12: aria-modal dialog keeps Tab / Shift+Tab inside it (background stays unreachable by keyboard).
+    const dialog = node.querySelector('[data-hrr-dialog]');
+    if (event.key === 'Tab' && dialog) {
+      const items = [...dialog.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+      if (items.length === 0) { event.preventDefault(); dialog.focus(); return; }
+      const first = items[0], last = items[items.length - 1];
+      if (!dialog.contains(document.activeElement) || document.activeElement === dialog) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
   };
   document.addEventListener('keydown', shortcut);
   const observers = [];

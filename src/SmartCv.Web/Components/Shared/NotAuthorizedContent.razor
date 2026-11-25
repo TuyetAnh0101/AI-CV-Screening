@@ -4,10 +4,13 @@
       2. Có phiên nhưng API chưa xác nhận được (mất kết nối lúc khôi phục) → "Thử lại"; không trao quyền, không về /login.
       3. Tài khoản phải đổi mật khẩu (A30) → B29: chuyển tới /change-password (giữ returnUrl).
       4. Đã đăng nhập nhưng thiếu quyền (HR mở trang của Admin) hoặc vai trò không hợp lệ → trang 403 (AccessDenied).
+         Ngoại lệ B51: Admin đã xác minh mở /dashboard (trang chủ HR, từ #114 dùng BusinessPolicy) → /admin/dashboard, một lần,
+         thay vì 403 — Home.razor không bao giờ được tạo cho Admin nên không thể tự chuyển hướng nữa.
     Không hiện tên chính sách, claim hay đường dẫn API.
 *@
 @inject AuthSession Session
 @inject AuthNavigator Navigator
+@inject NavigationManager Nav
 
 @switch (AccessRules.Level(User))
 {
@@ -42,6 +45,10 @@
         <RedirectToChangePassword />
         break;
 
+    case AccessLevel.Admin when adminHomeRedirect:
+        <div class="auth-wait" role="status"><span class="auth-wait-spinner" aria-hidden="true"></span><span>Đang mở Dashboard quản trị…</span></div>
+        break;
+
     default:
         <AccessDenied User="User" />
         break;
@@ -50,7 +57,16 @@
 @code {
     [Parameter, EditorRequired] public System.Security.Claims.ClaimsPrincipal User { get; set; } = AccessRules.Nobody;
 
-    private bool retrying, retryFailed;
+    private bool retrying, retryFailed, adminHomeRedirect;
+
+    protected override void OnParametersSet()
+    {
+        if (adminHomeRedirect || AccessRules.Level(User) != AccessLevel.Admin) return;
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+        if (!path.Equals("dashboard", StringComparison.OrdinalIgnoreCase)) return;
+        adminHomeRedirect = true;   // B51: không giữ query nghiệp vụ (jobId, from/to) khi sang trang quản trị
+        Nav.NavigateTo(AppNavigation.AdminHome, replace: true);
+    }
 
     private async Task RetryAsync()
     {

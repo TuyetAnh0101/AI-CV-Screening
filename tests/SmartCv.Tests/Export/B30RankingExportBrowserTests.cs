@@ -31,7 +31,9 @@ public class B30RankingExportBrowserTests
             .WithWebHostBuilder(b => { b.ConfigureTestServices(s => s.AddSingleton<IStartupFilter>(gate)); b.ConfigureLogging(l => l.ClearProviders()); });
         api.UseKestrel(o => o.Listen(IPAddress.Loopback, 0));
         var adminPassword = A28TestSupport.Password(); var hrPassword = A28TestSupport.Password();
-        var admin = await A28TestSupport.Seed(api, adminPassword); var hr = await A28TestSupport.Seed(api, hrPassword, "HR");
+        // Since #114 ranking export is HR business work (Admin is refused, B57RoleBoundaryTests.R1): the desktop
+        // export journey runs with a second internal HR account; "admin" keeps its variable name only.
+        var admin = await A28TestSupport.Seed(api, adminPassword, "HR"); var hr = await A28TestSupport.Seed(api, hrPassword, "HR");
         var run = await A31ExportTests.Seed(api); var running = await A31ExportTests.Seed(api, "Running");
         using var apiHttp = A29AuthorizationTests.Client(api, admin);
         using (var scope = api.Services.CreateScope()) Assert.Equal("Microsoft.EntityFrameworkCore.InMemory", scope.ServiceProvider.GetRequiredService<SmartCvDbContext>().Database.ProviderName);
@@ -51,7 +53,7 @@ public class B30RankingExportBrowserTests
         await using var context = await browser.NewContextAsync(new() { ViewportSize = new() { Width = 1366, Height = 768 }, AcceptDownloads = true });
         var page = await context.NewPageAsync(); page.SetDefaultTimeout(20000);
         var errors = new ConcurrentQueue<string>(); page.PageError += (_, message) => errors.Enqueue(message);
-        var stage = "Admin login";
+        var stage = "desktop HR login";
         try
         {
             await Login(page, root, admin.Email, adminPassword);
@@ -62,7 +64,7 @@ public class B30RankingExportBrowserTests
             Assert.Equal(ranking.JobId.ToString(), await page.GetByRole(AriaRole.Combobox, new() { Name = "Vị trí tuyển dụng" }).InputValueAsync());
             stage = "default preview and responsive"; await Open(page, "Shortlisted", 2);
             Assert.True(await page.Locator("#export-anonymous").IsCheckedAsync());
-            Assert.True(await page.Locator("input[value=pdf]").IsDisabledAsync());
+            Assert.False(await page.Locator("input[value=pdf]").IsDisabledAsync()); // PDF ranking export enabled by #118 (A31 settings: PdfEnabled)
             foreach (var width in new[] { 360, 390, 768, 1366 })
             {
                 await page.SetViewportSizeAsync(width, width < 768 ? 844 : 768);
@@ -98,6 +100,7 @@ public class B30RankingExportBrowserTests
             stage = "matching current filters";
             var privacy = page.GetByRole(AriaRole.Switch, new() { Name = "Ẩn danh", Exact = true });
             await privacy.CheckAsync();
+            await MoreFilters(page);
             await page.Locator("#stage-filter-New").ClickAsync();
             await page.GetByRole(AriaRole.Group, new() { Name = "Lọc nhanh", Exact = true }).GetByRole(AriaRole.Button, new() { Name = "Dự đoán Đạt", Exact = false }).ClickAsync();
             await page.Locator("#flag-filter").ClickAsync(); await page.Locator("#manual-filter").ClickAsync();
@@ -112,7 +115,7 @@ public class B30RankingExportBrowserTests
             await DownloadAndVerify(page, ranking, query, artifacts, "admin-current-filters.xlsx");
             Assert.Contains("needsReview=true", gate.Downloads.Last()); Assert.Contains("manualFlags=true", gate.Downloads.Last()); Assert.Contains("fit=pass", gate.Downloads.Last()); await Close(page);
 
-            stage = "empty scope"; await page.Locator("#stage-filter-Interview").ClickAsync(); await Open(page, "Shortlisted", 2);
+            stage = "empty scope"; await MoreFilters(page); await page.Locator("#stage-filter-Interview").ClickAsync(); await Open(page, "Shortlisted", 2);
             await page.Locator("#export-scope").SelectOptionAsync("Current"); await Preview(page, "Current", 0, false);
             await page.GetByText("Không có hồ sơ trong phạm vi đã chọn.", new() { Exact = false }).WaitForAsync(); await Close(page);
 
@@ -157,6 +160,13 @@ public class B30RankingExportBrowserTests
         await page.GotoAsync(root + "login"); await page.Locator("#login-email").FillAsync(email); await page.Locator("#login-password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Đăng nhập", Exact = true }).ClickAsync();
         await page.WaitForURLAsync(url => new Uri(url).AbsolutePath != "/login");
+    }
+    /// <summary>#112 moved the HR stage / flag filters into the collapsible "Giai đoạn HR và cờ" panel; open it when closed.</summary>
+    private static async Task MoreFilters(IPage page)
+    {
+        var panel = page.Locator("details.ranking-more-filters");
+        if (!await panel.EvaluateAsync<bool>("d => d.open")) await panel.Locator("summary").ClickAsync();
+        await page.Locator("#stage-filter-New").WaitForAsync();
     }
     private static async Task Open(IPage page, string scope, int count)
     {

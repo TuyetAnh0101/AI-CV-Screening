@@ -30,11 +30,14 @@ public class WorkspaceRouteCoverageTests(ITestOutputHelper output)
             .Concat(WorkspaceIsolationRouteTests.ListRoutes.Select(r => "GET " + r))
             .Concat(new[] { "POST /api/runs", "POST /api/jobs", "POST /api/candidates", "POST /api/cvs/upload", "GET /api/dashboard/summary" })
             .Concat(WorkspaceIsolationAdditionalTests.Covered)
+            .Concat(SmartCv.Tests.E2E.B57IsolationSessionTests.Covered)
             .ToHashSet(StringComparer.Ordinal);
         var routes = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .SelectMany(e => (e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
                 .Select(m => m + " /" + e.RoutePattern.RawText!.Trim('/'))).ToHashSet(StringComparer.Ordinal);
-        var classified = tested.Concat(A29AuthorizationTests.AdminRoutes).Concat(Exceptions.Keys).ToHashSet(StringComparer.Ordinal);
+        // Public and own-account routes carry no workspace records (A29AuthorizationTests.PublicRoutes / SignedInRoutes).
+        var classified = tested.Concat(A29AuthorizationTests.AdminRoutes).Concat(Exceptions.Keys)
+            .Concat(A29AuthorizationTests.PublicRoutes).Concat(A29AuthorizationTests.SignedInRoutes).ToHashSet(StringComparer.Ordinal);
         var missing = routes.Except(classified).Order().ToArray();
         foreach (var route in missing) output.WriteLine("MISSING ISOLATION TEST: " + route);
         Assert.True(missing.Length == 0, $"{missing.Length} route(s) lack explicit isolation tests: " + string.Join("; ", missing));

@@ -19,6 +19,7 @@
 .hrr-sort{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:inherit;font:inherit;font-weight:800;cursor:pointer;text-align:left;padding:0}.hrr-sort:focus-visible{outline:2px solid #2ca6a2;outline-offset:4px;border-radius:3px}.hrr-sort span{color:#458e89}
 .hrrv-jump{display:inline-flex;align-items:center;gap:8px;text-decoration:none;padding:8px 13px;border:1px solid #b5d7d6;border-radius:12px;color:#126d66;background:#eff9f6;font-weight:800;font-size:.77rem;white-space:nowrap}.hrrv-jump:hover{background:#e5f5ef;color:#07534f}
 .hrr-dialog-overlay{position:fixed;inset:0;z-index:1050;background:#0b2d37b8;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(5px)}
+.hrr-dialog:focus{outline:none}.hrr-dialog:focus-visible{outline:3px solid #2ca6a2;outline-offset:3px}
 .hrr-dialog{background:#fff;border-radius:23px;width:min(640px,100%);padding:clamp(21px,3vw,30px);box-shadow:0 35px 90px #092e3b55;max-height:88vh;overflow-y:auto}
 .hrr-dialog-kicker{color:#7c61c6;font-size:.7rem;font-weight:900;letter-spacing:.14em}.hrr-dialog h3{font-size:1.45rem;font-weight:850;letter-spacing:-.03em;margin:8px 0}.hrr-dialog p{color:#638087;line-height:1.6;font-size:.84rem}
 .hrr-dialog dl{display:grid;grid-template-columns:130px 1fr;gap:10px;border-top:1px solid #e8f0ee;border-bottom:1px solid #e8f0ee;padding:18px 0;margin:18px 0;font-size:.82rem}.hrr-dialog dt{font-weight:800;color:#5b7981}.hrr-dialog dd{margin:0;overflow-wrap:anywhere;color:#163d46}

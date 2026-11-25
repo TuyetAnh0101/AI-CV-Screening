@@ -177,7 +177,7 @@ public class A30AccountEndpointTests
         Assert.Equal(HttpStatusCode.Conflict, (await http.PostAsync($"/api/users/{admin.UserId}/lock", null)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await http.PutAsJsonAsync($"/api/users/{admin.UserId}", new { fullName = admin.FullName, role = "HR" })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await http.PostAsync($"/api/users/{admin.UserId}/reset-password", null)).StatusCode);
-        using var delete = await http.DeleteAsync($"/api/users/{admin.UserId}"); Assert.True(delete.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed);
+        using var delete = await http.DeleteAsync($"/api/users/{admin.UserId}"); Assert.True(delete.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed or HttpStatusCode.Forbidden); // unmapped verb: fail-closed fallback policy since #114
         Assert.True(before == Fingerprint(await Saved(factory, admin.UserId)));
     }
 

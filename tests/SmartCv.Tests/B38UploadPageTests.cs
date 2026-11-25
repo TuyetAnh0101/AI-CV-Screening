@@ -352,6 +352,7 @@ public class B38UploadPageTests
         services.AddSingleton(anonymity ?? B36PrivacyTests.NormalView());
         var http = new HttpClient(api) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new JobApiClient(http, NullLogger<JobApiClient>.Instance));
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance)); // B56 QuotaNotice on /upload
         services.AddSingleton(new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new CvUploadOptions { MaxFileSizeMB = 2 }), NullLogger<CvApiClient>.Instance));
         services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));
         services.AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance));

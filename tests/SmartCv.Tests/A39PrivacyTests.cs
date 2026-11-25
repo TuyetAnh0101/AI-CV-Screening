@@ -90,7 +90,8 @@ public class A39PrivacyTests
     public async Task Worker_is_off_by_default_and_settings_do_not_start_a_scan()
     {
         using var factory = TestSupport.ApiFactory(settings: new() { ["Scoring:WorkerEnabled"] = "false" });
-        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory);
+        // Retention settings are a System Admin route (RetentionEndpoints: AuthPolicies.SystemAdmin).
+        using var http = await TestSupport.ClientWithSyntheticHrAsync(factory, role: "Admin");
         using var response = await http.GetAsync("/api/retention/settings");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("\"autoAnonymize\":false", await response.Content.ReadAsStringAsync());
@@ -111,9 +112,9 @@ public class A39PrivacyTests
     [Theory]
     [InlineData(null, 401)]
     [InlineData("Viewer", 401)]
-    [InlineData("HR", 200)]
+    [InlineData("HR", 403)]
     [InlineData("Admin", 200)]
-    public async Task Configured_authentication_requires_authenticated_HR_or_Admin(string? role, int status)
+    public async Task Configured_authentication_requires_authenticated_System_Admin(string? role, int status)
     {
         using var factory = SmartCv.Tests.Auth.A28TestSupport.Factory(new() { ["Scoring:WorkerEnabled"] = "false" });
         using var http = factory.CreateClient();

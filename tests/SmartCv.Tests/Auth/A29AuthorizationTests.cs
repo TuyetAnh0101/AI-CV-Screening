@@ -32,8 +32,33 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         "GET /api/exports",
         "GET /api/admin/reports/v2/preview", "GET /api/admin/reports/v2/download",
         "GET /api/users", "POST /api/users", "PUT /api/users/{id:int}",
-        "POST /api/users/{id:int}/lock", "POST /api/users/{id:int}/unlock", "POST /api/users/{id:int}/reset-password"
+        "POST /api/users/{id:int}/lock", "POST /api/users/{id:int}/unlock", "POST /api/users/{id:int}/reset-password",
+        // #114/#119/#121 operational routes (B57 R2/R4/R7 prove HR/Owner 403 and aggregate-only content).
+        "GET /api/retention/settings", "GET /api/admin/email/health", "POST /api/admin/email/test",
+        "GET /api/admin/ops/overview", "GET /api/admin/ops/ai-usage", "GET /api/admin/ops/ai-history", "GET /api/admin/ops/gemini-telemetry",
+        "GET /api/admin/ops/workspaces", "PATCH /api/admin/ops/workspaces/{id:int}/quota", "GET /api/admin/ops/integrations",
+        "GET /api/admin/ops/integrations/insights", "POST /api/admin/ops/integrations/gemini/check",
+        "GET /api/admin/reports/summary", "GET /api/admin/reports/trend", "GET /api/admin/reports/exports",
+        "GET /api/admin/reports/preview", "GET /api/admin/reports/health", "GET /api/admin/reports/download"
     ];
+
+    /// <summary>Anonymous by design (sign-in, sign-up, recovery, external callback); each has its own A56/A57/A58 tests.</summary>
+    internal static readonly HashSet<string> PublicRoutes =
+    [
+        "GET /api/health", "POST /api/auth/login", "GET /api/auth/registration-settings", "POST /api/auth/register",
+        "POST /api/auth/verify-email", "POST /api/auth/resend-verification", "POST /api/auth/forgot-password", "POST /api/auth/reset-password",
+        "GET /api/auth/external/{provider}/start", "GET /api/auth/external/{provider}/complete", "POST /api/auth/external/exchange"
+    ];
+
+    /// <summary>Current account only (no workspace data); allowed even with a temporary password.</summary>
+    internal static readonly HashSet<string> SignedInRoutes =
+    [
+        "GET /api/auth/me", "POST /api/auth/change-password", "GET /api/auth/me/profile", "PUT /api/auth/me/profile",
+        "POST /api/auth/me/password-setup", "GET /api/auth/me/logins", "DELETE /api/auth/me/logins/{provider}", "POST /api/auth/external/link-ticket"
+    ];
+
+    /// <summary>Personal workspace Owner only (internal HR members are refused).</summary>
+    internal static readonly HashSet<string> OwnerRoutes = ["POST /api/workspace/sample-job"];
 
     private static string Path(RouteEndpoint endpoint) => "/" + endpoint.RoutePattern.RawText!.Trim('/');
     private static string Url(string path) => System.Text.RegularExpressions.Regex.Replace(path, "\\{([^}]+)\\}", m =>
@@ -81,7 +106,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
     [InlineData("must-change")]
     public async Task Changed_account_state_invalidates_the_next_business_request_without_a_cache_window(string change)
     {
-        using var factory = A28TestSupport.Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        using var factory = A28TestSupport.Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
         using var http = Client(factory, user);
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/jobs")).StatusCode);
         await A28TestSupport.WithDb(factory, async db =>
@@ -90,7 +115,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             if (change == "locked") stored.IsActive = false;
             if (change == "deleted") db.Users.Remove(stored);
             if (change == "stamp") stored.SecurityStamp = User.NewStamp();
-            if (change == "role") stored.Role = "HR";
+            if (change == "role") stored.Role = "Admin";
             if (change == "must-change") stored.MustChangePassword = true;
             await db.SaveChangesAsync();
         });
@@ -109,14 +134,16 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         var auth = factory.Services.GetRequiredService<IAuthorizationService>();
         var options = factory.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value;
         Assert.NotNull(options.FallbackPolicy);
-        Assert.Equal(97, endpoints.Count);
+        // Every route is classified exactly once; a new route fails here until its boundary is decided.
+        var classified = AdminRoutes.Concat(PublicRoutes).Concat(SignedInRoutes).Concat(OwnerRoutes).ToList();
+        Assert.Equal(classified.Count, classified.Distinct().Count());
         var observedAdmin = new HashSet<string>();
         foreach (var endpoint in endpoints)
         {
             var path = Path(endpoint);
             var method = Assert.Single(endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods);
             var route = method + " " + path;
-            var isPublic = route is "GET /api/health" or "POST /api/auth/login";
+            var isPublic = PublicRoutes.Contains(route);
             Assert.Equal(isPublic, endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null);
             using var response = await anonymous.SendAsync(Request(method, path));
             if (isPublic)
@@ -129,13 +156,18 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             Assert.True(response.Headers.CacheControl?.NoStore);
             var authorizeData = endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>();
             var policy = (await AuthorizationPolicy.CombineAsync(factory.Services.GetRequiredService<IAuthorizationPolicyProvider>(), authorizeData))!;
-            Assert.True((await auth.AuthorizeAsync(Principal(admin), ValidatedRequest(), policy)).Succeeded, route);
             var adminOnly = AdminRoutes.Contains(route);
+            var signedIn = SignedInRoutes.Contains(route);
+            var ownerOnly = OwnerRoutes.Contains(route);
+            // Since #114: System Admin = system routes only; internal HR member = business routes; both = own account.
+            var adminAllowed = (await auth.AuthorizeAsync(Principal(admin), ValidatedRequest(), policy)).Succeeded;
+            Assert.True(adminAllowed == (adminOnly || signedIn), route + " admin=" + adminAllowed);
             var hrAllowed = (await auth.AuthorizeAsync(Principal(hr), ValidatedRequest(), policy)).Succeeded;
-            Assert.Equal(!adminOnly, hrAllowed);
-            // A temporary password only reaches /api/auth/me; every business route is denied for Admin and HR alike.
-            var mustChangeAllowed = (await auth.AuthorizeAsync(Principal(admin, mustChange: true), ValidatedRequest(), policy)).Succeeded;
-            Assert.Equal(route is "GET /api/auth/me" or "POST /api/auth/change-password", mustChangeAllowed);
+            Assert.True(hrAllowed == (!adminOnly && !ownerOnly), route + " hr=" + hrAllowed);
+            // A temporary password only reaches own-account routes; every business and system route is denied for Admin and HR alike.
+            var mustChangeAllowed = (await auth.AuthorizeAsync(Principal(admin, mustChange: true), ValidatedRequest(), policy)).Succeeded
+                || (await auth.AuthorizeAsync(Principal(hr, mustChange: true), ValidatedRequest(), policy)).Succeeded;
+            Assert.True(signedIn == mustChangeAllowed, route + " mustChange=" + mustChangeAllowed);
             var hrStatus = "-";
             if (adminOnly)
             {
@@ -216,7 +248,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
     [InlineData("must-change")]
     public async Task Account_changes_revoke_old_privileges_immediately_even_after_a_successful_request(string change)
     {
-        using var factory = A28TestSupport.Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        using var factory = A28TestSupport.Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
         using var http = Client(factory, user);
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/jobs")).StatusCode);
         await A28TestSupport.WithDb(factory, async db =>
@@ -224,7 +256,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
             var current = await db.Users.SingleAsync();
             if (change == "locked") current.IsActive = false;
             if (change == "deleted") db.Remove(current);
-            if (change == "role") current.Role = "HR"; // Deliberately do not rotate the stamp.
+            if (change == "role") current.Role = "Admin"; // Deliberately do not rotate the stamp.
             if (change == "stamp") current.SecurityStamp = User.NewStamp();
             if (change == "must-change") current.MustChangePassword = true;
             await db.SaveChangesAsync();
@@ -328,7 +360,7 @@ public class A29AuthorizationTests(ITestOutputHelper output)
     {
         using var factory = A28TestSupport.Factory();
         var first = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
-        var second = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        var second = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR"); // stage changes are business (HR) actions since #114
         var ids = await ApplicationStageEndpointTests.SeedAsync(factory.Services, 2);
         using var a = Client(factory, first); using var b = Client(factory, second);
         var responses = await Task.WhenAll(a.PatchAsJsonAsync($"/api/applications/{ids[0]}/stage", new { toStage = "Reviewing", actor = "FORGED" }),

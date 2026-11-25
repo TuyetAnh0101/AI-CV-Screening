@@ -15,7 +15,10 @@ public class A52IgnoreFiltersGuardTests
     internal static readonly Allowed[] IgnoreQueryFiltersAllowlist =
     [new("src/SmartCv.Api/Endpoints/ExportEndpoints.cs", "Admin export log list",
         "Admin must see export log rows and Job titles across all workspaces.",
-        "Only ListAsync, protected by Admin policy; WorkspaceIsolationAdminTests proves system scope and HR denial.")];
+        "Only ListAsync, protected by Admin policy; WorkspaceIsolationAdminTests proves system scope and HR denial."),
+     new("src/SmartCv.Api/Reports/AdminOperationsReportReader.cs", "Admin operations report aggregates (v1 + v2)",
+        "Global counts of AI ledger units, failed runs/evaluations and export logs across all workspaces; projections are counts/sums/ids only.",
+        "Called only by /api/admin/reports and /api/admin/reports/v2 (SystemAdmin policy); B57RoleBoundaryTests R2/R4/R8 prove HR/Owner 403 and anonymous 401, B57ReportScopeTests R7 proves no CV/candidate/prompt/e-mail content in JSON/CSV/XLSX.")];
 
     internal static readonly Allowed[] BeginSystemAllowlist =
     [

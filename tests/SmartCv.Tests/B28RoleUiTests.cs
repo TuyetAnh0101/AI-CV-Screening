@@ -71,7 +71,9 @@ public class B28RoleUiTests
             .AddSingleton(new PublicSettingsClient(http))
             .AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(
                 new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build())
-            .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance));
+            .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance))
+            .AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance))
+            .AddSingleton(new RunApiClient(http, NullLogger<RunApiClient>.Instance)); // B56 onboarding checklist on /dashboard
         services.AddSupplyValueFromQueryProvider();
         services.AddSmartCvWebAuth();   // đúng chính sách, provider, navigator của Web
         return services.BuildServiceProvider();
@@ -141,11 +143,13 @@ public class B28RoleUiTests
     }
 
     [Fact]
-    public async Task Admin_opens_the_job_form()
+    public async Task Admin_cannot_open_the_job_form_and_loads_nothing()
     {
-        var (html, nav, _) = await Open("Admin", "jobs/new");
-        Assert.Contains("Tạo vị trí tuyển dụng", html);
-        Assert.DoesNotContain("Bạn không có quyền truy cập", html);
+        // #114: the System Admin is not a business operator; the page is never created, so no business API is called.
+        var (html, nav, api) = await Open("Admin", "jobs/new");
+        Assert.Contains("Bạn không có quyền truy cập trang này", html);
+        Assert.DoesNotContain("id=\"job-title\"", html);
+        Assert.Empty(BusinessCalls(api));
         Assert.Empty(nav.Navigations);
     }
 
@@ -331,14 +335,14 @@ public class B28RoleUiTests
     }
 
     [Fact]
-    public async Task Admin_sees_the_job_actions()
+    public async Task Admin_gets_403_on_the_job_list_without_business_data_or_actions()
     {
-        var (html, _, _) = await Open("Admin", "jobs");
-        Assert.Contains("Tạo vị trí", html);
-        Assert.Contains("Sửa vị trí", html);
-        Assert.Contains("Ngừng tuyển", html);
-        Assert.Contains("href=\"jobs/3\"", html);
-        Assert.DoesNotContain("Bạn có quyền xem danh sách", html);
+        var (html, _, api) = await Open("Admin", "jobs");
+        Assert.Contains("Bạn không có quyền truy cập trang này", html);
+        Assert.DoesNotContain("Backend .NET Intern", html);
+        Assert.DoesNotContain("Sửa vị trí", html);
+        Assert.DoesNotContain("Ngừng tuyển", html);
+        Assert.Empty(BusinessCalls(api));
     }
 
     private static readonly List<PromptVersionDto> Versions =
@@ -354,13 +358,15 @@ public class B28RoleUiTests
             .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance))
             .AddSingleton(new AiPreviewApiClient(http, NullLogger<AiPreviewApiClient>.Instance))
             .AddSingleton(new AnonymityState())
-            .AddB28Auth(role).BuildServiceProvider();
+            .AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance)) // B56 QuotaNotice
+            // Since #114 only an HR with a validated workspace is a business operator; Admin keeps its plain principal.
+            .AddB28Auth(role == "HR" ? B28Auth.VerifiedInternalHr() : B28Auth.Principal(role)).BuildServiceProvider();
     }
 
     [Theory]
     [InlineData("HR", true)]
-    [InlineData("Admin", true)]
-    public async Task Prompt_history_shows_activate_to_both_business_roles(string role, bool visible)
+    [InlineData("Admin", false)] // #114: System Admin is not a business operator
+    public async Task Prompt_history_shows_activate_only_to_the_business_HR(string role, bool visible)
     {
         using var sp = ComponentServices(role);
         var html = await Html<PromptHistory>(sp, new() { ["Versions"] = Versions, ["SelectedId"] = 2 });
@@ -370,8 +376,8 @@ public class B28RoleUiTests
 
     [Theory]
     [InlineData("HR", true)]
-    [InlineData("Admin", true)]
-    public async Task Both_business_roles_can_edit_save_and_try_a_prompt(string role, bool canSave)
+    [InlineData("Admin", false)] // #114: Admin sees the read-only editor
+    public async Task Only_the_business_HR_can_edit_save_and_try_a_prompt(string role, bool canSave)
     {
         using var sp = ComponentServices(role);
         var draft = new PromptDraft();
@@ -386,28 +392,27 @@ public class B28RoleUiTests
     }
 
     [Theory]
-    [InlineData("HR")]
-    [InlineData("Admin")]
-    public async Task Both_business_roles_see_the_masked_payload_tab_in_the_playground(string role)
+    [InlineData("HR", true)]
+    [InlineData("Admin", false)] // #114: the assembled payload is business data
+    public async Task Only_the_business_HR_sees_the_masked_payload_tab_in_the_playground(string role, bool visible)
     {
         using var sp = ComponentServices(role);
         var draft = new PromptDraft(); draft.Load(Versions[0]);
         var html = await Html<PromptPlayground>(sp, new() { ["Draft"] = draft });
-        Assert.Contains("Nội dung gửi Gemini", html);
-        Assert.Contains("aria-controls=\"pg-panel-payload\"", html);
+        Assert.Equal(visible, html.Contains("aria-controls=\"pg-panel-payload\""));
     }
 
     [Theory]
-    [InlineData("HR")]
-    [InlineData("Admin")]
-    public async Task Both_business_roles_can_create_an_evaluation_set(string role)
+    [InlineData("HR", true)]
+    [InlineData("Admin", false)] // #114: Admin cannot create business evaluation sets
+    public async Task Only_the_business_HR_can_create_an_evaluation_set(string role, bool canCreate)
     {
         var api = Api();
         using var sp = ComponentServices(role, api);
         var html = await Html<EvaluationSetManager>(sp);
-        Assert.Contains("Tên bộ CV mới", html);
-        Assert.Contains("id=\"create-set-open\"", html);
-        Assert.Contains("id=\"create-set-submit\"", html);
+        Assert.Equal(canCreate, html.Contains("Tên bộ CV mới"));
+        Assert.Equal(canCreate, html.Contains("id=\"create-set-open\""));
+        Assert.Equal(canCreate, html.Contains("id=\"create-set-submit\""));
         Assert.DoesNotContain("Quản trị viên (Admin) tạo bộ", html);
         Assert.All(BusinessCalls(api), c => Assert.StartsWith("GET ", c));
     }
@@ -419,13 +424,16 @@ public class B28RoleUiTests
     {
         var (raw, _, _) = await Open("HR", "forbidden");   // trang không cần API nào: chỉ kiểm tra khung + menu
         var html = System.Text.RegularExpressions.Regex.Replace(raw, @" b-[a-z0-9]{10}", "");
-        foreach (var item in new[] { "Dashboard tuyển dụng", "Tải hồ sơ lên", "Ứng viên", "Kết quả", "System prompt", "Bộ dữ liệu đánh giá", "Vị trí tuyển dụng", "Lịch sử lượt chấm" })
+        // Internal HR persona menu (RoleBasedNavigation.Business(personal: false)).
+        foreach (var item in new[] { "Dashboard tuyển dụng", "Báo cáo tuyển dụng", "Vị trí tuyển dụng", "Tải CV lên", "Ứng viên", "Kết quả & xếp hạng", "Lịch sử lượt chấm", "System Prompt", "Bộ dữ liệu đánh giá", "Quyền truy cập" })
             Assert.Contains($"<span>{item}</span>", html);
+        foreach (var adminOnly in new[] { "Dashboard quản trị", "Audit Log", "Workspace & quota" })
+            Assert.DoesNotContain($"<span>{adminOnly}</span>", html);
         Assert.Contains("nav-account", html);
         Assert.Contains("nav-account-role", html);
         Assert.Contains("aria-label=\"Mở menu\"", html);
         Assert.Contains("aria-expanded=\"false\"", html);
-        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(html, "class=\"nav-group\"").Count);
+        Assert.Equal(4, System.Text.RegularExpressions.Regex.Matches(html, "class=\"nav-group\"").Count);
     }
 
     [Fact]

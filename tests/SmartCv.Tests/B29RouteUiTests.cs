@@ -90,7 +90,9 @@ public class B29RouteUiTests
         Assert.Contains(">Bạn</span>", html);                      // dòng của chính mình
         Assert.Contains("Đã khóa", html);
         Assert.Contains("Hiển thị <strong>1–3</strong> / 3 tài khoản", html);
-        Assert.Contains("<span>Tài khoản</span>", html);           // mục menu chỉ Admin
+        Assert.Contains("<span>Quản lý tài khoản</span>", html);   // mục menu chỉ Admin
+        Assert.Matches("<a[^>]*href=\"users\"[^>]*class=\"nav-item active\"|<a[^>]*class=\"nav-item active\"[^>]*href=\"users\"", html);
+        Assert.Contains("<span>Audit Log</span>", html);
         Assert.Contains("/api/users?page=1&pageSize=20", BusinessCalls(api));
         Assert.Contains("/api/users?role=Admin&isActive=true&page=1&pageSize=1", BusinessCalls(api));
         Assert.Empty(nav.Navigations);
@@ -101,7 +103,8 @@ public class B29RouteUiTests
     {
         var (html, nav, api) = await Open("HR", "users");
         Assert.Contains("Bạn không có quyền truy cập trang này", html);
-        Assert.DoesNotContain("<span>Tài khoản</span>", html);
+        Assert.DoesNotContain("<span>Quản lý tài khoản</span>", html);
+        Assert.DoesNotContain("href=\"users\"", html);
         Assert.Empty(BusinessCalls(api));
         Assert.Empty(nav.Navigations);
     }

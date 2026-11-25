@@ -75,6 +75,7 @@ public class JobSelectionUiTests
         services.Configure<CvUploadOptions>(_ => { });
         services.AddSingleton<Microsoft.JSInterop.IJSRuntime, NoJs>();
         services.AddSingleton(new JobApiClient(new HttpClient(new Handler(respond)) { BaseAddress = new Uri("https://api.test/") }, NullLogger<JobApiClient>.Instance));
+        services.AddSingleton(new WorkspaceApiClient(new HttpClient(new Handler(respond)) { BaseAddress = new Uri("https://api.test/") }, NullLogger<WorkspaceApiClient>.Instance)); // B56 QuotaNotice
         services.AddSingleton(new CvApiClient(new HttpClient(), Microsoft.Extensions.Options.Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance));
         // B6: trang Upload inject thêm 3 service này (test B4 không gọi tới)
         services.AddSingleton(new ApplicationApiClient(new HttpClient(), NullLogger<ApplicationApiClient>.Instance));

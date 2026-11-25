@@ -17,7 +17,7 @@ public class WorkspaceIsolationRouteTests
     [A51SqlFact]
     public async Task Sql_dashboard_timing_counts_only_current_workspace()
     {
-        await using var database = await A51Database.CreateAsync(A53JournalSqlTests.Current);
+        await using var database = await A51Database.CreateAsync(A51Database.Latest);
         await A52Data.SeedAsync(database.Options());
         using var context = database.Context();
         var connection = context.Database.GetConnectionString();
@@ -30,7 +30,9 @@ public class WorkspaceIsolationRouteTests
         }));
         foreach (var workspace in new[] { 1, 2 })
         {
-            var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR", memberOfWorkspace: workspace);
+            // Workspace 2 is Personal: only its verified Owner (Workspaces.OwnerUserId) is a business operator there.
+            var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR", memberOfWorkspace: workspace, workspaceRole: workspace == 2 ? "Owner" : "Member");
+            if (workspace == 2) await A28TestSupport.WithDb(factory, async db => { (await db.Workspaces.SingleAsync(w => w.WorkspaceId == 2)).OwnerUserId = user.UserId; await db.SaveChangesAsync(); });
             using var client = factory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(user, workspaceId: workspace));
             using var response = await client.GetAsync("/api/dashboard/summary");
@@ -94,14 +96,12 @@ public class WorkspaceIsolationRouteTests
     {
         using var fixture = await WorkspaceIsolationFixture.CreateAsync();
         using var client = fixture.Client(1, admin: true);
-        using var jobs = await client.GetAsync("/api/jobs");
-        Assert.Equal(HttpStatusCode.OK, jobs.StatusCode);
-        var body = await jobs.Content.ReadAsStringAsync();
-        Assert.Contains("A52 job 1", body); Assert.DoesNotContain("A52 job 2", body);
-        foreach (var path in new[] { $"/api/jobs/{fixture.Data[2].Job}", $"/api/cvs/{fixture.Data[2].Cv}", $"/api/runs/{fixture.Data[2].Run}" })
+        // Since #114 a System Admin is not a business operator (B57 R1): even with an internal membership the
+        // business API is 403 for own-workspace lists and foreign ids alike, and never returns business data.
+        foreach (var path in new[] { "/api/jobs", $"/api/jobs/{fixture.Data[1].Job}", $"/api/jobs/{fixture.Data[2].Job}", $"/api/cvs/{fixture.Data[2].Cv}", $"/api/runs/{fixture.Data[2].Run}" })
         {
             using var response = await client.GetAsync(path);
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             Assert.DoesNotContain("A52", await response.Content.ReadAsStringAsync());
         }
     }

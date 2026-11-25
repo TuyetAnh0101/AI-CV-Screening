@@ -177,7 +177,8 @@ public class B23CvLibraryTests
     [Fact]
     public async Task Menu_adds_library_and_keeps_all_existing_destinations()
     {
-        await using var sp = Services(new Api(), new Nav()); var html = await Html<NavMenu>(sp);
+        // Since #114 the business menu belongs to the internal HR persona (the Admin menu has only admin pages).
+        await using var sp = Services(new Api(), new Nav(), user: B28Auth.VerifiedInternalHr()); var html = await Html<NavMenu>(sp);
         // B24: một mục "Ứng viên" thay cho "Kho CV" (không để hai mục chồng chức năng).
         foreach (var route in new[] { "candidates", "upload", "results", "prompts", "jobs", "runs" }) Assert.Contains($"href=\"{route}\"", html);
         Assert.DoesNotContain("href=\"cvs\"", html); Assert.DoesNotContain("Kho CV", html);
@@ -309,11 +310,11 @@ public class B23CvLibraryTests
     private static HttpResponseMessage Json(object value, int status = 200) => new((HttpStatusCode)status) { Content = JsonContent.Create(value, value.GetType()) };
     private static AnonymityState Normal() { var state = new AnonymityState(); state.SetAsync(false).GetAwaiter().GetResult(); return state; }
     private static CvApiClient Client(HttpMessageHandler handler, ILogger<CvApiClient>? logger = null) => new(new(handler) { BaseAddress = new("http://localhost/") }, Options.Create(new CvUploadOptions()), logger ?? NullLogger<CvApiClient>.Instance);
-    private static ServiceProvider Services(HttpMessageHandler handler, Nav nav, AnonymityState? anonymity = null) => new ServiceCollection().AddLogging()
+    private static ServiceProvider Services(HttpMessageHandler handler, Nav nav, AnonymityState? anonymity = null, System.Security.Claims.ClaimsPrincipal? user = null) => new ServiceCollection().AddLogging()
         .AddSingleton<NavigationManager>(nav).AddSingleton(anonymity ?? new AnonymityState()).AddSingleton(Client(handler))
         .AddSingleton(new JobApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<JobApiClient>.Instance))
         .AddSingleton(new CandidateApiClient(new(handler) { BaseAddress = new("http://localhost/") }, NullLogger<CandidateApiClient>.Instance))
-        .AddSingleton<IJSRuntime>(new Js()).AddB28Auth().AddFixtureFileDownloads(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") }).BuildServiceProvider(); // B28: menu cần người đã đăng nhập
+        .AddSingleton<IJSRuntime>(new Js()).AddB28Auth(user ?? B28Auth.Principal()).AddFixtureFileDownloads(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") }).BuildServiceProvider(); // B28: menu cần người đã đăng nhập
     private static async Task<string> Html<T>(ServiceProvider services) where T : IComponent
         => await HtmlWithParameters<T>(services, []);
     private static async Task<string> HtmlWithParameters<T>(ServiceProvider services, Dictionary<string, object?> parameters) where T : IComponent

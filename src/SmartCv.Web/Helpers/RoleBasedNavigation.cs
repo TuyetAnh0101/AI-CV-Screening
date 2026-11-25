@@ -118,6 +118,8 @@ public static class RoleBasedNavigation
             new("Kết nối Google & AI", "admin/integrations", PromptIcon, AdminOnly: true)
         ]),
         new("Bảo mật & vận hành", [
+            // Account management (A30 /api/users, Users.razor with AdminPolicy); verified Admin persona only.
+            new("Quản lý tài khoản", "users", UsersIcon, AdminOnly: true),
             new("Audit Log", "admin/activity-logs", AuditIcon, AdminOnly: true),
         ])
     ];

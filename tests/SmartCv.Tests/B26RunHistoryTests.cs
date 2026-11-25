@@ -561,9 +561,10 @@ public class B26RunHistoryTests
     [Fact]
     public async Task Sidebar_adds_run_history_under_management_and_routes_match_B19_links()
     {
-        using var sp = Services(new Api(), new Nav("https://app.test/runs/12"));
+        // Since #114 run history is in the internal HR persona menu (RoleBasedNavigation.Business).
+        using var sp = Services(new Api(), new Nav("https://app.test/runs/12"), user: B28Auth.VerifiedInternalHr());
         var html = Decode(await Html<NavMenu>(sp));
-        var labels = new[] { "Dashboard quản trị", "Tải hồ sơ lên", "Kết quả", "System prompt", "Tuyển dụng", "Vị trí tuyển dụng", "Lịch sử lượt chấm" };
+        var labels = new[] { "Dashboard tuyển dụng", "Tải CV lên", "Kết quả & xếp hạng", "System Prompt", "Quản lý tuyển dụng", "Vị trí tuyển dụng", "Lịch sử lượt chấm" };
         var positions = labels.Select(l => html.IndexOf(l, StringComparison.Ordinal)).ToArray();
         Assert.All(positions, p => Assert.True(p >= 0)); Assert.True(positions[4] < positions[5] && positions[5] < positions[6]);
         Assert.Matches("<a[^>]*href=\"runs\"[^>]*class=\"nav-item active\"|<a[^>]*class=\"nav-item active\"[^>]*href=\"runs\"", html);
@@ -642,11 +643,11 @@ public class B26RunHistoryTests
     private static RunApiClient Client(HttpMessageHandler handler) =>
         new(new HttpClient(handler) { BaseAddress = new Uri("https://api.test/") }, NullLogger<RunApiClient>.Instance);
 
-    private static ServiceProvider Services(HttpMessageHandler handler, Nav nav, AnonymityState? anonymity = null)
+    private static ServiceProvider Services(HttpMessageHandler handler, Nav nav, AnonymityState? anonymity = null, System.Security.Claims.ClaimsPrincipal? user = null)
     {
         var services = new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav)
             .AddSingleton(new RunApiClient(new HttpClient(handler) { BaseAddress = handler is Recorder ? new Uri("http://localhost/") : new Uri("https://api.test/") }, NullLogger<RunApiClient>.Instance))
-            .AddSingleton(anonymity ?? new AnonymityState()).AddSingleton<IJSRuntime>(new Js()).AddB28Auth(); // B28: menu cần người đã đăng nhập
+            .AddSingleton(anonymity ?? new AnonymityState()).AddSingleton<IJSRuntime>(new Js()).AddB28Auth(user ?? B28Auth.Principal()); // B28: menu cần người đã đăng nhập
         services.AddSupplyValueFromQueryProvider();
         return services.BuildServiceProvider();
     }

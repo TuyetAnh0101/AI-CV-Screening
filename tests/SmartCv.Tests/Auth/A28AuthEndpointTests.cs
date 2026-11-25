@@ -58,7 +58,8 @@ public class A28AuthEndpointTests
         using var me = await http.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
         var data = await Json(me);
-        Assert.Equal(new[] { "email", "fullName", "lastLoginAt", "mustChangePassword", "role", "userId" }, data.EnumerateObject().Select(p => p.Name).Order());
+        // A52 added the DB-validated session workspace (null for accounts without membership) to the /me contract.
+        Assert.Equal(new[] { "email", "fullName", "lastLoginAt", "mustChangePassword", "role", "userId", "workspace" }, data.EnumerateObject().Select(p => p.Name).Order());
         Assert.DoesNotContain(user.SecurityStamp, data.GetRawText()); Assert.DoesNotContain(user.PasswordHash, data.GetRawText());
         await A28TestSupport.WithDb(factory, async db => Assert.NotNull((await db.Users.SingleAsync(u => u.UserId == user.UserId)).LastLoginAt));
     }
@@ -286,7 +287,7 @@ public class A28AuthEndpointTests
         using var limited = await Login(http, "absent@example.invalid", "synthetic9");
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.NotNull(limited.Headers.RetryAfter); Assert.Equal("login_rate_limited", (await Json(limited)).GetProperty("code").GetString());
-        var uploadUser = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        var uploadUser = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR"); // upload is a business (HR) route since #114
         http.DefaultRequestHeaders.Authorization = new("Bearer", A28TestSupport.Token(uploadUser));
         using var firstUpload = await http.PostAsync("/api/cvs/upload", new MultipartFormDataContent());
         using var secondUpload = await http.PostAsync("/api/cvs/upload", new MultipartFormDataContent());
@@ -330,7 +331,11 @@ public class A28AuthEndpointTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/retention/settings")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/data-requests")).StatusCode);
         using var hr = await TestSupport.ClientWithSyntheticHrAsync(factory);
-        Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/retention/settings")).StatusCode);
+        // Since #114 retention settings are a System Admin operation; HR keeps candidate data-rights requests.
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.GetAsync("/api/retention/settings")).StatusCode);
+        using var admin = await TestSupport.ClientWithSyntheticHrAsync(factory, "Admin");
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/retention/settings")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/data-requests")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/data-requests")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/jobs")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync("/api/jobs")).StatusCode);

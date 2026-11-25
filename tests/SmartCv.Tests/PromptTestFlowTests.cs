@@ -56,7 +56,7 @@ public class PromptTestFlowTests
     public async Task Interactive_polling_updates_then_stops_at_terminal_and_dispose()
     {
         var s = new Server { Exists = true };
-        using var sp = new ServiceCollection().AddLogging().AddSingleton(Client(s)).BuildServiceProvider();
+        using var sp = new ServiceCollection().AddLogging().AddSingleton(Client(s)).AddSingleton(Quota(s)).BuildServiceProvider();
         await using var renderer = new LiveRenderer(sp);
         await renderer.OpenAsync();
         s.Status = "Completed";
@@ -103,6 +103,8 @@ public class PromptTestFlowTests
         private static HttpResponseMessage Json<T>(T data, HttpStatusCode code = HttpStatusCode.OK) => new(code) { Content = JsonContent.Create(data) };
     }
     private static PromptApiClient Client(Server server) => new(new HttpClient(server) { BaseAddress = new Uri("http://api.test/") }, NullLogger<PromptApiClient>.Instance);
+    // B56: PromptTestPanel hosts QuotaNotice, which reads the workspace quota only after a recognized 429/409.
+    private static WorkspaceApiClient Quota(Server server) => new(new HttpClient(server) { BaseAddress = new Uri("http://api.test/") }, NullLogger<WorkspaceApiClient>.Instance);
     [Theory]
     [InlineData("Queued")] [InlineData("Running")] [InlineData("Failed")]
     public async Task Actual_api_null_counters_deserialize_and_preserve_unknown_statistics(string status)
@@ -157,7 +159,7 @@ public class PromptTestFlowTests
     public async Task Component_renders_real_set_counts_and_completed_result()
     {
         var s = new Server { Exists = true, Status = "Completed" };
-        using var sp = new ServiceCollection().AddLogging().AddSingleton(Client(s)).BuildServiceProvider();
+        using var sp = new ServiceCollection().AddLogging().AddSingleton(Client(s)).AddSingleton(Quota(s)).BuildServiceProvider();
         await using var renderer = new HtmlRenderer(sp, sp.GetRequiredService<ILoggerFactory>());
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
@@ -185,7 +187,7 @@ public class PromptTestFlowTests
     public async Task Parent_render_with_previous_query_does_not_restore_old_run_or_reset_new_prompt()
     {
         var server=new Server { Exists=true,Status="Completed",AdvanceId=true };
-        using var services=new ServiceCollection().AddLogging().AddSingleton(Client(server)).BuildServiceProvider();
+        using var services=new ServiceCollection().AddLogging().AddSingleton(Client(server)).AddSingleton(Quota(server)).BuildServiceProvider();
         await using var renderer=new LiveRenderer(services);await renderer.ShowToken("7");
         await renderer.Event("onchange","Phiên bản prompt đánh giá",new ChangeEventArgs{Value="2"});
         await renderer.Event("onclick","Chạy đánh giá",new MouseEventArgs());

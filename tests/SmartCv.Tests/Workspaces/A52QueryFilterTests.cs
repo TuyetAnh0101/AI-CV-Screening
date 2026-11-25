@@ -12,7 +12,7 @@ namespace SmartCv.Tests;
 public class A52QueryFilterTests
 {
     private static readonly Type[] RootTypes =
-        [typeof(Job), typeof(Cv), typeof(Candidate), typeof(Application), typeof(PromptVersion), typeof(EvaluationSet), typeof(EvaluationRun), typeof(ExportLog)];
+        [typeof(Job), typeof(Cv), typeof(Candidate), typeof(Application), typeof(PromptVersion), typeof(EvaluationSet), typeof(EvaluationRun), typeof(ExportLog), typeof(AiUsageEntry)];
 
     private static readonly Type[] ChildTypes =
         [typeof(JobSkill), typeof(JobSkillAlias), typeof(Evaluation), typeof(EvaluationSkill), typeof(ApplicationEvent), typeof(ApplicationFlag),

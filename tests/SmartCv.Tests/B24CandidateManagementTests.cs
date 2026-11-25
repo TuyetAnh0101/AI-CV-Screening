@@ -373,7 +373,7 @@ public class B24CandidateManagementTests
         var html = await ui.Until(s => s.Contains("Ứng viên #1"));
         foreach (var secret in new[] { "Nguyễn Văn An", "thu@example.com", "0912", "cv-moi.pdf", "Người Trùng", "Đã gửi email", "HR - Lan" })
             Assert.DoesNotContain(secret, html);
-        Assert.Contains("Đang bật Ẩn danh", html);
+        Assert.Contains("Đang ẩn danh: thông tin nhận diện đã được che.", html);   // privacy banner wording since #113
         Assert.DoesNotContain("data-export", html);
     }
 

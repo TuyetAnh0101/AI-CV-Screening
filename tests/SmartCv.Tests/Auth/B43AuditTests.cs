@@ -167,7 +167,7 @@ public class B43AuditTests
     [Fact]
     public async Task Job_prompt_upload_stage_and_scoring_events_come_from_committed_handlers_without_private_payloads()
     {
-        using var factory = Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password());
+        using var factory = Factory(); var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR"); // business actor since #114
         using var http = A29AuthorizationTests.Client(factory, user);
         var request = Jobs.JobRulesTests.Valid("Synthetic audit job " + Guid.NewGuid().ToString("N"));
         request.ClosingDate = SmartCv.Core.Common.VietnamTime.Today().AddDays(7);
@@ -220,8 +220,8 @@ public class B43AuditTests
         foreach (var response in responses) response.Dispose();
     }
 
+    // CV files are business data: Admin is refused (B57RoleBoundaryTests.R1 covers GET /api/cvs/{id}/file for Admin).
     [Theory]
-    [InlineData("Admin")]
     [InlineData("HR")]
     public async Task File_access_is_authenticated_private_and_audited_as_opened_not_download_completed(string role)
     {
@@ -244,7 +244,7 @@ public class B43AuditTests
     public async Task Failure_to_store_file_audit_prevents_stream_delivery_without_sensitive_errors()
     {
         var fault = new A28TestSupport.DataFault(); using var factory = A28TestSupport.Factory(fault: fault);
-        var user = await A28TestSupport.Seed(factory, A28TestSupport.Password()); using var http = A29AuthorizationTests.Client(factory, user);
+        var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR"); using var http = A29AuthorizationTests.Client(factory, user);
         var id = await Upload(http, TestSupport.Pdf(Guid.NewGuid().ToString("N"))); fault.FailSave = true;
         using var response = await http.GetAsync($"/api/cvs/{id}/file"); Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var text = await response.Content.ReadAsStringAsync(); Assert.Contains("audit_unavailable", text); Assert.DoesNotContain("SYNTHETIC_PRIVATE_SQL_ERROR", text); Assert.DoesNotContain("%PDF", text);

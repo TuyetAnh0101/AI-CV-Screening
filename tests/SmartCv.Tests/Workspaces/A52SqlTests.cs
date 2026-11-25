@@ -25,7 +25,7 @@ public class A52SqlTests
     [A51SqlFact]
     public async Task Sql_filters_isolate_workspaces_including_navigation_children_and_fail_closed()
     {
-        await using var database = await A51Database.CreateAsync(A53JournalSqlTests.Current);
+        await using var database = await A51Database.CreateAsync(A51Database.Latest);
         var options = await A52Data.SeedAsync(database.Options());   // đồ thị đầy đủ, đóng dấu qua SaveChanges, FK ghép + AK thật
 
         await using (var none = new SmartCvDbContext(options))
@@ -61,7 +61,7 @@ public class A52SqlTests
     [A51SqlFact]
     public async Task Sql_save_guard_stamps_graphs_blocks_forged_updates_and_keeps_cross_workspace_foreign_keys()
     {
-        await using var database = await A51Database.CreateAsync(A53JournalSqlTests.Current);
+        await using var database = await A51Database.CreateAsync(A51Database.Latest);
         var options = await A52Data.SeedAsync(database.Options());
         int foreignJob;
         using (WorkspaceScope.Begin(2)) { await using var db = new SmartCvDbContext(options); foreignJob = (await db.Jobs.SingleAsync(j => j.Title == "A52 job 2")).JobId; }
@@ -111,7 +111,7 @@ public class A52SqlTests
     [A51SqlFact]
     public async Task Sql_session_state_reads_account_and_membership_in_one_query_and_reports_revocation()
     {
-        await using var database = await A51Database.CreateAsync(A53JournalSqlTests.Current);
+        await using var database = await A51Database.CreateAsync(A51Database.Latest);
         await database.ExecAsync("""
             INSERT INTO Users (Email, FullName, PasswordHash, Role, IsActive, MustChangePassword, SecurityStamp, SignupSource)
             VALUES (N'a52-hr@example.invalid', N'HR A52', 'h', N'HR', 1, 0, 'stamp-hr', 'Admin'),

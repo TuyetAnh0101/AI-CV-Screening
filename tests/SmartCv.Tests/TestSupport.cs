@@ -185,7 +185,7 @@ internal static class TestSupport
 /// </summary>
 internal class StartupGatedApiFactory : WebApplicationFactory<Program>
 {
-    internal const string RegressionActor = "Synthetic regression Admin";
+    internal const string RegressionActor = "Synthetic regression user";
     // Khóa test ngẫu nhiên chỉ trong RAM của test host; không dùng User Secrets thật.
     internal static readonly string JwtTestKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
     protected override void ConfigureWebHost(IWebHostBuilder builder)

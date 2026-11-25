@@ -35,11 +35,12 @@ public sealed class AdminOperationsReportUiTests
     }
 
     [Fact]
-    public void Admin_sidebar_has_report_but_no_duplicate_account_entry()
+    public void Admin_sidebar_has_report_and_exactly_one_account_management_entry()
     {
         var admin = RoleBasedNavigation.For(User("Admin")).SelectMany(g => g.Items).ToArray();
         Assert.Contains(admin, i => i.Href == "admin/reports");
-        Assert.DoesNotContain(admin, i => i.Href is "users" or "account" or "reports/recruitment");
+        Assert.Single(admin, i => i.Href == "users");   // "Quản lý tài khoản" restored, never duplicated
+        Assert.DoesNotContain(admin, i => i.Href is "account" or "reports/recruitment");
         foreach (var role in new[] { User("HR", "Internal", "Member"), User("HR", "Personal", "Owner") })
             Assert.DoesNotContain(RoleBasedNavigation.For(role).SelectMany(g => g.Items), i => i.Href == "admin/reports");
     }
