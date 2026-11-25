@@ -50,9 +50,9 @@
             </article>
             <article class="rx-card rx-amber">
                 <div class="rx-card-top"><span>03 · XUẤT BÁO CÁO</span><span class="rx-chip rx-ready">Đã hỗ trợ CSV</span></div>
-                <h2>CSV báo cáo quản trị</h2>
-                <p>API quản trị đã hỗ trợ tải CSV chỉ gồm metadata, xu hướng và số liệu tổng hợp. Không xuất CV, tên ứng viên hoặc System Prompt.</p>
-                <a href="/admin/reports" class="rx-link">Mở báo cáo quản trị · CSV ↗</a>
+                <h2>Excel / CSV báo cáo quản trị</h2>
+                <p>Xuất Excel nhiều sheet theo chuyên đề hoặc CSV dữ liệu máy đọc; chỉ có metadata, số liệu tổng hợp và nguồn đối chiếu, không có CV, tên ứng viên hoặc System Prompt.</p>
+                <a href="/admin/reports" class="rx-link">Mở báo cáo quản trị · Excel / CSV ↗</a>
             </article>
         </div>
     }
@@ -110,7 +110,7 @@
 
 @code {
     private string CopyText => Session.User?.Role == "Admin"
-        ? "SCApp: Báo cáo quản trị chỉ gồm vận hành, sức khỏe, Audit, AI và workspace tổng hợp. CSV quản trị đã hỗ trợ; chỉ metadata và có Audit."
+        ? "SCApp: Báo cáo quản trị chỉ gồm vận hành, sức khỏe, Audit, AI và workspace tổng hợp. Excel/CSV quản trị đã hỗ trợ; chỉ metadata và có Audit."
         : Session.User?.Workspace?.Kind == "Personal"
             ? "SCApp: Chỉ dữ liệu workspace cá nhân. Excel kết quả đang hỗ trợ; ZIP backup workspace chưa triển khai."
             : "SCApp: Chỉ dữ liệu tuyển dụng workspace nội bộ. Excel từng lượt chấm đang hỗ trợ.";

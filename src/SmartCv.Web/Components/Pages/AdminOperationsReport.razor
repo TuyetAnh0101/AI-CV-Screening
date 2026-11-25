@@ -3,6 +3,7 @@
 @using System.Globalization
 @using Microsoft.JSInterop
 @using SmartCv.Core.Contracts
+@using SmartCv.Web.Components.Reports
 @inject AdminOperationsReportApiClient ReportsApi
 @inject FileDownloadService Files
 @inject IJSRuntime Js
@@ -117,7 +118,6 @@
 
     <section class="aor-panel aor-exports-panel" aria-labelledby="aor-export-title">
         <div class="aor-panel-heading"><div><span class="aor-index">06 / TRACEABILITY</span><h2 id="aor-export-title">Nhật ký xuất dữ liệu</h2><p>Chỉ metadata; nhật ký được ghi tại thời điểm hệ thống cấp quyền xuất file.</p></div>
-            <div class="aor-export-actions"><button type="button" class="aor-button aor-outline" disabled="@(busy || downloading || previewing)" @onclick="OpenPreviewAsync">Xem phạm vi CSV</button><button type="button" class="aor-button aor-primary" disabled="@(busy || downloading || previewing || summary is null || trend is null || exportPage is null)" @onclick="OpenPreviewAsync">Xuất CSV</button></div>
         </div>
         @if (exportError is not null) { <div class="aor-alert" role="alert">@exportError</div> }
         @if (exportPage is { } exp)
@@ -135,6 +135,7 @@
         else if (exportsLoading) { <div class="aor-loading" role="status">Đang tải nhật ký xuất…</div> }
     </section>
 
+    <AdminReportV2Export From="appliedFrom" To="appliedTo" />
     <div class="aor-footer-note">SCApp · Báo cáo quản trị chỉ hỗ trợ ra quyết định vận hành. Không thay thế hệ thống giám sát uptime, SLA hay công cụ sao lưu.</div>
 
     @if (previewOpen)

@@ -1,0 +1,195 @@
+@using SmartCv.Core.Contracts
+@using SmartCv.Web.Services
+@using Microsoft.JSInterop
+@inject AdminOperationsReportV2ApiClient Api
+@inject FileDownloadService Downloads
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<section id="admin-report-v2" class="ar2-root" aria-labelledby="ar2-title">
+    <header class="ar2-heading">
+        <div><span class="ar2-kicker">V2 · PROFESSIONAL REPORTING</span>
+            <h2 id="ar2-title">Xuất báo cáo điều hành có cấu trúc</h2>
+            <p>Excel nhiều trang tính hoặc CSV theo chuyên đề. Báo cáo chỉ gồm metadata và thống kê đã lưu.</p>
+        </div><span class="ar2-tag">XLSX / CSV · AUDITED</span>
+    </header>
+
+    <div class="ar2-grid">
+        <label>Chuyên đề báo cáo
+            <select @bind="report" disabled="@busy" aria-label="Chọn nhóm báo cáo">
+                <option value="all">Toàn bộ vận hành</option>
+                <option value="accounts">Tài khoản</option>
+                <option value="workspaces">Workspace &amp; giới hạn</option>
+                <option value="ai">AI &amp; quota</option>
+                <option value="operations">Sức khỏe vận hành</option>
+                <option value="security">Bảo mật &amp; Audit</option>
+                <option value="exports">Nhật ký xuất</option>
+            </select>
+        </label>
+        <label>Định dạng tệp
+            <select @bind="format" disabled="@busy" aria-label="Định dạng xuất">
+                <option value="xlsx">Excel (.xlsx) — đọc và phân tích</option>
+                <option value="csv">CSV (.csv) — tích hợp dữ liệu</option>
+            </select>
+        </label>
+        <div class="ar2-period"><small>Kỳ báo cáo đang áp dụng</small>
+            <strong>@From.ToString("dd/MM/yyyy") — @To.ToString("dd/MM/yyyy")</strong>
+            <span>UTC+7 · 1–90 ngày · lọc tại biểu mẫu phía trên</span>
+        </div>
+    </div>
+
+    <div class="ar2-actions">
+        <button type="button" class="ar2-btn ar2-outline" disabled="@busy" data-ar2-preview @onclick="PreviewAsync">
+            @(busy && checking ? "Đang kiểm tra…" : "Xem trước phạm vi")
+        </button>
+        <button type="button" class="ar2-btn ar2-primary" disabled="@(!CanDownload)" @onclick="DownloadAsync">
+            @(downloading ? "Đang xuất file…" : $"Xuất {format.ToUpperInvariant()}")
+        </button>
+        <span class="ar2-note">Phải xem trước sau khi đổi chuyên đề, định dạng hoặc kỳ báo cáo.</span>
+    </div>
+
+    @if (error is not null) { <div class="ar2-alert" role="alert">@error</div> }
+    @if (notice is not null) { <div class="ar2-success" role="status">@notice</div> }
+
+    @if (preview is { } p && SameSelection(p))
+    {
+        <div class="ar2-preview" aria-label="Phạm vi được API xác nhận">
+            <div class="ar2-preview-head"><div><span class="ar2-kicker">SERVER-VERIFIED PREVIEW</span><h3>Phạm vi tệp</h3></div>
+                <span class="@(p.CanDownload ? "ar2-state ok" : "ar2-state error")">
+                    @(p.CanDownload ? "Đủ điều kiện" : "Không thể xuất")</span>
+            </div>
+            <div class="ar2-preview-stats">
+                <div><small>Chuyên đề</small><strong>@Friendly(p.Report)</strong></div>
+                <div><small>Định dạng</small><strong>@p.Format.ToUpperInvariant()</strong></div>
+                <div><small>Nhật ký xuất kèm theo</small><strong>@(p.ExportEventCount is { } count ? $"{count:N0} / {p.MaxExportEvents:N0}" : "Không chọn")</strong></div>
+            </div>
+            <h4>Nhóm dữ liệu được xuất</h4>
+            <div class="ar2-chips">@foreach (var name in p.IncludedSections) { <span>@SectionName(name)</span> }</div>
+            <details class="ar2-disclosure"><summary>Giới hạn và nguồn dữ liệu cần biết</summary>
+                <ul>@foreach (var n in p.Notices) { <li>@n</li> }</ul>
+            </details>
+            <p class="ar2-audit-line">Tệp chỉ được cấp khi API đã ghi Audit thành công. Không xuất nội dung CV, tên ứng viên, điểm cá nhân hoặc System Prompt.</p>
+        </div>
+    }
+    else
+    {
+        <div class="ar2-placeholder">Chọn chuyên đề và nhấn <strong>Xem trước phạm vi</strong> để xác nhận dữ liệu từ API.</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DateOnly From { get; set; }
+    [Parameter, EditorRequired] public DateOnly To { get; set; }
+    private DateOnly lastFrom, lastTo;
+    private string report = AdminReportV2Kinds.All;
+    private string format = "xlsx";
+    private AdminReportV2PreviewDto? preview;
+    private bool checking, downloading, disposed;
+    private string? error, notice;
+    private bool busy => checking || downloading;
+    private readonly CancellationTokenSource lifecycle = new();
+    private IJSObjectReference? jsModule;
+
+    protected override void OnParametersSet()
+    {
+        if (lastFrom == From && lastTo == To) return;
+        lastFrom = From; lastTo = To;
+        preview = null; error = notice = null;
+    }
+    private bool SameSelection(AdminReportV2PreviewDto p) =>
+        p.Period.From == From && p.Period.To == To && p.Report == report && p.Format == format;
+    private bool CanDownload => !busy && !disposed && preview is { CanDownload: true } p && SameSelection(p) && error is null && notice is null;
+
+    private async Task PreviewAsync()
+    {
+        if (busy || disposed) return;
+        checking = true; error = notice = null; preview = null;
+        try
+        {
+            var result = await Api.PreviewAsync(From, To, report, format, lifecycle.Token);
+            if (disposed) return;
+            if (!result.IsSuccess || result.Data is null)
+            { error = Error(result.ErrorMessage, result.StatusCode); return; }
+            if (!SameSelection(result.Data))
+            { error = "Máy chủ xác nhận phạm vi khác với lựa chọn hiện tại."; return; }
+            preview = result.Data;
+            if (!preview.CanDownload)
+                error = $"Sự kiện xuất vượt giới hạn {preview.MaxExportEvents:N0}. Thu hẹp kỳ hoặc chọn chuyên đề khác.";
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { if (!disposed) checking = false; }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (!CanDownload || preview is not { } verified) return;
+        downloading = true; error = notice = null;
+        try
+        {
+            // A fresh preview is mandatory; no silent retry of a billable/audited download.
+            var response = await Api.PreviewAsync(From, To, report, format, lifecycle.Token);
+            if (disposed) return;
+            if (!response.IsSuccess || response.Data is not { } fresh ||
+                !fresh.CanDownload || !SameSelection(fresh) ||
+                fresh.ExportEventCount != verified.ExportEventCount)
+            { error = "Phạm vi hoặc nhật ký vừa thay đổi. Hãy xem trước lại."; preview = null; return; }
+            var fileResult = await Api.DownloadAsync(From, To, report, format, lifecycle.Token);
+            if (disposed) return;
+            if (!fileResult.IsSuccess || fileResult.Data is null)
+            { error = Error(fileResult.ErrorMessage, fileResult.StatusCode); return; }
+            await using var file = fileResult.Data;
+            if (format == "xlsx") await Downloads.SaveAdminReportExcelAsync(file, lifecycle.Token);
+            else await Downloads.SaveAdminReportCsvAsync(file, lifecycle.Token);
+            if (!disposed) notice = $"Đã chuyển file {format.ToUpperInvariant()} tới trình duyệt. Kiểm tra thư mục Tải xuống.";
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is JSException or IOException or InvalidOperationException or OperationCanceledException)
+        { if (!disposed) error = "Không xác nhận được thao tác tải file. Kiểm tra Downloads trước khi thử lại."; }
+        finally { if (!disposed) downloading = false; }
+    }
+
+    private static string Error(string? detail, int? status) => status switch
+    {
+        400 => "Tham số không hợp lệ. Hãy chọn lại kỳ và chuyên đề.",
+        401 => "Phiên đăng nhập hết hạn. Hãy đăng nhập lại.",
+        403 => "Chỉ System Admin có quyền xuất báo cáo này.",
+        409 => "Dữ liệu thay đổi trong lúc xuất. Hãy xem trước lại.",
+        413 => "Vượt giới hạn nhật ký xuất. Hãy rút ngắn kỳ báo cáo.",
+        503 => "Nguồn dữ liệu đang không khả dụng; không xuất số liệu ước lượng.",
+        _ => detail ?? "Không thể gọi API báo cáo."
+    };
+    private static string Friendly(string value) => value switch
+    {
+        "all" => "Toàn bộ vận hành", "accounts" => "Tài khoản", "workspaces" => "Workspace",
+        "ai" => "AI & Quota", "operations" => "Vận hành", "security" => "Bảo mật",
+        "exports" => "Nhật ký xuất", _ => value
+    };
+    private static string SectionName(string value) => value switch
+    {
+        "overview" => "Tổng quan", "accounts" => "Tài khoản", "workspaces" => "Workspace",
+        "ai" => "AI/Quota", "operations" => "Readiness", "security" => "Bảo mật",
+        "exports" => "Nhật ký xuất", "sources" => "Nguồn & giới hạn", _ => value
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            jsModule = await Js.InvokeAsync<IJSObjectReference>("import", lifecycle.Token, "./js/admin-report-v2.js");
+            await jsModule.InvokeVoidAsync("attach", lifecycle.Token, "admin-report-v2");
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or OperationCanceledException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        lifecycle.Cancel();
+        if (jsModule is not null)
+        {
+            try { await jsModule.InvokeVoidAsync("detach", "admin-report-v2"); await jsModule.DisposeAsync(); }
+            catch (Exception ex) when (ex is JSException or JSDisconnectedException or OperationCanceledException) { }
+        }
+        lifecycle.Dispose();
+    }
+}
