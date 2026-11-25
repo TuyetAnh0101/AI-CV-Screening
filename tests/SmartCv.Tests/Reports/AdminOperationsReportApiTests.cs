@@ -12,6 +12,21 @@ namespace SmartCv.Tests.Reports;
 
 public sealed class AdminOperationsReportApiTests
 {
+    // System Admin is not a member of a recruitment workspace.
+    // Its JWT must not contain the synthetic workspace 1 claim.
+    private static HttpClient AdminClient(
+        Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory,
+        User admin)
+    {
+        var client = factory.CreateClient();
+
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer",
+                A28TestSupport.Token(admin, workspaceId: null));
+
+        return client;
+    }
     private static IQueryCollection Query(string text)
     {
         var http = new DefaultHttpContext();
@@ -82,7 +97,7 @@ public sealed class AdminOperationsReportApiTests
         using var factory = A28TestSupport.Factory(new() { ["Scoring:WorkerEnabled"] = "false" });
         var admin = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "Admin", memberOfWorkspace: null);
         var hr = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
-        using var asAdmin = A29AuthorizationTests.Client(factory, admin);
+        using var asAdmin = AdminClient(factory, admin);
         using var asHr = A29AuthorizationTests.Client(factory, hr);
         using var anonymous = factory.CreateClient();
         foreach (var path in new[]
@@ -113,7 +128,7 @@ public sealed class AdminOperationsReportApiTests
         using var factory = A28TestSupport.Factory(new() { ["Scoring:WorkerEnabled"] = "false" }, fault);
         var admin = await A28TestSupport.Seed(factory, A28TestSupport.Password(),
             "Admin", memberOfWorkspace: null);
-        using var client = A29AuthorizationTests.Client(factory, admin);
+        using var client = AdminClient(factory, admin);
         fault.FailSave = true;
         using var response = await client.GetAsync("/api/admin/reports/download?format=csv");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
@@ -129,7 +144,7 @@ public sealed class AdminOperationsReportApiTests
     {
         using var factory = A28TestSupport.Factory(new() { ["Scoring:WorkerEnabled"] = "false" });
         var admin = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "Admin", memberOfWorkspace: null);
-        using var client = A29AuthorizationTests.Client(factory, admin);
+        using var client = AdminClient(factory, admin);
         using var file = await client.GetAsync("/api/admin/reports/download?format=csv");
         Assert.Equal(HttpStatusCode.OK, file.StatusCode);
         Assert.Equal("text/csv", file.Content.Headers.ContentType?.MediaType);
