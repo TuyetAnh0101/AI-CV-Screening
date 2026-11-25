@@ -13,6 +13,7 @@ public static class SmartCvApi
         app.MapAuthEndpoints();
         app.MapAdminOperationsEndpoints();
         app.MapAdminOperationsReportEndpoints();
+        app.MapAdminOperationsReportV2Endpoints();
         app.MapControllers().RequireAuthorization(AuthPolicies.SystemAdmin);
         var api = app.MapGroup("").RequireAuthorization(AuthPolicies.BusinessOperator);
         api.AddEndpointFilter<SmartCv.Api.Auditing.AuditEndpointFilter>();
