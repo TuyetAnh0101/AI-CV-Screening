@@ -11,12 +11,18 @@ export function open(dialog, callback, focusId) {
     first?.focus();
 }
 
+// Blazor Server can deliver this call before the render batch that re-enables the opener (e.g. "Xuất kết quả" is
+// disabled while its dialog is open). Wait up to ~20 frames for the opener to become focusable before the fallback,
+// so keyboard users are not dropped on the heading by a timing race.
 export function close(dialog, returnFocusId, fallbackId) {
     if (dialog?.open) dialog.close();
-    requestAnimationFrame(() => {
+    let frames = 0;
+    const restore = () => {
         const opener = returnFocusId && document.getElementById(returnFocusId);
         if (opener && !opener.disabled) { opener.focus(); return; }
+        if (opener && ++frames < 20) { requestAnimationFrame(restore); return; }
         const fallback = fallbackId && document.getElementById(fallbackId);
         fallback?.focus();
-    });
+    };
+    requestAnimationFrame(restore);
 }

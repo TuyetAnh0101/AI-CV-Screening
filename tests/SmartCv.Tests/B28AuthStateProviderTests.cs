@@ -88,7 +88,8 @@ public class B28AuthStateProviderTests
         var (provider, _) = Watch(B27.Session(Saved("HR", token: "SECRET-JWT-VALUE"), api));
         var state = await provider.GetAuthenticationStateAsync();
         Assert.DoesNotContain(state.User.Claims, c => c.Value.Contains("SECRET-JWT-VALUE"));
-        Assert.Equal(["sub", "name", "email", AccessRules.SessionClaim, "role", "smartcv_mcp"], state.User.Claims.Select(c => c.Type));
+        // A verified internal HR session also carries its workspace kind/role (A52), never the token.
+        Assert.Equal(["sub", "name", "email", AccessRules.SessionClaim, AccessRules.WorkspaceKindClaim, AccessRules.WorkspaceRoleClaim, "role", "smartcv_mcp"], state.User.Claims.Select(c => c.Type));
     }
 
     [Fact]

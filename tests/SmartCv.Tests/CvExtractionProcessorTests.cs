@@ -9,6 +9,7 @@ using SmartCv.Core.Extraction;
 using SmartCv.Core.Storage;
 using SmartCv.Infrastructure.Data;
 using SmartCv.Infrastructure.Extraction;
+using SmartCv.Infrastructure.Workspaces;
 
 namespace SmartCv.Tests;
 
@@ -147,6 +148,8 @@ public class CvExtractionProcessorTests
 
         // Giống lần trước tắt API khi còn CV chờ: 2 CV Pending + 1 CV đã xong
         var ids = new List<Guid>();
+        // A52: business rows are written inside their workspace; the worker itself starts outside any scope (like the host).
+        using (WorkspaceScope.Begin(1))
         using (var scope = sp.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
@@ -172,6 +175,7 @@ public class CvExtractionProcessorTests
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (DateTime.UtcNow < deadline)
             {
+                using var system = WorkspaceScope.BeginSystem("test: observe extraction across workspaces");
                 using var scope = sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<SmartCvDbContext>();
                 if (!await db.Cvs.AnyAsync(c => c.ExtractionStatus == ExtractionStatuses.Pending)) break;
@@ -183,9 +187,11 @@ public class CvExtractionProcessorTests
             await worker.StopAsync(CancellationToken.None);
         }
 
+        using (WorkspaceScope.BeginSystem("test: verify extraction results"))
         using (var scope = sp.CreateScope())
         {
             var rows = await scope.ServiceProvider.GetRequiredService<SmartCvDbContext>().Cvs.AsNoTracking().ToListAsync();
+            Assert.Equal(3, rows.Count);
             Assert.All(rows, r => Assert.Equal(ExtractionStatuses.Completed, r.ExtractionStatus));
             Assert.Equal("cũ", rows.Single(r => r.CvId == ids[2]).ExtractedText);   // CV đã xong không bị đọc lại
             Assert.Equal(2, ((FakeExtractor)sp.GetRequiredService<ICvTextExtractor>()).Calls);
@@ -201,6 +207,7 @@ public class CvExtractionProcessorTests
         var storage = TestSupport.Storage(TestSupport.TempRoot());
         var extractor = new FakeExtractor(TextExtractionResult.Success("recovered", ExtractionMethods.PdfText, 1));
         var id = Guid.NewGuid();
+        using (WorkspaceScope.Begin(1))
         await using (var seed = new SmartCvDbContext(options))
         {
             seed.Cvs.Add(new Cv
@@ -233,10 +240,12 @@ public class CvExtractionProcessorTests
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
             while (!deadline.IsCancellationRequested)
             {
+                using var system = WorkspaceScope.BeginSystem("test: observe extraction across workspaces");
                 await using var check = new SmartCvDbContext(options);
                 if (!await check.Cvs.AnyAsync(c => c.ExtractionStatus == ExtractionStatuses.Pending)) break;
                 try { await Task.Delay(20, deadline.Token); } catch (OperationCanceledException) { break; }
             }
+            using var verify = WorkspaceScope.BeginSystem("test: verify extraction results");
             await using var result = new SmartCvDbContext(options);
             Assert.Equal(ExtractionStatuses.Completed, (await result.Cvs.SingleAsync()).ExtractionStatus);
             Assert.Equal(1, extractor.Calls);

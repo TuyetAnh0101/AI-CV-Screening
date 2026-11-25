@@ -59,9 +59,10 @@ public class B28EndToEndTests
         {
             var u = (await State(first)).User;
             Assert.Equal(level, AccessRules.Level(u));
-            Assert.True(await CanOpen(first.ServiceProvider, typeof(JobsPage), u));
-            Assert.True(await CanOpen(first.ServiceProvider, typeof(JobEdit), u));
-            Assert.True(AccessRules.Can(u, AppPermission.ManageJobs));
+            // #114: business pages/actions belong to the HR business operator only; the System Admin gets admin pages instead.
+            Assert.Equal(!admin, await CanOpen(first.ServiceProvider, typeof(JobsPage), u));
+            Assert.Equal(!admin, await CanOpen(first.ServiceProvider, typeof(JobEdit), u));
+            Assert.Equal(!admin, AccessRules.Can(u, AppPermission.ManageJobs));
             Assert.Equal(admin, AccessRules.Can(u, AppPermission.ManageUsers));
             Assert.Equal(admin, AccessRules.Can(u, AppPermission.ViewAudit));
         }
@@ -93,8 +94,26 @@ public class B28EndToEndTests
         Assert.Equal(AccessLevel.Hr, AccessRules.Level((await State(scope)).User));
     }
 
+    [Fact]
+    public async Task Real_Web_clients_of_a_System_Admin_are_refused_business_writes_and_stay_signed_in()
+    {
+        using var api = B43AuditTests.Factory();
+        var password = A28TestSupport.Password();
+        var user = await A28TestSupport.Seed(api, password, "Admin");
+        await using var web = B27.WebServices(api.Server.CreateHandler());
+        var (scope, session) = await Login(web, user, password);
+        await using var lifetime = scope;
+        var title = "Synthetic Web permissions " + Guid.NewGuid().ToString("N");
+        var job = await scope.ServiceProvider.GetRequiredService<JobApiClient>().CreateAsync(new JobUpsertRequest { Title = title });
+        Assert.Equal(403, job.StatusCode);
+        Assert.Equal("access_denied", job.ErrorCode);
+        var set = await scope.ServiceProvider.GetRequiredService<PromptApiClient>().CreateEvaluationSetAsync(new CreateEvaluationSetRequest { Name = title });
+        Assert.Equal(403, set.StatusCode);
+        Assert.True(session.IsSignedIn);
+        await A28TestSupport.WithDb(api, async db => Assert.False(await db.Jobs.IgnoreQueryFilters().AnyAsync(j => j.Title == title)));
+    }
+
     [Theory]
-    [InlineData("Admin")]
     [InlineData("HR")]
     public async Task Real_Web_clients_can_write_the_business_resources_shown_by_the_UI(string role)
     {

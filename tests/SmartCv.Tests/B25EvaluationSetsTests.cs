@@ -233,7 +233,8 @@ public class B25EvaluationSetsTests
             .AddSingleton<IJSRuntime>(new Js())
             .AddSingleton(anonymity)
             .AddSingleton(new PromptApiClient(http, NullLogger<PromptApiClient>.Instance))
-            .AddSingleton(new AiPreviewApiClient(http, NullLogger<AiPreviewApiClient>.Instance));
+            .AddSingleton(new AiPreviewApiClient(http, NullLogger<AiPreviewApiClient>.Instance))
+            .AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance)); // B56 QuotaNotice in the prompt test panel
         services.AddSupplyValueFromQueryProvider();
         return services.AddFixtureFileDownloads(http).BuildServiceProvider();
     }

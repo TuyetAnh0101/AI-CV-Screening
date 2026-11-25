@@ -18,7 +18,8 @@ internal sealed class RegressionAuthenticationHandlerProvider(IAuthenticationSch
     public async Task<IAuthenticationHandler?> GetHandlerAsync(HttpContext http, string name)
     {
         if (name == "Bearer" && !http.Request.Headers.ContainsKey("Authorization"))
-            http.Request.Headers.Authorization = "Bearer " + await http.RequestServices.GetRequiredService<RegressionIdentity>().Token(http.RequestServices);
+            http.Request.Headers.Authorization = "Bearer " + await http.RequestServices.GetRequiredService<RegressionIdentity>()
+                .Token(http.RequestServices, RegressionIdentity.RoleFor(http));
         return await inner.GetHandlerAsync(http, name);
     }
 }
@@ -26,13 +27,23 @@ internal sealed class RegressionAuthenticationHandlerProvider(IAuthenticationSch
 internal sealed class RegressionIdentity
 {
     private readonly SemaphoreSlim gate = new(1);
-    private string? token;
-    public async Task<string> Token(IServiceProvider services)
+    private readonly Dictionary<string, string> tokens = [];
+
+    /// <summary>
+    /// Since #114 business routes require an HR member (System Admin is NOT a business operator) and system routes
+    /// require Admin. The regression actor therefore matches the route's own policy: an internal HR member for
+    /// business routes, an internal Admin for SystemAdmin routes. Authorization itself is never bypassed.
+    /// </summary>
+    internal static string RoleFor(HttpContext http) =>
+        http.GetEndpoint()?.Metadata.GetOrderedMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()
+            .Any(a => a.Policy is AuthPolicies.SystemAdmin or AuthPolicies.Admin) == true ? "Admin" : "HR";
+
+    public async Task<string> Token(IServiceProvider services, string role = "HR")
     {
         await gate.WaitAsync();
         try
         {
-            if (token is not null) return token;
+            if (tokens.TryGetValue(role, out var token)) return token;
             var db = services.GetRequiredService<SmartCvDbContext>();
             ValidateTarget(db);
             // Preserve this host's store while omitting fault interceptors used by a business test.
@@ -52,7 +63,7 @@ internal sealed class RegressionIdentity
             var user = new User
             {
                 Email = Guid.NewGuid().ToString("N") + "@example.invalid", FullName = StartupGatedApiFactory.RegressionActor,
-                Role = "Admin", IsActive = true, CreatedAt = DateTime.UtcNow,
+                Role = role, IsActive = true, CreatedAt = DateTime.UtcNow,
                 PasswordHash = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
             };
             // A52: người dùng nghiệp vụ của fixture là thành viên workspace nội bộ (WorkspaceId = 1, có sẵn qua migration/HasData);
@@ -60,7 +71,7 @@ internal sealed class RegressionIdentity
             identityDb.Users.Add(user);
             identityDb.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = 1, User = user, Role = "Member", JoinedAt = DateTime.UtcNow });
             await identityDb.SaveChangesAsync();
-            return token = new JwtTokenService(services.GetRequiredService<IOptions<JwtOptions>>(), TimeProvider.System).Create(user, 1).Token;
+            return tokens[role] = new JwtTokenService(services.GetRequiredService<IOptions<JwtOptions>>(), TimeProvider.System).Create(user, 1).Token;
         }
         finally { gate.Release(); }
     }

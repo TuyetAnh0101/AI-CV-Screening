@@ -248,7 +248,8 @@ public class A52SessionTests
         using var response = await http.GetAsync("/api/users");
         Assert.Equal(expected, response.StatusCode);
         using var business = await http.GetAsync("/api/jobs");
-        Assert.Equal(HttpStatusCode.OK, business.StatusCode);
+        // Since #114 the system role also bounds business work: System Admin is not a business operator.
+        Assert.Equal(role == "HR" ? HttpStatusCode.OK : HttpStatusCode.Forbidden, business.StatusCode);
     }
 
     [Theory]
@@ -260,12 +261,23 @@ public class A52SessionTests
         await SecondWorkspaceAsync(factory);
         var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), role);
         using var http = Bearer(factory, A28TestSupport.Token(user));
+        int foreignId = 0;
+        await A28TestSupport.WithDb(factory, async db => { using var system = WorkspaceScope.BeginSystem("test: lấy ID workspace khác"); foreignId = (await db.Jobs.SingleAsync(j => j.Title == "A52 job 2")).JobId; });
+        if (role == "Admin")
+        {
+            // Since #114 (B57 R1): Admin gets 403 for own and foreign business data alike, never the records.
+            foreach (var path in new[] { "/api/jobs?activeOnly=false", $"/api/jobs/{foreignId}" })
+            {
+                using var denied = await http.GetAsync(path);
+                Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+                Assert.DoesNotContain("A52 job", await denied.Content.ReadAsStringAsync());
+            }
+            return;
+        }
         var body = await JobsBodyAsync(http);
         Assert.Contains("A52 job 1", body);
         Assert.DoesNotContain("A52 job 2", body);
         // ID của workspace khác không dùng được (cách ly đầy đủ từng endpoint là A53).
-        int foreignId = 0;
-        await A28TestSupport.WithDb(factory, async db => { using var system = WorkspaceScope.BeginSystem("test: lấy ID workspace khác"); foreignId = (await db.Jobs.SingleAsync(j => j.Title == "A52 job 2")).JobId; });
         using var other = await http.GetAsync($"/api/jobs/{foreignId}");
         Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
     }
@@ -277,6 +289,8 @@ public class A52SessionTests
         await SecondWorkspaceAsync(factory);
         var first = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR", memberOfWorkspace: 1);
         var second = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR", memberOfWorkspace: 2, workspaceRole: "Owner");
+        // A Personal Owner is verified by Workspaces.OwnerUserId (RoleBoundaryRules), not by the membership row alone.
+        await A28TestSupport.WithDb(factory, async db => { (await db.Workspaces.SingleAsync(w => w.WorkspaceId == 2)).OwnerUserId = second.UserId; await db.SaveChangesAsync(); });
         using var a = Bearer(factory, A28TestSupport.Token(first, workspaceId: 1));
         using var b = Bearer(factory, A28TestSupport.Token(second, workspaceId: 2));
         var results = await Task.WhenAll(Enumerable.Range(0, 60).Select(i => Task.Run(async () =>

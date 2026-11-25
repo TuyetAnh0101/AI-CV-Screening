@@ -33,6 +33,9 @@ internal sealed class A51Database : IAsyncDisposable
 {
     internal const string Before = "20261120114152_AddRankingExportLogs";
     internal const string After = "20261121040902_AddWorkspaces";
+    /// <summary>B57: isolation tests that seed with the CURRENT model need the latest schema (no connection is opened here).</summary>
+    internal static string Latest => new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>()
+        .UseSqlServer("Server=unused;Database=SmartCv_A51_Test_unused").Options).Database.GetMigrations().Last();
     private readonly string connection;
     internal string Catalog { get; }
 
@@ -218,15 +221,23 @@ public class A51SqlTests
             Assert.Equal(1, await db.IntAsync($"SELECT COUNT(*) FROM sys.triggers WHERE name = N'{trigger}' AND is_disabled = 0"));
 
         Assert.False(await HasPendingAsync(db));
+        // Later migrations (A53, A54, email outbox, …) must apply cleanly on top; only then is the schema "ready".
+        await db.MigrateAsync(A51Database.Latest);
         await using var context = db.Context();
         var readiness = await DatabaseSchemaDiagnostics.InspectAsync(context);
         Assert.True(readiness.IsReady, string.Join("; ", readiness.PendingMigrations.Concat(readiness.MissingObjects)));
     }
 
+    /// <summary>
+    /// true if any migration up to and including the A51 target is still unapplied. Migrations added after A51 are not
+    /// "pending" for these point-in-time A51 checks; the tests migrate on to <see cref="A51Database.Latest"/> separately.
+    /// </summary>
     private static async Task<bool> HasPendingAsync(A51Database db)
     {
         await using var context = db.Context();
-        return (await context.Database.GetPendingMigrationsAsync()).Any();
+        var all = context.Database.GetMigrations().ToList();
+        var applied = (await context.Database.GetAppliedMigrationsAsync()).ToHashSet(StringComparer.Ordinal);
+        return all.Take(all.IndexOf(A51Database.After) + 1).Any(m => !applied.Contains(m));
     }
 
     // (2) Database có dữ liệu: không mất dòng nào, mọi dòng vào workspace 1, tài khoản không đổi
@@ -268,6 +279,9 @@ public class A51SqlTests
         Assert.NotEqual(0, await db.ErrorNumberAsync("UPDATE AuditEvents SET SafeSummary = N'x'"));
         Assert.NotEqual(0, await db.ErrorNumberAsync("DELETE FROM ApplicationEvents"));
 
+        // Later migrations apply cleanly on the migrated legacy data, then the schema is ready.
+        await db.MigrateAsync(A51Database.Latest);
+        Assert.Equal(before, await db.LegacyCountsAsync());
         await using (var context = db.Context()) Assert.True((await DatabaseSchemaDiagnostics.InspectAsync(context)).IsReady);
     }
 

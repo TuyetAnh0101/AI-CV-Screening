@@ -65,9 +65,9 @@ public class A31ExportTests
         return id;
     }
 
+    // Admin is refused ranking export since #114 (B57RoleBoundaryTests.R1); the success contract is HR's.
     [Theory]
     [InlineData("HR")]
-    [InlineData("Admin")]
     public async Task Real_excel_default_scope_matches_ranking_and_records_one_atomic_verified_event(string role)
     {
         using var factory = Factory(); var actor = await A28TestSupport.Seed(factory, A28TestSupport.Password(), role);
@@ -162,12 +162,15 @@ public class A31ExportTests
     [Fact]
     public async Task Separate_concurrent_exports_are_recorded_once_each_and_Admin_logs_are_bounded_and_filtered()
     {
+        // Since #114: HR exports (business), Admin reads the export journal (system); neither does the other's job.
         using var factory = Factory(); var admin = await A28TestSupport.Seed(factory, A28TestSupport.Password());
-        var id = await Seed(factory); using var http = A29AuthorizationTests.Client(factory, admin);
-        var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => http.GetAsync($"/api/runs/{id}/ranking/export?search=HS&stage=all")));
+        var hr = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
+        var id = await Seed(factory); using var http = A29AuthorizationTests.Client(factory, admin); using var exporter = A29AuthorizationTests.Client(factory, hr);
+        var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => exporter.GetAsync($"/api/runs/{id}/ranking/export?search=HS&stage=all")));
         foreach (var response in results) { Assert.Equal(HttpStatusCode.OK, response.StatusCode); response.Dispose(); }
-        var page = (await http.GetFromJsonAsync<ExportLogPageDto>($"/api/exports?runId={id}&actorUserId={admin.UserId}&anonymous=true&pageSize=1"))!;
-        Assert.Equal((2, 2, 1), (page.TotalCount, page.TotalPages, page.Items.Count)); Assert.Equal(admin.FullName, page.Items[0].ExportedBy);
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.GetAsync($"/api/runs/{id}/ranking/export")).StatusCode);
+        var page = (await http.GetFromJsonAsync<ExportLogPageDto>($"/api/exports?runId={id}&actorUserId={hr.UserId}&anonymous=true&pageSize=1"))!;
+        Assert.Equal((2, 2, 1), (page.TotalCount, page.TotalPages, page.Items.Count)); Assert.Equal(hr.FullName, page.Items[0].ExportedBy);
         var next = (await http.GetFromJsonAsync<ExportLogPageDto>($"/api/exports?runId={id}&pageSize=1&page=2"))!;
         Assert.NotEqual(page.Items[0].ExportId, next.Items[0].ExportId); Assert.True(page.Items[0].SearchApplied);
         Assert.Empty((await http.GetFromJsonAsync<ExportLogPageDto>("/api/exports?runId=99999"))!.Items);
@@ -215,7 +218,8 @@ public class A31ExportTests
     public async Task Disabled_business_feature_hides_all_export_routes()
     {
         using var factory = A28TestSupport.Factory(new() { ["CvUpload:Endpoint:Enabled"] = "false" });
-        var user = await A28TestSupport.Seed(factory, A28TestSupport.Password()); using var http = A29AuthorizationTests.Client(factory, user);
+        // An HR business session: unmapped routes reach the (business) fallback policy and then 404.
+        var user = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR"); using var http = A29AuthorizationTests.Client(factory, user);
         foreach (var path in new[] { "/api/exports", "/api/exports/settings", "/api/runs/1/ranking/export", "/api/runs/1/ranking/export/preview" })
             Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync(path)).StatusCode);
     }

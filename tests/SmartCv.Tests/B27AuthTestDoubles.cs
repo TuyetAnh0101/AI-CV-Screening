@@ -88,7 +88,12 @@ internal sealed class B27CaptureHandler : HttpMessageHandler
 internal static class B27
 {
     public static MeDto User(string role = "Admin", bool mustChange = false, string name = "Nguyễn Thị Lan", int id = 7) =>
-        new() { UserId = id, Email = $"user{id}@example.invalid", FullName = name, Role = role, MustChangePassword = mustChange, LastLoginAt = DateTime.UtcNow };
+        new()
+        {
+            UserId = id, Email = $"user{id}@example.invalid", FullName = name, Role = role, MustChangePassword = mustChange, LastLoginAt = DateTime.UtcNow,
+            // Like the real /api/auth/me since A52/#114: an internal HR session carries its validated workspace (business operator).
+            Workspace = role == "HR" ? new MeWorkspaceDto { Id = 1, Name = "SmartCv nội bộ", Kind = "Internal", Role = "Member" } : null
+        };
 
     public static LoginResponse Login(string token, string role = "Admin", bool mustChange = false, TimeSpan? lifetime = null) =>
         new() { Token = token, ExpiresAt = DateTime.UtcNow + (lifetime ?? TimeSpan.FromHours(8)), User = User(role, mustChange) };

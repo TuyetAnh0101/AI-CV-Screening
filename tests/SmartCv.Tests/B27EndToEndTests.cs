@@ -68,11 +68,16 @@ public class B27EndToEndTests
             Map("candidates (Candidate List)", await sp.GetRequiredService<CandidateApiClient>().ListPeopleAsync(new())),
             Map("auth/me", await sp.GetRequiredService<IAuthApi>().GetMeAsync(savedToken)),
         };
-        Assert.All(results, r =>
+        Assert.All(results, r => Assert.NotEqual(ApiFailureKind.SignedOut, r.Kind)); // never a forced sign-out
+        if (role == "Admin")
         {
-            Assert.NotEqual(ApiFailureKind.SignedOut, r.Kind);
-            Assert.False(r.Status is 401 or 403, $"{r.Name} → {r.Status}");
-        });
+            // Since #114 (B57 R1) the System Admin keeps a valid session but every business API is 403, not 401.
+            Assert.All(results.Where(r => r.Name != "auth/me"), r => Assert.True(r.Status == 403, $"{r.Name} → {r.Status}"));
+            Assert.Null(results.Single(r => r.Name == "auth/me").Status);
+            Assert.True(sp.GetRequiredService<AuthSession>().IsSignedIn);
+            return;
+        }
+        Assert.All(results, r => Assert.False(r.Status is 401 or 403, $"{r.Name} → {r.Status}"));
         // Danh sách (không phụ thuộc dữ liệu) phải thành công hẳn.
         Assert.All(results.Where(r => r.Name.StartsWith("jobs") || r.Name.StartsWith("cvs") || r.Name.StartsWith("candidates") || r.Name.Contains("page=") || r.Name == "auth/me"),
             r => Assert.True(r.Status is null && r.Kind == ApiFailureKind.None, $"{r.Name} → {r.Status} {r.Kind}"));
@@ -117,7 +122,7 @@ public class B27EndToEndTests
     {
         using var api = A28TestSupport.Factory();
         var password = A28TestSupport.Password();
-        var user = await A28TestSupport.Seed(api, password, "Admin");
+        var user = await A28TestSupport.Seed(api, password, "HR"); // /jobs is a business (HR) API since #114
         var tab = new B27MemoryStore();
         await using var web = Web(api, tab);
         var (first, _) = await LoginAsync(web, user.Email, password);

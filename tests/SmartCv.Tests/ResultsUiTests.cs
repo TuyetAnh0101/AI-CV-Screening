@@ -314,7 +314,8 @@ public class ResultsUiTests
             get
             {
                 var text = Text;
-                var start = text.IndexOf("Bảng xếp hạng ứng viên Mặc định", StringComparison.Ordinal);
+                // Ranking header since #112: "Bảng xếp hạng ứng viên" + "AI dự đoán mức phù hợp; HR quyết định …".
+                var start = text.IndexOf("Bảng xếp hạng ứng viên AI dự đoán mức phù hợp", StringComparison.Ordinal);
                 return start < 0 ? string.Empty : text[start..];
             }
         }

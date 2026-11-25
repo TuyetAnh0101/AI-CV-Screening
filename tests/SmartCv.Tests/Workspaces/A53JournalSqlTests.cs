@@ -8,6 +8,12 @@ namespace SmartCv.Tests;
 public class A53JournalSqlTests
 {
     internal const string Current = "20261121061232_ScopeCandidateDataRequests";
+    /// <summary>Migrations appended after A53, in order (A54 ledger, email outbox, Gemini logs, ranking PDF export).</summary>
+    internal static readonly string[] Later =
+    [
+        "20261122082301_A54AiUsageLedgerAndPromptSnapshot", "20261122092023_AddEmailOutbox",
+        "20261123210000_AddGeminiInvocationLogs", "20261124223000_AllowRankingPdfExport"
+    ];
 
     [A51SqlFact]
     public async Task Migration_preserves_live_and_deleted_candidate_journal_ownership_without_rewriting_accounts()

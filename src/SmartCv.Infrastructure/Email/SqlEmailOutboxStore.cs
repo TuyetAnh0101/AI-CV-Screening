@@ -12,7 +12,11 @@ public sealed class SqlEmailOutboxStore(SmartCvDbContext db) : IEmailOutboxStore
     {
         if (!db.Database.IsSqlServer()) throw new NotSupportedException("EmailWorker yêu cầu SQL Server cho atomic claim.");
         if (batchSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(batchSize));
+        // B57: READPAST is only valid under READ COMMITTED / REPEATABLE READ. A pooled connection can keep the
+        // SERIALIZABLE level of an earlier request (registration, password reset, quota): sp_reset_connection does not
+        // restore it. Without this line the worker failed to claim mail right after a sign-up on the same pool.
         const string sql = """
+            SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
             ;WITH due AS (
                 SELECT TOP (@batch) EmailOutboxId
                 FROM dbo.EmailOutbox WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)

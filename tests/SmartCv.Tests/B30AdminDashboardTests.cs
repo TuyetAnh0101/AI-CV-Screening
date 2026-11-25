@@ -101,7 +101,7 @@ public class B30AdminDashboardTests
     [Fact]
     public async Task Health_rejects_bad_or_inconsistent_reports_instead_of_claiming_ready()
     {
-        foreach (var body in new object[] { new { status = "ok" }, new HealthReportDto("ok", DateTime.UtcNow, [new("database", true, "ok"), new("uploads", true, "ok"), new("ocr", false, "missing")]) })
+        foreach (var body in new object[] { new { status = "ok" }, new HealthReportDto("ok", DateTime.UtcNow, [new("database", true, "ok"), new("uploads", true, "ok"), new("ocr", false, "missing"), new("email", true, "ok")]) }) // all 4 checks: rejected only for "ok" vs failed OCR
         {
             var handler = new B27CaptureHandler { Respond = _ => Task.FromResult(B27CaptureHandler.Json(HttpStatusCode.OK, body)) };
             using var services = B27.WebServices(handler); using var scope = services.CreateScope();
@@ -131,7 +131,7 @@ public class B30AdminDashboardTests
 internal sealed class B30Api
 {
     internal readonly B27CaptureHandler Handler;
-    internal volatile bool MissingAccountTotal, SummaryUnavailable, EmptyJournals;
+    internal volatile bool MissingAccountTotal, SummaryUnavailable, EmptyJournals, OverviewUnavailable;
     internal TaskCompletionSource? HoldSummary;
     internal B30Api() => Handler = new() { Respond = Respond };
     private async Task<HttpResponseMessage> Respond(HttpRequestMessage request)
@@ -151,13 +151,20 @@ internal sealed class B30Api
             return B27CaptureHandler.Json(HttpStatusCode.OK, B27.User(token == "HR" ? "HR" : token == "Candidate" ? "Candidate" : "Admin", token == "mcp"));
         }
         if (path == "/api/health") return B27CaptureHandler.Json(HttpStatusCode.ServiceUnavailable,
-            new HealthReportDto("error", DateTime.UtcNow, [new("database", true, "Kết nối và schema hợp lệ."), new("uploads", true, "Kho lưu trữ sẵn sàng."), new("ocr", false, "Thiếu dữ liệu ngôn ngữ OCR.")]));
+            new HealthReportDto("error", DateTime.UtcNow, [new("database", true, "Kết nối và schema hợp lệ."), new("uploads", true, "Kho lưu trữ sẵn sàng."), new("ocr", false, "Thiếu dữ liệu ngôn ngữ OCR."), new("email", true, "Email ở chế độ File.")])); // HealthApiClient requires all 4 checks
         if (path == "/api/dashboard/summary")
         {
             if (HoldSummary is { } gate) await gate.Task;
             if (SummaryUnavailable) return B27CaptureHandler.Problem(HttpStatusCode.ServiceUnavailable, "summary_unavailable");
             body = new DashboardSummaryDto { TotalCvs = 120, TotalApplications = 180, ActiveJobs = 7, RunningRuns = 3, FailedCvs = 4, FlaggedUnresolved = 9, FlaggedJobId = 3, RejectedCount = 18, Funnel = [new() { Stage = "Shortlisted", Current = 25 }, new() { Stage = "Interview", Current = 12 }] };
         }
+        else if (path == "/api/admin/ops/overview")
+        {
+            // #116/#120 admin operations dashboard: aggregate counts only.
+            if (OverviewUnavailable) return B27CaptureHandler.Problem(HttpStatusCode.ServiceUnavailable, "admin_ops_unavailable");
+            body = new AdminSystemOverviewDto(DateTime.UtcNow, 35, 33, 6, 4, 9, 7, 120, 180, 41, 3, 2, 17, 5);
+        }
+        else if (path == "/api/admin/ops/ai-history") return B27CaptureHandler.Problem(HttpStatusCode.ServiceUnavailable, "ai_history_unavailable");
         else if (path == "/api/dashboard/trend") body = new DashboardTrendDto { From = new(2026, 11, 14), To = new(2026, 11, 20) };
         else if (path == "/api/users")
         {

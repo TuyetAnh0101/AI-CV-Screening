@@ -31,9 +31,9 @@ public class A51SchemaTests
         using var db = new SmartCvDbContext(new DbContextOptionsBuilder<SmartCvDbContext>()
             .UseSqlServer("Server=(local);Database=SmartCv_A51_ModelOnly;Integrated Security=True").Options);
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(A53JournalSqlTests.Current, db.Database.GetMigrations().Last());
-        Assert.Equal(WorkspaceMigration, db.Database.GetMigrations().SkipLast(1).Last());
-        Assert.Equal(PreviousMigration, db.Database.GetMigrations().SkipLast(2).Last());
+        // Previous -> A51 workspaces -> A53 stay contiguous; later migrations are only appended after them.
+        var tail = db.Database.GetMigrations().TakeLast(3 + A53JournalSqlTests.Later.Length).ToArray();
+        Assert.Equal(new[] { PreviousMigration, WorkspaceMigration, A53JournalSqlTests.Current }.Concat(A53JournalSqlTests.Later), tail);
     }
 
     [Fact]

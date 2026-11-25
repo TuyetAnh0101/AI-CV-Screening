@@ -244,7 +244,7 @@ public class B20JobsTests
     }
     private static ServiceProvider Services(Server server, Nav nav)
     {
-        var services = new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav).AddSingleton(Api(server)).AddB28Auth(); // B28: Admin thấy đủ thao tác
+        var services = new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav).AddSingleton(Api(server)).AddB28Auth(B28Auth.VerifiedInternalHr()); // #114: only a business HR sees the job actions
         services.AddSingleton(new RunApiClient(new HttpClient(server) { BaseAddress = new("https://api.test/") }, NullLogger<RunApiClient>.Instance));
         services.AddSingleton(new ApplicationApiClient(new HttpClient(server) { BaseAddress = new("https://api.test/") }, NullLogger<ApplicationApiClient>.Instance));
         var anonymity = new AnonymityState(); anonymity.SetAsync(false).GetAwaiter().GetResult(); services.AddSingleton(anonymity); services.AddSingleton(new HrActorState()); services.AddSingleton<IJSRuntime>(new Js()); services.AddSupplyValueFromQueryProvider();

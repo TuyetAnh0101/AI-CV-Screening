@@ -61,7 +61,7 @@ public class WorkspaceIsolationAdditionalTests
         "GET /api/prompts/active", "GET /api/runs/estimate", "GET /api/runs/latest"];
     internal static readonly string[] Constants =
     ["GET /api/applications/ai-preview/quota", "GET /api/applications/flag-reasons", "GET /api/applications/stage-options",
-        "GET /api/exports/settings", "GET /api/retention/settings"];
+        "GET /api/exports/settings"]; // GET /api/retention/settings is System Admin only since #114 (A29AuthorizationTests.AdminRoutes)
     internal static readonly string[] Comparisons =
     ["GET /api/prompt-tests/{runId:int}", "GET /api/prompt-tests/compare", "GET /api/prompts/compare", "GET /api/runs/{id:int}/compare"];
     internal static readonly string[] BodyRoutes =

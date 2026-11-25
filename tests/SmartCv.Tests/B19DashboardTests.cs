@@ -214,7 +214,7 @@ public class B19DashboardTests
         var services=new ServiceCollection().AddLogging().AddSingleton<NavigationManager>(nav).AddSingleton(DashboardApi(server)).AddSingleton(JobsApi(server));
         services.AddSingleton(new RunApiClient(new HttpClient(server){BaseAddress=new Uri("https://api.test/")},NullLogger<RunApiClient>.Instance));
         services.AddSingleton(new ApplicationApiClient(new HttpClient(server){BaseAddress=new Uri("https://api.test/")},NullLogger<ApplicationApiClient>.Instance));
-        services.AddSingleton(new AnonymityState());services.AddSingleton(new HrActorState());services.AddSingleton<IJSRuntime>(new Js());services.AddSupplyValueFromQueryProvider();
+        services.AddSingleton(new AnonymityState());services.AddSingleton(new HrActorState());services.AddSingleton(B43UiTestSupport.Session());services.AddSingleton(new WorkspaceApiClient(new HttpClient(server){BaseAddress=new Uri("https://api.test/")},NullLogger<WorkspaceApiClient>.Instance));services.AddSingleton<IJSRuntime>(new Js());services.AddSupplyValueFromQueryProvider(); // B56: Home reads the verified session and workspace quota
         return services.BuildServiceProvider();
     }
     private static async Task<string> Html<T>(ServiceProvider services,Dictionary<string,object?>? parameters=null) where T:IComponent

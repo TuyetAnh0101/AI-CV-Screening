@@ -311,6 +311,7 @@ public class UploadValidationTests
         services.AddSingleton<Microsoft.JSInterop.IJSRuntime, NoJs>();
         var http = new HttpClient(api) { BaseAddress = new Uri("https://api.test/") };
         services.AddSingleton(new JobApiClient(http, NullLogger<JobApiClient>.Instance));
+        services.AddSingleton(new WorkspaceApiClient(http, NullLogger<WorkspaceApiClient>.Instance)); // B56 QuotaNotice
         services.AddSingleton(new CvApiClient(http, Microsoft.Extensions.Options.Options.Create(new CvUploadOptions()), NullLogger<CvApiClient>.Instance));
         // B6: trang Upload inject thêm 3 service này (test B5 không gọi tới)
         services.AddSingleton(new ApplicationApiClient(http, NullLogger<ApplicationApiClient>.Instance));

@@ -47,6 +47,6 @@ public class JobCrudMigrationTests
         Assert.False(db.Database.HasPendingModelChanges());
         // Giữ nguyên thứ tự A20/A21/A43/v2 và kiểm tra A27 được nối vào cuối.
         Assert.Equal(new[] { Previous, Current, "20261118131430_CandidateDataRequests", "20261119024613_ScappWorkflowV2", Auth.A27MigrationTests.Current }, db.Database.GetMigrations().Skip(4).Take(5));
-        Assert.Equal(A53JournalSqlTests.Current, db.Database.GetMigrations().Last());
+        Assert.Equal(new[] { A53JournalSqlTests.Current }.Concat(A53JournalSqlTests.Later), db.Database.GetMigrations().TakeLast(1 + A53JournalSqlTests.Later.Length));
     }
 }

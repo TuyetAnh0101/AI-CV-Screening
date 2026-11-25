@@ -105,8 +105,8 @@
     <div class="hrr-table-head"><div><h3>Chi tiết theo lượt ứng tuyển</h3><p>Mỗi hàng là một Application; phân trang ở server theo bộ lọc.</p></div>
         <div class="hrr-buttons">
             <button type="button" class="hrr-btn hrr-ghost" disabled="@(busy || summary is null)" @onclick="PreviewAsync">Xem phạm vi</button>
-            <button type="button" class="hrr-btn hrr-primary" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("xlsx")'>Xuất Excel</button>
-            <button type="button" class="hrr-btn hrr-pdf" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("pdf")'>Xuất PDF</button>
+            <button type="button" class="hrr-btn hrr-primary" @ref="excelButton" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("xlsx")'>Xuất Excel</button>
+            <button type="button" class="hrr-btn hrr-pdf" @ref="pdfButton" disabled="@(busy || summary is null)" @onclick='() => OpenExportAsync("pdf")'>Xuất PDF</button>
         </div>
     </div>
     @if (preview is { } pre)
@@ -144,7 +144,7 @@
     @if (pendingFormat is not null && preview is { } check)
     {
         <div class="hrr-dialog-overlay" role="presentation">
-            <section class="hrr-dialog" role="dialog" aria-modal="true" aria-labelledby="hrr-confirm-title" aria-describedby="hrr-confirm-help">
+            <section class="hrr-dialog" role="dialog" aria-modal="true" aria-labelledby="hrr-confirm-title" aria-describedby="hrr-confirm-help" tabindex="-1" @ref="dialogRef" data-hrr-dialog>
                 <span class="hrr-dialog-kicker">SCAPP · EXPORT APPROVAL</span>
                 <h3 id="hrr-confirm-title">Xác nhận xuất @(pendingFormat == "pdf" ? "PDF" : "Excel")</h3>
                 <p id="hrr-confirm-help">Kiểm tra dữ liệu sẽ xuất. Hệ thống ghi Audit sau khi tạo file thành công; không tạo file nếu vượt giới hạn.</p>
@@ -185,6 +185,10 @@
     private string pendingQuery = "";
     private string pendingScope = "";
     private IJSObjectReference? premiumModule;
+    // B57/E12: keyboard users land inside the modal and return to the button that opened it.
+    private ElementReference excelButton, pdfButton, dialogRef;
+    private bool focusDialog, restoreFocus;
+    private string lastFormat = "xlsx";
     private string Exporter => Session.User?.FullName ?? "HR (phiên hiện hành)";
     private string Indicator(string key) => sortKey != key ? "↕" : descending ? "↓" : "↑";
     private string AriaSort(string key) => sortKey != key ? "none" : descending ? "descending" : "ascending";
@@ -210,6 +214,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (focusDialog && pendingFormat is not null) { focusDialog = false; await TryFocusAsync(dialogRef); }
+        else if (restoreFocus && pendingFormat is null) { restoreFocus = false; await TryFocusAsync(lastFormat == "pdf" ? pdfButton : excelButton); }
         if (!firstRender) return;
         try
         {
@@ -315,6 +321,7 @@
             if (!check.IsSuccess || check.Data is null) { error = check.ErrorMessage ?? "Không xác minh được phạm vi xuất."; return; }
             preview = check.Data;
             pendingFormat = format;
+            lastFormat = format; focusDialog = true;
             pendingQuery = query; // frozen exactly as previewed; no hidden filter changes
             pendingScope = ScopeDescription;
         }
@@ -323,7 +330,13 @@
         finally { busy = false; await InvokeAsync(StateHasChanged); }
     }
 
-    private void CloseExport() { if (!busy) { pendingFormat = null; pendingQuery = ""; } }
+    private void CloseExport() { if (!busy) { pendingFormat = null; pendingQuery = ""; restoreFocus = true; } }
+
+    private static async Task TryFocusAsync(ElementReference target)
+    {
+        try { await target.FocusAsync(); }
+        catch (Exception e) when (e is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException) { }
+    }
 
     private async Task ConfirmExportAsync()
     {
@@ -349,6 +362,7 @@
             }
             pendingFormat = null;
             pendingQuery = "";
+            restoreFocus = true;
             notice = "Đã gửi file báo cáo đến trình duyệt. Kiểm tra thư mục Downloads và Audit Log.";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

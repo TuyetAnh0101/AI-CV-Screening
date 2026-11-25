@@ -36,13 +36,29 @@ public class B27LoginUiTests
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken ct, object?[]? args) => ValueTask.FromResult(default(TValue)!);
     }
 
+    /// <summary>B53/B54 dependency of /login; these B27 tests never use resend-verification.</summary>
+    private sealed class NoRegistrationApi : IRegistrationApi
+    {
+        public Task<ApiResult<SmartCv.Core.Contracts.RegistrationSettingsResponse>> GetRegistrationSettingsAsync(CancellationToken ct = default) =>
+            Task.FromResult(ApiResult<SmartCv.Core.Contracts.RegistrationSettingsResponse>.Failure("disabled", 404, "registration_disabled"));
+        public Task<ApiResult<SmartCv.Core.Contracts.RegistrationNotice>> RegisterAsync(SmartCv.Core.Contracts.RegisterRequest request, CancellationToken ct = default) =>
+            throw new InvalidOperationException("Not used by B27 login tests.");
+        public Task<ApiResult<SmartCv.Core.Contracts.RegistrationNotice>> ResendVerificationAsync(string email, CancellationToken ct = default) =>
+            throw new InvalidOperationException("Not used by B27 login tests.");
+        public Task<ApiResult<SmartCv.Core.Contracts.LoginResponse>> VerifyEmailAsync(string token, CancellationToken ct = default) =>
+            throw new InvalidOperationException("Not used by B27 login tests.");
+    }
+
     private static ServiceProvider Services(AuthSession session, Nav nav, B27CaptureHandler? api = null)
     {
         api ??= new B27CaptureHandler { Respond = _ => Task.FromResult(B27CaptureHandler.Json(HttpStatusCode.OK, new { status = "ok", time = DateTime.UtcNow })) };
         var services = new ServiceCollection().AddLogging()
             .AddSingleton(session).AddSingleton<IAuthApi>(new B27FakeAuthApi()).AddSingleton<NavigationManager>(nav)
             .AddSingleton(TimeProvider.System).AddSingleton<IJSRuntime>(new Js())
-            .AddSingleton(new HealthApiClient(new HttpClient(api) { BaseAddress = new Uri("https://api.test/") }, NullLogger<HealthApiClient>.Instance));
+            .AddSingleton(new HealthApiClient(new HttpClient(api) { BaseAddress = new Uri("https://api.test/") }, NullLogger<HealthApiClient>.Instance))
+            .AddSingleton(new PublicSettingsClient(new HttpClient(api) { BaseAddress = new Uri("https://api.test/") })) // B53 registration settings on /login
+            .AddScoped<RegistrationFlowState>().AddSingleton<IRegistrationApi>(new NoRegistrationApi())
+            .AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()); // A58 Google button reads config
         services.AddSupplyValueFromQueryProvider();
         services.AddSmartCvWebAuth();   // B28: trạng thái đăng nhập cascade đọc từ đúng AuthSession ở trên
         return services.BuildServiceProvider();
@@ -80,8 +96,9 @@ public class B27LoginUiTests
         Assert.Contains("aria-controls=\"login-password\" aria-pressed=\"false\" aria-label=\"Hiện mật khẩu\"", html);
         Assert.Contains("<button type=\"submit\"", html);                      // Enter gửi form
         Assert.Contains("novalidate", html);
-        Assert.Contains("Liên hệ <strong>quản trị viên (Admin)</strong>", html);
-        Assert.DoesNotContain("Quên mật khẩu?</a>", html);                     // không có link tới trang không tồn tại
+        // Registration closed (no registration settings): contact the admin; B54 added the real /forgot-password page.
+        Assert.Contains("Chưa có tài khoản? Liên hệ quản trị viên SCApp để được cấp quyền.", html);
+        Assert.Contains("href=\"/forgot-password\"", html);
         Assert.DoesNotContain("Tạo tài khoản", html);
         Assert.DoesNotContain("main-navigation", html);
     }
@@ -115,7 +132,8 @@ public class B27LoginUiTests
     public async Task Signed_in_user_opening_login_goes_back_to_a_safe_page(string uri, string expected)
     {
         var nav = new Nav(uri);
-        using var sp = Services(await SignedIn(), nav);
+        // Business HR: a System Admin never returns to business pages (RoleBasedNavigation.Destination → /admin/dashboard).
+        using var sp = Services(await SignedIn("HR"), nav);
         var html = await Html<Login>(sp);
         Assert.Equal((expected, false, true), Assert.Single(nav.Navigations));
         Assert.DoesNotContain("login-form", html);
@@ -175,7 +193,7 @@ public class B27LoginUiTests
         Assert.Contains("main-navigation", html);
         Assert.Contains(">Nguyễn Thị Lan</span>", html);
         Assert.Contains(">NL</span>", html);
-        Assert.Contains("Nhân sự (HR)", html);
+        Assert.Contains("Nhân sự nội bộ (HR)", html);   // internal HR persona (RoleBasedNavigation.DisplayRole)
         Assert.Contains("aria-label=\"Đăng xuất\"", html);
         Assert.Empty(nav.Navigations);
     }

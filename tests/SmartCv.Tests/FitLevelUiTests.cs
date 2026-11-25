@@ -352,7 +352,9 @@ public class FitLevelUiTests
             Row(4, "Lý Văn Minh", null, null, 0, 3, status: EvaluationStatuses.Failed));
 
         var text = table.Text;
-        Assert.Contains("Ngưỡng Đạt 65", text);                               // chú giải lấy ngưỡng của lượt chấm
+        // #112 moved the run threshold out of the table legend: FitDistribution ("Ngưỡng Đạt …", FitDistributionTests) and the
+        // candidate drawer show it; the table never invents a threshold of its own.
+        Assert.DoesNotContain("Ngưỡng Đạt 70", text);
         // SCApp v2: thanh điểm (kèm vạch ngưỡng) chuyển vào panel "Xem nhanh"; bảng chỉ còn điểm số. ScoreBar có test riêng ở trên.
         Assert.Empty(table.StyleOf("pass-line"));
         Assert.True(table.HasClass("fit-excellent") && table.HasClass("fit-potential") && table.HasClass("fit-good"));

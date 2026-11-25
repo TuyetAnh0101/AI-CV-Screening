@@ -15,7 +15,8 @@ public static class HrRecruitmentReportEndpoints
     public static IEndpointRouteBuilder MapHrRecruitmentReportEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/hr/reports").WithTags("HR Reports")
-            .RequireAuthorization(AuthPolicies.BusinessOperator);
+            .RequireAuthorization(AuthPolicies.BusinessOperator)
+            .AddEndpointFilter(DatabaseFailureFilterAsync);
         group.MapGet("/summary", SummaryAsync).WithName("HrRecruitmentReportSummary");
         group.MapGet("/rows", RowsAsync).WithName("HrRecruitmentReportRows");
         group.MapGet("/preview", PreviewAsync).WithName("HrRecruitmentReportPreview");
@@ -123,6 +124,23 @@ public static class HrRecruitmentReportEndpoints
         $"Run={filter.RunId?.ToString() ?? "latest"}; Stage={filter.Stage}; Eval={filter.Evaluation}; " +
         $"Ẩn danh={filter.Anonymous}; Từ={filter.Period.From?.ToString("yyyy-MM-dd") ?? "all"}; " +
         $"Đến={filter.Period.To?.ToString("yyyy-MM-dd") ?? "all"}";
+
+    /// <summary>
+    /// B57: a transient database failure is a controlled 503 (same contract as the Admin reports), never an
+    /// unhandled 500 and never partial statistics. The transaction is rolled back by disposal, so no file and no
+    /// "exported" audit event is produced. Exception text (SQL, values) is not returned or logged.
+    /// </summary>
+    private static async ValueTask<object?> DatabaseFailureFilterAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        try { return await next(context); }
+        catch (Exception error) when (AuthProblems.IsDatabaseFailure(error) && !context.HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("SCApp.HrReports")
+                .LogWarning("HR report unavailable: {Type}", error.GetType().Name);
+            return Problem(503, "Báo cáo tuyển dụng tạm thời không khả dụng",
+                "Không đọc được dữ liệu báo cáo lúc này; không hiển thị số liệu ước lượng. Vui lòng thử lại sau.");
+        }
+    }
 
     private static IResult Problem(int status, string title, string? detail) =>
         Results.Problem(statusCode: status, title: title, detail: detail,

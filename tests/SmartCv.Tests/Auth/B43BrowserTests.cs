@@ -29,8 +29,10 @@ public class B43BrowserTests
         var adminPassword = A28TestSupport.Password(); var hrPassword = A28TestSupport.Password();
         var admin = await A28TestSupport.Seed(api, adminPassword); var hr = await A28TestSupport.Seed(api, hrPassword, "HR");
         using var apiHttp = A29AuthorizationTests.Client(api, admin);
+        // CV files are business data: uploaded and opened by HR (Admin is refused since #114; B57RoleBoundaryTests.R1).
+        using var hrApi = A29AuthorizationTests.Client(api, hr);
         var files = new List<(Guid Id, string Name, string Type)>();
-        files.Add((await B43AuditTests.Upload(apiHttp, Pdf(), "CV tổng hợp.pdf"), "CV tổng hợp.pdf", "application/pdf"));
+        files.Add((await B43AuditTests.Upload(hrApi, Pdf(), "CV tổng hợp.pdf"), "CV tổng hợp.pdf", "application/pdf"));
         using (var bitmap = new SkiaSharp.SKBitmap(8, 8))
         {
             bitmap.Erase(SkiaSharp.SKColors.White); using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
@@ -38,7 +40,7 @@ public class B43BrowserTests
             {
                 using var data = image.Encode(format, 90); var extension = format == SkiaSharp.SKEncodedImageFormat.Png ? "png" : "jpg";
                 var name = "CV tổng hợp." + extension;
-                files.Add((await B43AuditTests.Upload(apiHttp, data.ToArray(), name), name, extension == "png" ? "image/png" : "image/jpeg"));
+                files.Add((await B43AuditTests.Upload(hrApi, data.ToArray(), name), name, extension == "png" ? "image/png" : "image/jpeg"));
             }
         }
         var candidate = new Candidate { FullName = "Ứng viên tổng hợp B43", Email = Guid.NewGuid().ToString("N") + "@example.invalid" };
@@ -79,7 +81,7 @@ public class B43BrowserTests
             await page.GetByText("Đang tải nhật ký hoạt động…", new() { Exact = true }).WaitForAsync();
             gate.Block.TrySetResult(); gate.Block = null;
             await page.Locator(".audit-list tbody tr").First.WaitForAsync(); checks.Add("Admin Audit loading/data");
-            Assert.True(await page.GetByRole(AriaRole.Link, new() { Name = "Nhật ký hoạt động", Exact = true }).CountAsync() > 0);
+            Assert.True(await page.GetByRole(AriaRole.Link, new() { Name = "Audit Log", Exact = true }).CountAsync() > 0);
             stage = "responsive";
             foreach (var width in new[] { 360, 375, 390, 768, 1024, 1366, 1920 })
             {
@@ -100,43 +102,43 @@ public class B43BrowserTests
             await page.GetByRole(AriaRole.Button, new() { Name = "Đóng", Exact = true }).ClickAsync();
             await page.Locator("#audit-detail-title").WaitForAsync(new() { State = WaitForSelectorState.Detached });
             checks.Add("pagination/detail");
-            stage = "empty filter"; await page.Locator("input[type=search]").FillAsync("no-synthetic-event-has-this-text"); await page.GetByRole(AriaRole.Button, new() { Name = "Áp dụng", Exact = true }).ClickAsync();
+            stage = "empty filter"; await page.Locator("form.audit-filters input[type=search]").FillAsync("no-synthetic-event-has-this-text"); await page.GetByRole(AriaRole.Button, new() { Name = "Áp dụng", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Heading, new() { Name = "Không có sự kiện phù hợp" }).WaitForAsync(); checks.Add("empty filter");
             stage = "unavailable/retry"; gate.Unavailable = true;
             await page.GetByRole(AriaRole.Button, new() { Name = "Làm mới", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Heading, new() { Name = "Chưa tải được nhật ký" }).WaitForAsync();
             gate.Unavailable = false; await page.GetByRole(AriaRole.Button, new() { Name = "Thử lại", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Heading, new() { Name = "Không có sự kiện phù hợp" }).WaitForAsync(); checks.Add("unavailable/retry");
-            stage = "candidate files"; await page.GotoAsync(root + "candidates/" + candidate.CandidateId);
-            await page.Locator("#candidate-name").WaitForAsync();
+            stage = "HR roles";
+            await using var hrContext = await browser.NewContextAsync(new() { ViewportSize = new() { Width = 1366, Height = 900 }, AcceptDownloads = true });
+            var hrPage = await hrContext.NewPageAsync(); hrPage.SetDefaultTimeout(20000); await Login(hrPage, root, hr.Email, hrPassword);
+            stage = "candidate files"; await hrPage.GotoAsync(root + "candidates/" + candidate.CandidateId);
+            await hrPage.Locator("#candidate-name").WaitForAsync();
             // New browser has no anonymity preference; toggle only if the fail-closed UI currently has it enabled.
-            var toggle = page.GetByRole(AriaRole.Switch);
+            var toggle = hrPage.GetByRole(AriaRole.Switch);
             if (await toggle.CountAsync() > 0 && await toggle.First.GetAttributeAsync("aria-checked") == "true") await toggle.First.ClickAsync();
-            await page.GetByText(candidate.FullName, new() { Exact = true }).First.WaitForAsync();
+            await hrPage.GetByText(candidate.FullName, new() { Exact = true }).First.WaitForAsync();
             foreach (var file in files)
             {
                 stage = "preview " + file.Type;
-                var card = page.Locator("article.cv-card").Filter(new() { HasText = file.Name });
+                var card = hrPage.Locator("article.cv-card").Filter(new() { HasText = file.Name });
                 await card.GetByRole(AriaRole.Button, new() { Name = "Xem file", Exact = true }).ClickAsync();
-                await page.Locator("dialog.sc-file-preview[open]").WaitForAsync();
-                if (file.Type.StartsWith("image/", StringComparison.Ordinal)) await page.WaitForFunctionAsync("document.querySelector('.sc-file-preview img')?.naturalWidth > 0");
-                else Assert.StartsWith("blob:", await page.Locator(".sc-file-preview iframe").GetAttributeAsync("src"), StringComparison.Ordinal);
-                Assert.Single(context.Pages); // no blank popup/tab
-                await page.Locator(".sc-file-preview").GetByRole(AriaRole.Button, new() { Name = "Đóng", Exact = true }).ClickAsync();
-                var downloadTask = page.WaitForDownloadAsync(); await card.GetByRole(AriaRole.Button, new() { Name = "Tải file CV về máy", Exact = true }).ClickAsync();
+                await hrPage.Locator("dialog.sc-file-preview[open]").WaitForAsync();
+                if (file.Type.StartsWith("image/", StringComparison.Ordinal)) await hrPage.WaitForFunctionAsync("document.querySelector('.sc-file-preview img')?.naturalWidth > 0");
+                else Assert.StartsWith("blob:", await hrPage.Locator(".sc-file-preview iframe").GetAttributeAsync("src"), StringComparison.Ordinal);
+                Assert.Single(hrContext.Pages); // no blank popup/tab
+                await hrPage.Locator(".sc-file-preview").GetByRole(AriaRole.Button, new() { Name = "Đóng", Exact = true }).ClickAsync();
+                var downloadTask = hrPage.WaitForDownloadAsync(); await card.GetByRole(AriaRole.Button, new() { Name = "Tải file CV về máy", Exact = true }).ClickAsync();
                 var download = await downloadTask; Assert.Equal(file.Name, download.SuggestedFilename); checks.Add("preview/download " + file.Type);
             }
-            stage = "export JSON"; var exportedTask = page.WaitForDownloadAsync(); await page.Locator("#rights-export").ClickAsync();
+            stage = "export JSON"; var exportedTask = hrPage.WaitForDownloadAsync(); await hrPage.Locator("#rights-export").ClickAsync();
             var exported = await exportedTask; Assert.EndsWith(".json", exported.SuggestedFilename);
             Assert.Contains(candidate.FullName, await File.ReadAllTextAsync((await exported.PathAsync())!)); checks.Add("JSON export");
-            Assert.Equal(0, await page.Locator("#rights-actor,input#hr-actor,input#merge-actor,input#erase-handled-by").CountAsync());
-            Assert.True(await page.EvaluateAsync<bool>("!Object.values(sessionStorage).some(v=>v.startsWith('eyJ')) && !Object.keys(localStorage).some(k=>/token|jwt|auth/i.test(k))"));
+            Assert.Equal(0, await hrPage.Locator("#rights-actor,input#hr-actor,input#merge-actor,input#erase-handled-by").CountAsync());
+            Assert.True(await hrPage.EvaluateAsync<bool>("!Object.values(sessionStorage).some(v=>v.startsWith('eyJ')) && !Object.keys(localStorage).some(k=>/token|jwt|auth/i.test(k))"));
             checks.Add("no actor inputs or plaintext JWT/storage/URL");
-            stage = "HR roles";
-            await using var hrContext = await browser.NewContextAsync(new() { ViewportSize = new() { Width = 1366, Height = 900 } });
-            var hrPage = await hrContext.NewPageAsync(); hrPage.SetDefaultTimeout(20000); await Login(hrPage, root, hr.Email, hrPassword);
             await hrPage.GotoAsync(root + "runs"); await hrPage.Locator("h1").WaitForAsync(); Assert.DoesNotContain("403", await hrPage.Locator("h1").InnerTextAsync());
-            Assert.Equal(0, await hrPage.GetByRole(AriaRole.Link, new() { Name = "Nhật ký hoạt động", Exact = true }).CountAsync());
+            Assert.Equal(0, await hrPage.GetByRole(AriaRole.Link, new() { Name = "Audit Log", Exact = true }).CountAsync());
             // B28 AccessDenied renders "Mã 403 · Không đủ quyền" + #denied-title; the audit table must never render for HR.
             await hrPage.GotoAsync(root + "admin/activity-logs"); await hrPage.Locator("#denied-title").WaitForAsync();
             Assert.Contains("403", await hrPage.Locator(".denied-code").InnerTextAsync());
