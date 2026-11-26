@@ -25,9 +25,9 @@
         {
             var linked = logins.FirstOrDefault(x => x.Provider == provider);
             <div class="b55-method-row" @key="provider">
-                <div class="b55-method-icon" aria-hidden="true">@(provider == "google" ? "G" : "⌘")</div>
+                <div class="b55-method-icon" aria-hidden="true">G</div>
                 <div class="b55-method-info">
-                    <strong>@(provider == "google" ? "Google" : "GitHub")</strong>
+                    <strong>Google</strong>
                     @if (linked is not null)
                     {
                         <small>Đã liên kết @(linked.EmailAtLink ?? "tài khoản ngoài")</small>

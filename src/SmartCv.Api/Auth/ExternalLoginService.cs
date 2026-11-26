@@ -282,7 +282,9 @@ public sealed class ExternalLoginService(
         if (user.Role == UserRoles.Admin) throw new AccountFailure(403, "admin_not_allowed", "Admin dùng mật khẩu.");
         var linked = await db.UserExternalLogins.SingleOrDefaultAsync(x => x.UserId == user.UserId && x.Provider == provider, ct);
         if (linked is null) throw new AccountFailure(404, "link_not_found", "Chưa liên kết phương thức này.");
-        var otherMethods = await db.UserExternalLogins.CountAsync(x => x.UserId == user.UserId && x.Provider != provider, ct);
+        // Historical records for unsupported providers cannot be used to sign in.
+        var otherMethods = await db.UserExternalLogins.CountAsync(x => x.UserId == user.UserId
+            && x.Provider != provider && x.Provider == ExternalProviders.Google, ct);
         if (ExternalUnlinkRules.Check(user.HasPassword, otherMethods) is { } blocked)
             throw new AccountFailure(409, blocked, "Hãy đặt mật khẩu trước khi hủy liên kết.");
         db.UserExternalLogins.Remove(linked);

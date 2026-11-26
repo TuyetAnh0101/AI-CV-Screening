@@ -35,10 +35,10 @@ public sealed class B57BrowserTests
         internal string Stage = "start";
         internal string Artifacts = TestSupport.RepoFile("artifacts/b57/browser");
 
-        internal static async Task<Run> StartAsync()
+        internal static async Task<Run> StartAsync(Dictionary<string, string?>? settings = null)
         {
             var run = new Run();
-            run.World = await B57World.CreateAsync(kestrel: true);
+            run.World = await B57World.CreateAsync(settings, kestrel: true);
             var apiRoot = run.World.Anonymous().BaseAddress!.ToString();
             run.Web = new WebApplicationFactory<web::Program>().WithWebHostBuilder(b =>
             {
@@ -102,6 +102,55 @@ public sealed class B57BrowserTests
             throw new Xunit.Sdk.XunitException("B57 browser failed at " + run.Stage + " (" + error.GetType().Name + "): " +
                 error.Message.Split('\n')[0].Replace(run.World.Password, "***"));
         }
+    }
+
+    [B43BrowserFact]
+    public async Task Google_only_account_queries_are_verified_and_responsive_in_the_browser()
+    {
+        await using var run = await Run.StartAsync(new() { ["Authentication:Google:Enabled"] = "false" });
+        await Guard(run, async () =>
+        {
+            var (context, page) = await run.NewUserAsync();
+            await using var _ = context;
+            await page.GotoAsync(run.Root + "login");
+            var login = await SettledTextAsync(page);
+            Assert.DoesNotContain("Tiếp tục với Google", login);
+            Assert.DoesNotContain("GitHub", login);
+            Assert.DoesNotContain("LinkedIn", login);
+            await LoginAsync(page, run.Root, run.World.OwnerA.Email, run.World.Password);
+            foreach (var (width, height) in Viewports)
+            {
+                await page.SetViewportSizeAsync(width, height);
+                foreach (var provider in new[] { "github", "linkedin", "google" })
+                {
+                    await page.GotoAsync(run.Root + "account?linked=" + provider);
+                    await page.Locator("#b55-methods-heading").WaitForAsync();
+                    var text = await SettledTextAsync(page);
+                    Assert.Equal(0, await page.Locator(".b55-banner-ok").CountAsync());
+                    Assert.Contains("Email và mật khẩu", text);
+                    Assert.DoesNotContain("GitHub", text);
+                    Assert.DoesNotContain("LinkedIn", text);
+                    Assert.True(await NoHorizontalOverflow(page));
+                }
+            }
+            // Only the isolated fixture supplies this link; no OAuth/Google service is contacted.
+            await run.World.WithDb(B57World.OwnerAWorkspace, async db =>
+            {
+                db.UserExternalLogins.Add(new SmartCv.Core.Entities.UserExternalLogin
+                {
+                    UserId = run.World.OwnerA.UserId, Provider = "google", ProviderKey = "synthetic-browser-google-sub",
+                    EmailAtLink = "browser@example.invalid", LinkedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync();
+            });
+            await page.GotoAsync(run.Root + "account?linked=google");
+            await page.Locator(".b55-banner-ok").WaitForAsync();
+            await page.EvaluateAsync("Blazor.navigateTo('/account?linked=github')");
+            await page.Locator(".b55-banner-ok").WaitForAsync(new() { State = WaitForSelectorState.Detached });
+            await page.Locator("#b55-methods-heading").WaitForAsync();
+            Assert.DoesNotContain("GitHub", await SettledTextAsync(page));
+            Assert.Empty(run.Errors);
+        });
     }
 
     [B43BrowserFact]

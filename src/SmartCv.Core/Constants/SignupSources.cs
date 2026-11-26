@@ -8,5 +8,6 @@ public static class SignupSources
     public const string Google = "google";
     public const string LinkedIn = "linkedin";
 
+    // Schema/historical values, not the supported authentication providers (see ExternalProviders).
     public static readonly IReadOnlyList<string> All = [Admin, Local, Google, LinkedIn];
 }

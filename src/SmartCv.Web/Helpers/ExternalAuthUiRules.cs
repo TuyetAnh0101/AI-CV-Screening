@@ -1,9 +1,11 @@
+using SmartCv.Core.Auth;
+
 namespace SmartCv.Web.Helpers;
 
 /// <summary>B55: chỉ sinh URL từ API origin tin cậy; không dùng returnUrl hoặc startUrl làm external target tùy ý.</summary>
 public static class ExternalAuthUiRules
 {
-    public static bool SupportedProvider(string? provider) => provider is "google" or "github";
+    public static bool SupportedProvider(string? provider) => ExternalProviders.IsSupported(provider);
 
     public static string SafeDestination(string? proposed)
     {

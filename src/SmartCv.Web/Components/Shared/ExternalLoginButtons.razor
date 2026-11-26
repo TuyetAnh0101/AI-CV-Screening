@@ -3,7 +3,7 @@
 @inject IConfiguration Config
 @implements IDisposable
 
-@if (googleEnabled || githubEnabled)
+@if (googleEnabled)
 {
     <div class="b55-external-signin" aria-label="Phương thức đăng nhập khác">
         <div class="b55-social-divider"><span>hoặc tiếp tục với</span></div>
@@ -19,20 +19,13 @@
                 <span>Tiếp tục với Google</span>
             </button>
         }
-        @if (githubEnabled)
-        {
-            <button type="button" class="b55-social-button b55-github-button" disabled="@busy" @onclick='() => Start("github")'>
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.4c.57.11.78-.25.78-.55v-2.15c-3.19.69-3.86-1.35-3.86-1.35-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.2 1.77 1.2 1.03 1.76 2.7 1.25 3.36.95.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.2-3.1-.12-.3-.52-1.47.12-3.07 0 0 .98-.32 3.17 1.18a11.02 11.02 0 0 1 5.76 0c2.19-1.5 3.17-1.18 3.17-1.18.64 1.6.24 2.77.12 3.06.75.82 1.2 1.85 1.2 3.11 0 4.43-2.68 5.4-5.24 5.69.42.37.79 1.07.79 2.16v3.62c0 .3.2.67.79.55A11.5 11.5 0 0 0 12 .5z"/></svg>
-                <span>Tiếp tục với GitHub</span>
-            </button>
-        }
         @if (error is not null) { <p class="b55-field-error" role="alert">@error</p> }
     </div>
 }
 
 @code {
     [Parameter] public string? ReturnUrl { get; set; }
-    private bool googleEnabled, githubEnabled, busy;
+    private bool googleEnabled, busy;
     private string? error;
     private readonly CancellationTokenSource lifetime = new();
 
@@ -42,16 +35,14 @@
         {
             var result = await RegistrationApi.GetRegistrationSettingsAsync(lifetime.Token);
             var providers = result.Data?.Providers;
-            // Không dự đoán GitHub đã được A59 làm xong. API phải thực sự quảng bá enabled=true.
             googleEnabled = providers?.Any(p => p.Name == "google" && p.Enabled) == true;
-            githubEnabled = providers?.Any(p => p.Name == "github" && p.Enabled) == true;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
     }
 
     private void Start(string provider)
     {
-        if (busy || !(provider == "google" && googleEnabled || provider == "github" && githubEnabled)) return;
+        if (busy || !googleEnabled || !ExternalAuthUiRules.SupportedProvider(provider)) return;
         try
         {
             busy = true;
