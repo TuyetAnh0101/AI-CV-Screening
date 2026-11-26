@@ -48,6 +48,7 @@ public static class AppNavigation
         [
             // B29: quản lý tài khoản (A30 /api/users chỉ Admin)
             new("Trạng thái hệ thống", "admin/system-health", "M4 4h16v16H4zm4 8h8m-4-4v8", AdminOnly: true),
+            new("Sao lưu hệ thống", "admin/backups", "M12 2 4 5v6c0 5 3.4 9.1 8 11 4.6-1.9 8-6 8-11V5z", AdminOnly: true),
             new("Workspace & quota", "admin/workspaces", "M4 4h16v16H4zm4 4h8m-8 5h8m-8 5h8", AdminOnly: true),
             new("Giám sát AI", "admin/ai-usage", "M5 17l4-6 4 3 5-8M3 20h18", AdminOnly: true),
             new("Kết nối Google & AI", "admin/integrations", "M4 12h4m8 0h4M12 4v4m0 8v4M8 8l8 8", AdminOnly: true),

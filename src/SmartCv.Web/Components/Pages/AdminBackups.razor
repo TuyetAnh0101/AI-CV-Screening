@@ -1,0 +1,598 @@
+@page "/admin/backups"
+@attribute [Authorize(Policy = AccessRules.AdminPolicy)]
+@using SmartCv.Core.Backup
+@inject AdminBackupApiClient BackupApi
+@inject FileDownloadService Files
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Sao lưu &amp; Phục hồi · SCApp</PageTitle>
+<div class="op-shell backup-page">
+    <header class="op-header">
+        <div><div class="op-eyebrow"><span class="op-dot"></span> BẢO TOÀN DỮ LIỆU · GOOGLE DRIVE</div>
+            <h1>Sao lưu &amp; Phục hồi hệ thống</h1>
+            <p>Worker trên máy chủ sao lưu database, tệp CV và khóa bảo vệ theo lịch, mã hóa rồi tải lên Google Drive. Không cần Admin đăng nhập để sao lưu chạy.</p></div>
+        <div class="op-toolbar"><button type="button" class="op-button op-button-plain" disabled="@busy" @onclick="ReloadAsync">↻ Làm mới</button></div>
+    </header>
+
+    <div class="backup-tabs" role="tablist" aria-label="Khu vực sao lưu">
+        @foreach (var (key, label) in Tabs)
+        {
+            <button type="button" role="tab" data-tab="@key" aria-selected="@Pressed(tab == key)" @onclick="() => SelectAsync(key)">@label</button>
+        }
+    </div>
+
+    @if (notice is not null) { <div class="backup-notice @noticeTone" role="status" data-notice="@noticeTone">@notice</div> }
+    @if (busy && data is null) { <div class="op-loading" role="status" aria-busy="true">Đang đọc trạng thái sao lưu…</div> }
+    else if (error is not null)
+    {
+        <section class="op-alert" role="alert"><strong>Chưa tải được trạng thái sao lưu.</strong><p>@error</p><button type="button" class="op-button" @onclick="ReloadAsync">Thử lại</button></section>
+    }
+
+    @if (data is { } x)
+    {
+        @if (x.Active.Count > 0)
+        {
+            <section class="op-card" data-activity aria-live="polite">
+                <div class="op-card-top"><h2>Đang xử lý</h2></div>
+                @foreach (var job in x.Active)
+                {
+                    <div class="backup-progress-row">
+                        <span><strong>@BackupLabels.Type(job.Type)</strong> · @BackupLabels.Status(job.Status)@(job.Stage is null ? "" : " · " + StageText(job.Stage))</span>
+                        <progress max="100" value="@job.Progress" aria-label="@($"Tiến độ {BackupLabels.Type(job.Type)}")"></progress>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (tab == "overview")
+        {
+            var headline = BackupText.Headline(x);
+            <aside class="backup-banner @BackupText.Tone(headline.Health)" role="status" data-backup-health="@BackupText.Tone(headline.Health)">
+                <span class="backup-icon" aria-hidden="true">@(headline.Health == BackupText.Health.Ok ? "✓" : "!")</span>
+                <div><strong>@headline.Title</strong><p>@headline.Detail</p></div>
+            </aside>
+            <ol class="backup-steps" aria-label="Sáu trạng thái, từ kết nối đến khôi phục thử">
+                @foreach (var step in BackupText.Steps(x))
+                {
+                    <li class="@step.State" data-step="@step.Code" data-state="@step.State">
+                        <span class="backup-step-mark" aria-hidden="true">@StepMark(step.State)</span>
+                        <div><strong>@step.Label</strong><small>@step.Detail</small><span class="visually-hidden">@StepWord(step.State)</span></div>
+                    </li>
+                }
+            </ol>
+            @if (x.Blockers.Count + x.Warnings.Count > 0)
+            {
+                <section class="op-card" aria-labelledby="canh-bao">
+                    <div class="op-card-top"><h2 id="canh-bao">Cần xử lý</h2></div>
+                    <ul class="backup-list">
+                        @foreach (var item in x.Blockers)
+                        { <li class="critical" data-blocker="@item.Code"><span class="backup-mark" aria-hidden="true">✕</span><div><strong>@item.Message</strong><p>@item.Action</p></div></li> }
+                        @foreach (var item in x.Warnings)
+                        { <li class="warning" data-warning="@item.Code"><span class="backup-mark" aria-hidden="true">!</span><div><strong>@item.Message</strong><p>@item.Action</p></div></li> }
+                    </ul>
+                </section>
+            }
+            <section class="op-kpis backup-kpis" aria-label="Tình trạng chính">
+                <article class="op-kpi op-teal"><div class="op-kpi-label">Bản đầy đủ mới nhất <span aria-hidden="true">✓</span></div><h3>@BackupText.Time(x.LastFull?.CreatedAtUtc)</h3><p>@(x.LastFull is { } f ? $"{f.CvFiles:N0} tệp CV · database {BackupText.Size(f.PayloadBytes)}" : "Chưa có")</p></article>
+                <article class="op-kpi op-azure" data-next-run><div class="op-kpi-label">Lịch tiếp theo <span aria-hidden="true">↻</span></div><h3>@NextRun(x)</h3><p>@Schedule(x.Settings)</p></article>
+                <article class="op-kpi op-violet"><div class="op-kpi-label">Dung lượng trên Drive <span aria-hidden="true">▤</span></div><h3>@BackupText.Size(x.StoredBytes)</h3><p>@x.RestorePoints điểm khôi phục đầy đủ</p></article>
+                <article class="op-kpi op-amber"><div class="op-kpi-label">Khôi phục thử <span aria-hidden="true">◇</span></div><h3>@(x.LastRestoreDrill is { } d ? BackupLabels.Status(d.Status) : "Chưa thực hiện")</h3><p>@BackupText.Time(x.LastRestoreDrill?.FinishedAtUtc)</p></article>
+            </section>
+            <section class="op-card" aria-labelledby="bao-ve">
+                <div class="op-card-top"><h2 id="bao-ve">Cách dữ liệu được bảo vệ</h2><span class="op-mini-tag">MÃ HÓA TRƯỚC KHI TẢI LÊN</span></div>
+                <dl class="backup-stats">
+                    <div><dt>Mã hóa</dt><dd class="backup-text">AES-256-GCM trên máy chủ</dd><small>Khóa @(x.BackupWorker.KeyId is { } id ? "…" + id[^6..] : "chưa có") · @(x.BackupWorker.KeyEscrowConfirmedAtUtc is null ? "chưa xác nhận cất khóa ngoài máy" : "đã xác nhận cất khóa ngoài máy")</small></div>
+                    <div><dt>Nơi lưu chính thức</dt><dd class="backup-text">Google Drive</dd><small>@(x.Drive.Connected ? x.Drive.AccountEmail : "chưa kết nối")</small></div>
+                    <div><dt>Lần kiểm tra toàn vẹn gần nhất</dt><dd class="backup-text">@(x.LastVerify is { } v ? BackupLabels.Status(v.Status) : "Chưa thực hiện")</dd><small>@BackupText.Time(x.LastVerify?.FinishedAtUtc)</small></div>
+                    <div><dt>Transaction log</dt><dd class="backup-text">@BackupText.Time(x.LastLog?.CreatedAtUtc)</dd><small>mỗi @x.Settings.LogIntervalHours giờ@(x.NextLogAtUtc is { } nextLog ? " · kế tiếp " + BackupText.Time(nextLog) : "")</small></div>
+                </dl>
+                <p class="backup-hint" data-key-hint><strong>Khóa khôi phục:</strong> phải có một bản cất ngoài máy này và ngoài Google Drive chứa backup. Thử bản cất bằng lệnh <code>verify-key</code> của worker trên máy chủ; mất máy mà không có khóa thì không giải mã được bản nào.</p>
+                <details class="backup-details-box">
+                    <summary>Giới hạn cần biết</summary>
+                    <p>Dữ liệu gốc (SQL Server và tệp CV) vẫn nằm trên máy chủ; ổ đĩa đó có thể chưa được mã hóa, và Drive chỉ giữ bản sao. Xóa/ẩn danh CV sau một điểm khôi phục: phải áp dụng lại sau khi khôi phục. Khóa Data Protection của Web dùng DPAPI theo tài khoản Windows; giải mã trên máy khác chưa được kiểm chứng.</p>
+                </details>
+            </section>
+        }
+
+        @if (tab == "drive")
+        {
+            <section class="op-card" aria-labelledby="drive-title">
+                <div class="op-card-top"><h2 id="drive-title">Kết nối Google Drive</h2><span class="op-mini-tag">PHẠM VI drive.file</span></div>
+                @if (!x.Drive.Configured)
+                {
+                    <div class="backup-empty"><strong>Máy chủ chưa có OAuth Client</strong><p>Cần Client ID và Client Secret (cấu hình trên máy chủ, không nhập tại đây). Xem mục "Google Drive" trong tài liệu vận hành.</p></div>
+                }
+                else if (!x.Drive.Connected)
+                {
+                    <p>Bấm Kết nối, đăng nhập tài khoản Google sẽ chứa bản sao lưu và đồng ý quyền "Xem, chỉnh sửa, tạo và xóa các tệp Drive do ứng dụng này tạo". SCApp không đọc được tệp khác trong Drive.</p>
+                    <button type="button" class="op-button" data-action="connect" disabled="@sending" @onclick="ConnectAsync">Kết nối Google Drive</button>
+                }
+                else
+                {
+                    <dl class="backup-stats">
+                        <div><dt>Tài khoản</dt><dd class="backup-text">@x.Drive.AccountEmail</dd></div>
+                        <div><dt>Thư mục</dt><dd class="backup-text">@x.Drive.FolderName</dd></div>
+                        <div><dt>Kết nối lúc</dt><dd class="backup-text">@BackupText.Time(x.Drive.ConnectedAtUtc)</dd></div>
+                        <div><dt>Kiểm tra gần nhất</dt><dd class="backup-text" data-drive-check="@(x.Drive.LastCheckOk == true ? "ok" : x.Drive.LastCheckOk == false ? "failed" : "none")">@(x.Drive.LastCheckOk == true ? "Hoạt động" : x.Drive.LastCheckOk == false ? BackupLabels.Error(x.Drive.LastCheckError) : "Chưa kiểm tra")</dd><small>@BackupText.Time(x.Drive.LastCheckedAtUtc)</small></div>
+                        <div><dt>Dung lượng Drive</dt><dd class="backup-text">@BackupText.Size(x.Drive.QuotaUsedBytes) / @(x.Drive.QuotaLimitBytes is null ? "không giới hạn" : BackupText.Size(x.Drive.QuotaLimitBytes))</dd></div>
+                        <div><dt>Bản sao SCApp</dt><dd class="backup-text">@BackupText.Size(x.StoredBytes)</dd></div>
+                    </dl>
+                    <div class="backup-actions">
+                        <button type="button" class="op-button" data-action="check" disabled="@sending" @onclick="CheckAsync">Kiểm tra kết nối</button>
+                        <button type="button" class="op-button op-button-plain" data-action="reconnect" disabled="@sending" @onclick="ConnectAsync">Kết nối lại</button>
+                        <button type="button" class="op-button op-button-plain" data-action="catalog-sync" disabled="@Disabled(x, BackupJobTypes.CatalogSync)" @onclick='() => Ask("catalog-sync")'>Đọc lại danh mục từ Drive</button>
+                        <button type="button" class="op-button op-button-danger" data-action="disconnect" disabled="@sending" @onclick='() => Ask("disconnect")'>Ngắt kết nối</button>
+                    </div>
+                    <p class="backup-hint" data-oauth-hint>Nếu màn hình đồng ý OAuth trên Google Cloud còn ở trạng thái <strong>Testing</strong>, quyền này hết hạn sau 7 ngày (khoảng @BackupText.Time(x.Drive.ConnectedAtUtc?.AddDays(7))) và sao lưu tự động sẽ dừng. Chuyển <strong>Publishing status</strong> sang <strong>In production</strong> rồi bấm Kết nối lại (xem tài liệu Google Drive).</p>
+                }
+                @ConfirmBox("catalog-sync", "disconnect")
+            </section>
+        }
+
+        @if (tab == "points")
+        {
+            <section class="op-card" aria-labelledby="points-title">
+                <div class="op-card-top"><h2 id="points-title">Bản sao lưu trên Google Drive</h2><span class="op-mini-tag">@(points?.Count ?? 0) ĐIỂM</span></div>
+                @if (points is null) { <div class="op-loading">Đang đọc danh mục…</div> }
+                else if (points.Count == 0)
+                {
+                    <div class="backup-empty"><strong>Chưa có bản sao lưu</strong><p>Danh mục chỉ ghi điểm khôi phục sau khi mọi tệp đã tải lên và khớp checksum.</p></div>
+                }
+                else
+                {
+                    <table class="backup-history">
+                        <caption class="visually-hidden">Điểm khôi phục, mới nhất trước</caption>
+                        <thead><tr><th scope="col">Tạo lúc</th><th scope="col">Loại</th><th scope="col">Dung lượng</th><th scope="col">Tệp CV</th><th scope="col">Toàn vẹn</th><th scope="col">Khôi phục thử</th><th scope="col">Khôi phục</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in points.Skip(pointPage * PageSize).Take(PageSize))
+                            {
+                                <tr data-point="@p.Kind">
+                                    <td data-label="Tạo lúc">@BackupText.Time(p.CreatedAtUtc)</td>
+                                    <td data-label="Loại">@(p.Kind == "Full" ? "Đầy đủ" : "Transaction log")@(p.Status == "Damaged" ? " · hỏng" : "")</td>
+                                    <td data-label="Dung lượng">@BackupText.Size(p.PayloadBytes)</td>
+                                    <td data-label="Tệp CV">@p.CvFiles.ToString("N0")@(p.KnownMissingCvs > 0 ? $" (thiếu {p.KnownMissingCvs})" : "")</td>
+                                    <td data-label="Toàn vẹn">@(p.VerifyResult is null ? "Chưa kiểm tra" : p.VerifyResult == "success" ? "Đạt " + BackupText.Time(p.VerifiedAtUtc) : BackupLabels.Error(p.VerifyResult))</td>
+                                    <td data-label="Khôi phục thử">@(p.RestoreTestResult is null ? "—" : p.RestoreTestResult == "success" ? "Đạt " + BackupText.Time(p.RestoreTestedAtUtc) : BackupLabels.Error(p.RestoreTestResult))</td>
+                                    <td data-label="Khôi phục">
+                                        @if (p.Kind == "Full" && p.Status == "Available")
+                                        { <button type="button" class="op-button op-button-plain op-small" data-restore="@p.Id" @onclick="() => AskRestore(p)">Khôi phục…</button> }
+                                        else { <span>—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @Pager("points", points.Count, pointPage, value => pointPage = value)
+                }
+                @if (restorePoint is { } chosen)
+                {
+                    <div class="backup-confirm" role="alertdialog" aria-label="Yêu cầu khôi phục">
+                        <p><strong>Khôi phục có kiểm soát từ bản @BackupText.Time(chosen.CreatedAtUtc).</strong> Worker khôi phục tạo một database MỚI và thư mục tệp riêng; database đang chạy không bị thay đổi. Chuyển ứng dụng sang bản khôi phục là bước vận hành riêng: dừng ứng dụng, đổi cấu hình, áp dụng lại các yêu cầu xóa dữ liệu cá nhân phát sinh sau thời điểm này.</p>
+                        <label>Khôi phục tới thời điểm (giờ máy chủ SQL, để trống = bản đầy đủ + mọi log liên tục)<input type="datetime-local" step="1" data-stop-at @bind="stopAt" @bind:format="yyyy-MM-ddTHH:mm:ss" /></label>
+                        <label>Nhập <strong>KHÔI PHỤC</strong> để xác nhận<input type="text" data-confirm-text @bind="confirmText" @bind:event="oninput" autocomplete="off" /></label>
+                        <button type="button" class="op-button" data-confirm-restore disabled="@(sending || confirmText.Trim() != "KHÔI PHỤC")" @onclick="RecoverAsync">Yêu cầu khôi phục</button>
+                        <button type="button" class="op-button op-button-plain" @onclick="() => restorePoint = null">Hủy</button>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (tab == "schedule")
+        {
+            <section class="op-card" aria-labelledby="thao-tac">
+                <div class="op-card-top"><h2 id="thao-tac">Thao tác khi cần</h2><span class="op-mini-tag">LỊCH TỰ ĐỘNG KHÔNG CẦN BẤM</span></div>
+                <p>Chỉ cần tạo thêm điểm khôi phục trước migration lớn, cập nhật hoặc sửa dữ liệu hàng loạt, hoặc khi phát hiện rủi ro.</p>
+                <div class="backup-actions">
+                    <button type="button" class="op-button" data-action="full" disabled="@Disabled(x, BackupJobTypes.Full)" @onclick='() => Ask("full")'>Sao lưu ngay</button>
+                    <button type="button" class="op-button op-button-plain" data-action="log" disabled="@Disabled(x, BackupJobTypes.Log)" @onclick='() => Ask("log")'>Sao lưu transaction log</button>
+                    <button type="button" class="op-button op-button-plain" data-action="verify" disabled="@Disabled(x, BackupJobTypes.Verify)" @onclick='() => Ask("verify")'>Kiểm tra toàn vẹn</button>
+                    <button type="button" class="op-button op-button-plain" data-action="restore-drill" disabled="@Disabled(x, BackupJobTypes.RestoreDrill)" @onclick='() => Ask("restore-drill")'>Khôi phục thử</button>
+                </div>
+                @if (ReadyProblem(x) is { } why) { <p data-blocker>@why</p> }
+                @ConfirmBox("full", "log", "verify", "restore-drill")
+            </section>
+
+            <section class="op-card" aria-labelledby="lich">
+                <div class="op-card-top"><h2 id="lich">Lịch &amp; lưu giữ</h2></div>
+                <div class="backup-form">
+                    <label>Giờ sao lưu đầy đủ<input type="time" data-policy="time" value="@fullTime" @onchange="e => SetTime(e.Value?.ToString())" /></label>
+                    <label>Transaction log mỗi (giờ)<input type="number" min="1" max="24" data-policy="log" @bind="logHours" /></label>
+                    <label>Số điểm khôi phục giữ lại<input type="number" min="7" max="90" data-policy="keep" @bind="retention" /></label>
+                    <label class="backup-check"><input type="checkbox" data-policy="drill" @bind="weeklyDrill" /> Khôi phục thử tự động hằng tuần</label>
+                    <label class="backup-check"><input type="checkbox" data-policy="paused" @bind="paused" /> Tạm dừng lịch tự động</label>
+                </div>
+                <button type="button" class="op-button" data-action="settings" disabled="@sending" @onclick='() => Ask("settings")'>Áp dụng lịch</button>
+                @ConfirmBox("settings")
+                <p>Đang áp dụng: @Schedule(x.Settings). Máy tắt đúng giờ: lần đó được ghi "bị lỡ" và worker chạy bù một lần khi hoạt động lại.</p>
+            </section>
+        }
+
+        @if (tab == "report")
+        {
+            <section class="op-card" aria-labelledby="bao-cao">
+                <div class="op-card-top"><h2 id="bao-cao">Báo cáo sao lưu</h2>
+                    <button type="button" class="op-button op-button-plain" data-export disabled="@(report is null || exporting)" @onclick="ExportAsync">@(exporting ? "Đang tạo…" : "Xuất Excel")</button></div>
+                <div class="backup-form">
+                    <div class="backup-filter" role="group" aria-label="Khoảng nhanh">
+                        @foreach (var days in new[] { 7, 30, 90 }) { <button type="button" data-days="@days" aria-pressed="@Pressed(rangeDays == days)" @onclick="() => PresetAsync(days)">@days ngày</button> }
+                    </div>
+                    <label>Từ ngày<input type="date" data-filter="from" @bind="from" /></label>
+                    <label>Đến ngày<input type="date" data-filter="to" @bind="to" /></label>
+                    <label>Kết quả<select data-filter="status" @bind="statusFilter"><option value="">Tất cả</option>@foreach (var s in BackupJobStatuses.All) { <option value="@s">@BackupLabels.Status(s)</option> }</select></label>
+                    <label>Loại<select data-filter="type" @bind="typeFilter"><option value="">Tất cả</option>@foreach (var t in BackupJobTypes.All) { <option value="@t">@BackupLabels.Type(t)</option> }</select></label>
+                    <label>Cách chạy<select data-filter="trigger" @bind="triggerFilter"><option value="">Tất cả</option><option value="automatic">Tự động</option><option value="manual">Thủ công</option></select></label>
+                    <button type="button" class="op-button" data-apply @onclick="ApplyAsync">Áp dụng</button>
+                </div>
+                @if (reportError is not null) { <div class="op-alert" role="alert">@reportError</div> }
+                @if (report is { } r)
+                {
+                    <dl class="backup-stats" data-report-total="@r.Total">
+                        <div><dt>Số công việc</dt><dd>@r.Total</dd></div>
+                        <div><dt>Thành công</dt><dd>@r.Succeeded</dd></div>
+                        <div><dt>Thất bại</dt><dd>@r.Failed</dd></div>
+                        <div><dt>Bị lỡ lịch</dt><dd>@r.Missed</dd></div>
+                        <div><dt>Tỷ lệ thành công</dt><dd>@(r.SuccessRate is { } rate ? $"{rate:0.#}%" : "Chưa có")</dd></div>
+                        <div><dt>Đã tải lên trong kỳ</dt><dd class="backup-text">@BackupText.Size(r.UploadedBytes)</dd></div>
+                        <div><dt>CV mới trong kỳ</dt><dd class="backup-text">@BackupText.Size(r.NewCvBytes)</dd></div>
+                        <div><dt>Điểm khôi phục</dt><dd>@r.RestorePoints</dd></div>
+                    </dl>
+                    @if (r.Weeks.Count > 0)
+                    {
+                        var peak = r.Weeks.Max(w => w.Succeeded + w.Failed + w.Missed);
+                        <h3>Theo tuần</h3>
+                        <ul class="backup-weeks">
+                            @foreach (var week in r.Weeks)
+                            {
+                                <li><span>@week.WeekStart.ToString("dd/MM")</span>
+                                    <div class="backup-stack" role="img" aria-label="@($"Tuần {week.WeekStart:dd/MM}: {week.Succeeded} thành công, {week.Failed} thất bại, {week.Missed} bị lỡ")">
+                                        <i class="ok" style="width:@Width(week.Succeeded, peak)"></i><i class="bad" style="width:@Width(week.Failed, peak)"></i><i class="miss" style="width:@Width(week.Missed, peak)"></i>
+                                    </div>
+                                    <small>@week.Succeeded ✓ · @week.Failed ✕ · @week.Missed lỡ</small></li>
+                            }
+                        </ul>
+                    }
+                    @if (r.Jobs.Count == 0)
+                    {
+                        <div class="backup-empty"><strong>Không có công việc nào trong bộ lọc</strong></div>
+                    }
+                    else
+                    {
+                        <table class="backup-history">
+                            <caption class="visually-hidden">Lịch sử công việc, mới nhất trước</caption>
+                            <thead><tr><th scope="col">Thời điểm</th><th scope="col">Loại</th><th scope="col">Cách chạy</th><th scope="col">Kết quả</th><th scope="col">Tải lên</th><th scope="col">CV mới</th><th scope="col">Xử lý</th></tr></thead>
+                            <tbody>
+                                @foreach (var job in r.Jobs.Skip(jobPage * PageSize).Take(PageSize))
+                                {
+                                    <tr data-run="@job.Status" data-job="@job.Type">
+                                        <td data-label="Thời điểm">@BackupText.Time(job.RequestedAtUtc)</td>
+                                        <td data-label="Loại">@BackupLabels.Type(job.Type)</td>
+                                        <td data-label="Cách chạy">@BackupLabels.Trigger(job.Trigger)@(job.Attempt > 1 ? $" (lần {job.Attempt})" : "")</td>
+                                        <td data-label="Kết quả"><span class="backup-chip @BackupText.JobTone(job.Status)">@BackupLabels.Status(job.Status)</span> @(job.ErrorCode is { } code ? $"{code} — {BackupLabels.Error(code)}" : "")@(job.TargetDatabase is { } target ? $" Database: {target}" : "")</td>
+                                        <td data-label="Tải lên">@BackupText.Size(job.UploadedBytes)</td>
+                                        <td data-label="CV mới">@(job.NewCvFiles is { } n ? $"{n:N0} · {BackupText.Size(job.NewCvBytes)}" : "—")</td>
+                                        <td data-label="Xử lý">
+                                            @* Retry only where trying again can help; otherwise say what a person has to do. *@
+                                            @if (job.Status == BackupJobStatuses.Failed && job.Type != BackupJobTypes.Recovery && BackupErrors.IsTransient(job.ErrorCode))
+                                            { <button type="button" class="op-button op-button-plain op-small" data-retry="@job.Type" @onclick="() => RetryAsync(job.Type)">Thử lại</button> }
+                                            else if (job.Status == BackupJobStatuses.Failed) { <small class="backup-guidance" data-guidance="@job.ErrorCode">@BackupLabels.Guidance(job.ErrorCode)</small> }
+                                            else { <span>—</span> }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        @Pager("jobs", r.Jobs.Count, jobPage, value => jobPage = value)
+                    }
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private static readonly (string, string)[] Tabs = [("overview", "Tổng quan"), ("drive", "Google Drive"), ("points", "Bản sao lưu"), ("schedule", "Lịch & thao tác"), ("report", "Báo cáo")];
+    [SupplyParameterFromQuery(Name = "drive")] public string? DriveResult { get; set; }
+
+    private BackupOverviewDto? data;
+    private List<BackupPointDto>? points;
+    private BackupReportDto? report;
+    private BackupPointDto? restorePoint;
+    private DateTime? stopAt;
+    private string confirmText = "";
+    private string tab = "overview";
+    private string? error, notice, reportError, confirming;
+    private string noticeTone = "ok";
+    private bool busy, disposed, sending, exporting, polling, formLoaded;
+    private string fullTime = "01:30";
+    private int logHours = 4, retention = 14, rangeDays = 30;
+    private bool paused, weeklyDrill = true;
+    private DateOnly to = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+    private DateOnly from = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)).AddDays(-29);
+    private string statusFilter = "", typeFilter = "", triggerFilter = "";
+    private readonly CancellationTokenSource lifecycle = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DriveResult is { Length: > 0 } result)
+        {
+            tab = "drive";
+            (notice, noticeTone) = result == "connected" ? ("Đã kết nối Google Drive.", "ok") : ($"Kết nối Google Drive không thành công ({result}). Thử lại và đồng ý đủ quyền.", "warning");
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (busy || disposed) return;
+        busy = true; error = null; formLoaded = false;
+        try
+        {
+            await LoadOverviewAsync();
+            if (tab == "points") await LoadPointsAsync();
+            if (tab == "report") await LoadReportAsync();
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { if (!disposed) busy = false; }
+    }
+
+    private async Task LoadOverviewAsync()
+    {
+        var result = await BackupApi.GetOverviewAsync(lifecycle.Token);
+        if (disposed) return;
+        if (result.IsSuccess && result.Data is not null) data = result.Data;
+        else { data = null; error = result.ErrorMessage ?? "Máy chủ chưa trả thông tin hợp lệ."; return; }
+        if (!formLoaded)
+        {
+            var s = data.Settings;
+            fullTime = s.FullTime; logHours = s.LogIntervalHours; retention = s.RetentionCount; paused = s.Paused; weeklyDrill = s.WeeklyRestoreDrill; formLoaded = true;
+        }
+        if (data.Active.Count > 0) _ = PollAsync();
+    }
+
+    // Follows queued/running jobs without the Admin refreshing.
+    private async Task PollAsync()
+    {
+        if (polling || disposed) return;
+        polling = true;
+        try
+        {
+            while (!disposed)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), lifecycle.Token);
+                var result = await BackupApi.GetOverviewAsync(lifecycle.Token);
+                if (disposed || !result.IsSuccess || result.Data is null) break;
+                data = result.Data;
+                var done = data.Active.Count == 0;
+                if (done)
+                {
+                    notice = "Worker đã xử lý xong. Xem kết quả ở tab Báo cáo."; noticeTone = "ok";
+                    if (tab == "points") await LoadPointsAsync();
+                    if (tab == "report") await LoadReportAsync();
+                }
+                await InvokeAsync(StateHasChanged);
+                if (done) break;
+            }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { polling = false; }
+    }
+
+    private const int PageSize = 25;
+    private int pointPage, jobPage;
+
+    private RenderFragment Pager(string name, int total, int current, Action<int> go) => __builder =>
+    {
+        var pages = (total + PageSize - 1) / PageSize;
+        if (pages > 1)
+        {
+            <nav class="backup-pager" aria-label="Phân trang" data-pager="@name">
+                <button type="button" class="op-button op-button-plain op-small" data-page="previous" disabled="@(current == 0)" @onclick="() => go(current - 1)">‹ Trước</button>
+                <span>Trang @(current + 1) / @pages · @total.ToString("N0") dòng</span>
+                <button type="button" class="op-button op-button-plain op-small" data-page="next" disabled="@(current >= pages - 1)" @onclick="() => go(current + 1)">Sau ›</button>
+            </nav>
+        }
+    };
+
+    private static string StepMark(string state) => state switch { "ok" => "✓", "warning" => "!", "critical" => "✕", _ => "…" };
+    private static string StepWord(string state) => state switch { "ok" => "(đạt)", "warning" => "(cần chú ý)", "critical" => "(chưa đạt)", _ => "(chưa có)" };
+
+    private async Task SelectAsync(string key)
+    {
+        tab = key; confirming = null; restorePoint = null; pointPage = 0; jobPage = 0;
+        if (key == "points") await LoadPointsAsync();
+        else if (key == "report") await LoadReportAsync();
+        else await LoadOverviewAsync();
+    }
+
+    private async Task LoadPointsAsync()
+    {
+        var result = await BackupApi.GetPointsAsync(lifecycle.Token);
+        if (!disposed) points = result.Data ?? [];
+    }
+
+    private void Ask(string action) { confirming = action; notice = null; }
+    private void SetTime(string? value) => fullTime = value is { Length: >= 5 } ? value[..5] : value ?? string.Empty; // browsers may add seconds
+    private void AskRestore(BackupPointDto point) { restorePoint = point; stopAt = null; confirmText = ""; notice = null; }
+
+    private RenderFragment ConfirmBox(params string[] actions) => __builder =>
+    {
+        if (confirming is { } action && actions.Contains(action))
+        {
+            <div class="backup-confirm" role="alertdialog" aria-label="Xác nhận">
+                <p>@ConfirmText(action)</p>
+                <button type="button" class="op-button" data-confirm disabled="@sending" @onclick="() => RunAsync(action)">Xác nhận</button>
+                <button type="button" class="op-button op-button-plain" @onclick="() => confirming = null">Hủy</button>
+            </div>
+        }
+    };
+
+    private string ConfirmText(string action) => action switch
+    {
+        "full" => "Tạo thêm một bản sao lưu đầy đủ ngay bây giờ? Ứng dụng vẫn dùng được; ẩn danh/xóa CV tạm chờ trong lúc chụp tệp.",
+        "log" => "Sao lưu transaction log ngay?",
+        "verify" => "Tải lại bản mới nhất từ Drive, giải mã và đối chiếu checksum?",
+        "restore-drill" => "Khôi phục bản mới nhất từ Drive vào database mới cách ly, kiểm tra rồi xóa database thử? Database đang chạy không bị thay đổi.",
+        "catalog-sync" => "Đọc các manifest trên Drive để bổ sung những bản chưa có trong danh mục?",
+        "disconnect" => "Ngắt kết nối Google Drive? Sao lưu tự động sẽ dừng. Các tệp đã có trên Drive được giữ nguyên.",
+        _ => (paused ? "Tạm dừng lịch tự động: sẽ KHÔNG có bản sao lưu mới cho tới khi bật lại. " : "") + $"Áp dụng giờ {fullTime}, log mỗi {logHours} giờ, giữ {retention} điểm?"
+    };
+
+    private async Task RunAsync(string action)
+    {
+        if (sending || disposed) return;
+        sending = true;
+        try
+        {
+            bool ok; string? message;
+            if (action == "settings")
+            {
+                var r = await BackupApi.SaveSettingsAsync(new(fullTime, logHours, retention, paused, weeklyDrill, null), lifecycle.Token);
+                (ok, message) = (r.IsSuccess, r.ErrorMessage ?? "Đã áp dụng lịch.");
+                formLoaded = false;
+            }
+            else if (action == "disconnect")
+            {
+                var r = await BackupApi.DisconnectDriveAsync(lifecycle.Token);
+                (ok, message) = (r.IsSuccess, r.ErrorMessage ?? "Đã ngắt kết nối Google Drive.");
+            }
+            else
+            {
+                var r = await BackupApi.RequestAsync(action, lifecycle.Token);
+                (ok, message) = (r.IsSuccess, r.ErrorMessage ?? "Đã ghi nhận yêu cầu. Worker sẽ thực hiện trong khoảng một phút.");
+            }
+            if (disposed) return;
+            confirming = null; notice = ok && action == "settings" ? "Đã áp dụng lịch." : message; noticeTone = ok ? "ok" : "warning";
+            await LoadOverviewAsync();
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { sending = false; }
+    }
+
+    private async Task RecoverAsync()
+    {
+        if (sending || restorePoint is not { } point) return;
+        sending = true;
+        try
+        {
+            var r = await BackupApi.RecoverAsync(new(point.Id, stopAt, confirmText.Trim()), lifecycle.Token);
+            if (disposed) return;
+            notice = r.IsSuccess ? "Đã ghi nhận yêu cầu khôi phục. Theo dõi tiến độ và tên database mới trong Báo cáo." : r.ErrorMessage;
+            noticeTone = r.IsSuccess ? "ok" : "warning";
+            if (r.IsSuccess) restorePoint = null;
+            await LoadOverviewAsync();
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { sending = false; }
+    }
+
+    private async Task ConnectAsync()
+    {
+        if (sending) return;
+        sending = true;
+        try
+        {
+            var r = await BackupApi.ConnectDriveAsync(lifecycle.Token);
+            if (disposed) return;
+            if (r.IsSuccess && r.Data is { AuthorizationUrl: var url } && url.StartsWith("https://accounts.google.com/", StringComparison.Ordinal))
+                Navigation.NavigateTo(url, forceLoad: true);
+            else { notice = r.ErrorMessage ?? "Không tạo được liên kết kết nối."; noticeTone = "warning"; }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { sending = false; }
+    }
+
+    private async Task CheckAsync()
+    {
+        if (sending) return;
+        sending = true;
+        try
+        {
+            var r = await BackupApi.CheckDriveAsync(lifecycle.Token);
+            if (disposed) return;
+            notice = r.IsSuccess ? "Google Drive hoạt động." : r.ErrorMessage; noticeTone = r.IsSuccess ? "ok" : "warning";
+            await LoadOverviewAsync();
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        finally { sending = false; }
+    }
+
+    // A retry is a new request that still needs the Admin's confirmation.
+    private async Task RetryAsync(string type)
+    {
+        tab = "schedule"; confirming = type;
+        await LoadOverviewAsync();
+    }
+
+    private async Task PresetAsync(int days)
+    {
+        rangeDays = days;
+        to = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)); from = to.AddDays(1 - days);
+        await LoadReportAsync();
+    }
+
+    private Task ApplyAsync() { rangeDays = 0; return LoadReportAsync(); }
+    private BackupReportFilter Filter() => new(from, to, Empty(statusFilter), Empty(typeFilter), Empty(triggerFilter));
+    private static string? Empty(string value) => value.Length == 0 ? null : value;
+
+    private async Task LoadReportAsync()
+    {
+        reportError = null;
+        var result = await BackupApi.GetReportAsync(Filter(), lifecycle.Token);
+        if (disposed) return;
+        jobPage = 0;
+        if (result.IsSuccess) report = result.Data;
+        else { report = null; reportError = result.ErrorMessage ?? "Chưa tải được báo cáo."; }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (exporting || report is null) return;
+        exporting = true; reportError = null;
+        try
+        {
+            var result = await BackupApi.ExportReportAsync(Filter(), lifecycle.Token);
+            if (disposed) return;
+            if (result.IsSuccess && result.Data is { } file) { await using (file) await Files.SaveRankingAsync(file, lifecycle.Token); }
+            else reportError = result.ErrorMessage ?? "Không xuất được báo cáo.";
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+        catch (InvalidOperationException) { reportError = "Phiên đã thay đổi hoặc máy chủ chưa trả file Excel hợp lệ."; }
+        finally { exporting = false; }
+    }
+
+    private bool Disabled(BackupOverviewDto x, string type)
+    {
+        var restore = BackupJobTypes.RestoreRole.Contains(type);
+        var worker = restore ? x.RestoreWorker : x.BackupWorker;
+        // Log, verify and drill all need something that was already backed up.
+        var nothingYet = type switch
+        {
+            BackupJobTypes.Log or BackupJobTypes.RestoreDrill => x.LastFull is null,
+            BackupJobTypes.Verify => x.LastFull is null && x.LastLog is null && x.RestorePoints == 0,
+            _ => false
+        };
+        return sending || nothingYet || !x.Drive.Connected || !worker.Installed || !worker.Alive || !worker.Ready || x.Active.Any(j => j.Type == type);
+    }
+
+    private static string? ReadyProblem(BackupOverviewDto x) =>
+        !x.Drive.Connected ? "Các nút bị khóa: chưa kết nối Google Drive."
+        : !x.BackupWorker.Installed || !x.BackupWorker.Alive ? "Các nút bị khóa: worker sao lưu chưa hoạt động trên máy chủ."
+        : !x.BackupWorker.Ready ? "Các nút bị khóa: " + BackupLabels.Error(x.BackupWorker.Problem)
+        : !x.RestoreWorker.Installed || !x.RestoreWorker.Alive ? "Khôi phục thử bị khóa: worker khôi phục chưa hoạt động."
+        : !x.RestoreWorker.Ready ? "Khôi phục thử bị khóa: " + BackupLabels.Error(x.RestoreWorker.Problem)
+        : x.LastFull is null ? "Transaction log, kiểm tra toàn vẹn và khôi phục thử mở sau khi có bản sao lưu đầy đủ đầu tiên." : null;
+
+    private static string NextRun(BackupOverviewDto x) => x.Settings.Paused ? "Đang tạm dừng" : x.NextFullAtUtc is { } next ? BackupText.Time(next) : "Chưa hoạt động";
+    private static string Schedule(BackupSettingsDto s) => $"Hằng ngày {s.FullTime}, log mỗi {s.LogIntervalHours} giờ, giữ {s.RetentionCount} điểm{(s.Paused ? " (tạm dừng)" : "")}";
+    private static string StageText(string stage) => stage switch
+    {
+        "prepare" => "chuẩn bị", "cv-lock" => "khóa dữ liệu CV", "sql-backup" => "SQL backup", "cv-snapshot" => "chụp tệp CV", "encrypt" => "mã hóa",
+        "upload" => "tải lên Drive", "manifest" => "ghi manifest", "retention" => "dọn bản cũ", "verify-cloud" => "đối chiếu trên Drive", "catalog" => "đọc danh mục",
+        "download" => "tải từ Drive", "decrypt" => "giải mã", "restore" => "khôi phục SQL", "checkdb" => "DBCC CHECKDB", "rebuild-cv" => "dựng lại tệp CV",
+        "keys" => "khôi phục khóa", "done" => "hoàn tất", _ => stage
+    };
+    private static string Width(int value, int peak) => (peak == 0 ? 0 : value * 100.0 / peak).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+    private static string Pressed(bool value) => value ? "true" : "false";
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}

@@ -84,6 +84,7 @@ public static class ServiceCollectionExtensions
         Add<UserApiClient>(TimeSpan.FromSeconds(20)); // B29: quản lý tài khoản (A30, chỉ Admin)
         Add<AuditApiClient>(TimeSpan.FromSeconds(20));
         Add<AdminOperationsApiClient>(TimeSpan.FromSeconds(25)); // Bảo mật JWT theo circuit.
+        Add<AdminBackupApiClient>(TimeSpan.FromSeconds(30));
         Add<AdminOperationsReportApiClient>(TimeSpan.FromSeconds(35)); // Admin reports, JWT + safe URL logging.
         Add<AdminOperationsReportV2ApiClient>(TimeSpan.FromSeconds(60)); // Admin v2 Excel/CSV via the authenticated circuit.
         Add<ExportApiClient>(TimeSpan.FromSeconds(20));

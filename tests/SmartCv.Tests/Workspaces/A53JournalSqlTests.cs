@@ -8,11 +8,11 @@ namespace SmartCv.Tests;
 public class A53JournalSqlTests
 {
     internal const string Current = "20261121061232_ScopeCandidateDataRequests";
-    /// <summary>Migrations appended after A53, in order (A54 ledger, email outbox, Gemini logs, ranking PDF export).</summary>
+    /// <summary>Migrations appended after A53, in order (A54 ledger, email outbox, Gemini logs, ranking PDF export, A62 backup).</summary>
     internal static readonly string[] Later =
     [
         "20261122082301_A54AiUsageLedgerAndPromptSnapshot", "20261122092023_AddEmailOutbox",
-        "20261123210000_AddGeminiInvocationLogs", "20261124223000_AllowRankingPdfExport"
+        "20261123210000_AddGeminiInvocationLogs", "20261124223000_AllowRankingPdfExport", "20261126023357_A62GoogleDriveBackup"
     ];
 
     [A51SqlFact]

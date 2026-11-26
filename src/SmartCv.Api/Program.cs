@@ -57,6 +57,12 @@ builder.Services.AddScoped<AdminCvErasureService>();
 builder.Services.AddScoped<SmartCv.Infrastructure.Candidates.CandidateErasureService>();
 builder.Services.AddScoped<RetentionProcessor>();
 builder.Services.AddSingleton(TimeProvider.System);
+// A62: Google Drive backup administration (the backup itself runs in the separate SmartCv.BackupWorker).
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient(SmartCv.Infrastructure.Backup.GoogleDriveStoreFactory.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddSingleton<SmartCv.Infrastructure.Backup.BackupDriveCredentials>();
+builder.Services.AddScoped<SmartCv.Infrastructure.Backup.BackupAdminService>();
+builder.Services.AddScoped<SmartCv.Api.Backup.GoogleDriveConnector>();
 builder.Services.AddScoped<SmartCv.Infrastructure.Ops.ApplicationReadiness>();
 builder.Services.AddHostedService<RetentionWorker>();
 builder.Services.AddHostedService<EmailWorker>();

@@ -9,7 +9,12 @@ public sealed record AdminSystemOverviewDto(
     long TotalJobs, long ActiveJobs,
     long StoredCvs, long TotalApplications,
     long TotalRuns, long PendingRuns, long FailedRuns24h,
-    long AiReservedUnitsToday, long RejectedAuditEvents24h);
+    long AiReservedUnitsToday, long RejectedAuditEvents24h)
+{
+    public long TotalWorkspaces { get; init; }
+    public long InactiveWorkspaces { get; init; }
+    public long QuotaConfiguredWorkspaces { get; init; }
+}
 
 public sealed record AdminAiUsagePointDto(
     DateOnly Date,

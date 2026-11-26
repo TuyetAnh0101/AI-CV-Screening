@@ -1,0 +1,30 @@
+@using SmartCv.Core.Ops
+@inject HealthApiClient HealthApi
+@implements IDisposable
+
+<section class="op-card" aria-label="Sức khỏe vận hành">
+    <div class="op-card-top"><h2>API &amp; phụ thuộc</h2><a class="op-link" href="/admin/system-health">Xem kiểm tra chi tiết →</a></div>
+    @if (health is { } h)
+    {
+        <div class="ops-health-summary">
+            @foreach (var check in h.Checks)
+            { <div><strong>@(check.Ok ? "✓" : "!") @Name(check.Name)</strong><p>@check.Message</p></div> }
+        </div>
+        <p>Readiness lúc @BackupText.Time(DateTime.SpecifyKind(h.Time, DateTimeKind.Utc)). Email/OCR chỉ xác minh cấu hình và tài nguyên; cần kiểm thử gửi email/xử lý OCR riêng.</p>
+    }
+    else { <p role="status">@(loading ? "Đang kiểm tra trạng thái API…" : "Chưa xác minh được trạng thái API và các phụ thuộc.")</p> }
+    <a class="op-link" href="/admin/integrations">Kiểm tra Gemini và xem lịch sử lỗi tích hợp →</a>
+</section>
+
+@code {
+    private HealthReportDto? health;
+    private bool loading = true, disposed;
+    private readonly CancellationTokenSource lifecycle = new();
+    protected override async Task OnInitializedAsync()
+    {
+        try { var result = await HealthApi.GetReadinessAsync(lifecycle.Token); if (!disposed) { health = result.Data; loading = false; } }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+    }
+    private static string Name(string code) => code switch { "database" => "Database", "uploads" => "Kho CV", "email" => "Email", "ocr" => "OCR", _ => "Phụ thuộc" };
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}

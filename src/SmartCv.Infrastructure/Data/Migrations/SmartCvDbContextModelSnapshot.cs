@@ -444,6 +444,472 @@ namespace SmartCv.Infrastructure.Data.Migrations
                     b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupDriveConnection", b =>
+                {
+                    b.Property<byte>("BackupDriveConnectionId")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("AccountEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime>("ConnectedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ConnectedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FolderId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("FolderName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("LastCheckError")
+                        .HasMaxLength(44)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(44)");
+
+                    b.Property<bool?>("LastCheckOk")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastCheckedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProtectedCredential")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long?>("QuotaLimitBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("QuotaUsedBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("BackupDriveConnectionId");
+
+                    b.ToTable("BackupDriveConnections", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackupDriveConnections_Single", "[BackupDriveConnectionId] = 1");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupJob", b =>
+                {
+                    b.Property<Guid>("BackupJobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("BackupPointId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("CvFiles")
+                        .HasColumnType("int");
+
+                    b.Property<long?>("DatabaseBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(44)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(44)");
+
+                    b.Property<DateTime?>("FinishedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("HeartbeatAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long?>("NewCvBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("NewCvFiles")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NotBeforeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte>("Progress")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RequestedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("RetryOfJobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ScheduledSlotUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Stage")
+                        .HasMaxLength(60)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(60)");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(12)");
+
+                    b.Property<DateTime?>("StopAtServerTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TargetDatabase")
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(12)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<long?>("UploadedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("WorkerMachine")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("BackupJobId");
+
+                    b.HasIndex("RequestedAtUtc")
+                        .HasDatabaseName("IX_BackupJobs_RequestedAtUtc");
+
+                    b.HasIndex("Type")
+                        .IsUnique()
+                        .HasDatabaseName("UX_BackupJobs_ActiveType")
+                        .HasFilter("[Status] IN ('Queued','Running')");
+
+                    b.HasIndex("Type", "ScheduledSlotUtc")
+                        .IsUnique()
+                        .HasDatabaseName("UX_BackupJobs_Slot")
+                        .HasFilter("[ScheduledSlotUtc] IS NOT NULL");
+
+                    b.ToTable("BackupJobs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackupJobs_Error", "[ErrorCode] IS NULL OR [ErrorCode] LIKE 'A62[_]%'");
+
+                            t.HasCheckConstraint("CK_BackupJobs_Progress", "[Progress] BETWEEN 0 AND 100");
+
+                            t.HasCheckConstraint("CK_BackupJobs_Status", "[Status] IN ('Queued','Running','Succeeded','Failed','Missed','Cancelled')");
+
+                            t.HasCheckConstraint("CK_BackupJobs_Trigger", "[Trigger] IN ('scheduled','catch-up','retry','manual')");
+
+                            t.HasCheckConstraint("CK_BackupJobs_Type", "[Type] IN ('full','log','verify','restore-drill','recovery','catalog-sync')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupObject", b =>
+                {
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("CipherBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CipherSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FileId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<long>("PlainBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ObjectKey");
+
+                    b.ToTable("BackupObjects", (string)null);
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupPoint", b =>
+                {
+                    b.Property<Guid>("BackupPointId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("BackupJobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Consistency")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("CvBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("CvFiles")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DatabaseName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("FirstLsn")
+                        .HasColumnType("decimal(25,0)");
+
+                    b.Property<string>("KeyId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long?>("KeysCipherBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("KeysFileId")
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<int>("KnownMissingCvs")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("LastLsn")
+                        .HasColumnType("decimal(25,0)");
+
+                    b.Property<long>("ManifestCipherBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ManifestFileId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<long>("PayloadCipherBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PayloadCipherSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PayloadFileId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<long>("PayloadPlainBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RestoreTestResult")
+                        .HasMaxLength(44)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(44)");
+
+                    b.Property<DateTime?>("RestoreTestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SchemaVersion")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime?>("SqlFinishedServerTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(12)");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VerifyResult")
+                        .HasMaxLength(44)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(44)");
+
+                    b.HasKey("BackupPointId");
+
+                    b.HasIndex("ManifestFileId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_BackupPoints_Manifest");
+
+                    b.HasIndex("Kind", "Status", "CreatedAtUtc")
+                        .HasDatabaseName("IX_BackupPoints_Kind_Status");
+
+                    b.ToTable("BackupPoints", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackupPoints_Kind", "[Kind] IN ('Full','Log')");
+
+                            t.HasCheckConstraint("CK_BackupPoints_Status", "[Status] IN ('Available','Deleted','Damaged')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupPointObject", b =>
+                {
+                    b.Property<Guid>("BackupPointId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("BackupPointId", "ObjectKey");
+
+                    b.HasIndex("ObjectKey")
+                        .HasDatabaseName("IX_BackupPointObjects_ObjectKey");
+
+                    b.ToTable("BackupPointObjects", (string)null);
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupSettings", b =>
+                {
+                    b.Property<byte>("BackupSettingsId")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("FullTimeLocal")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<DateTime?>("LastHandledFullSlotUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LogIntervalHours")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("Paused")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RetentionCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("WeeklyRestoreDrill")
+                        .HasColumnType("bit");
+
+                    b.HasKey("BackupSettingsId");
+
+                    b.ToTable("BackupSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackupSettings_Limits", "[LogIntervalHours] BETWEEN 1 AND 24 AND [RetentionCount] BETWEEN 7 AND 90 AND [FullTimeLocal] LIKE '[0-2][0-9]:[0-5][0-9]'");
+
+                            t.HasCheckConstraint("CK_BackupSettings_Single", "[BackupSettingsId] = 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            BackupSettingsId = (byte)1,
+                            FullTimeLocal = "01:30",
+                            LogIntervalHours = 4,
+                            Paused = false,
+                            RetentionCount = 14,
+                            UpdatedAtUtc = new DateTime(2026, 11, 26, 0, 0, 0, 0, DateTimeKind.Utc),
+                            WeeklyRestoreDrill = true
+                        });
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupWorkerHeartbeat", b =>
+                {
+                    b.Property<string>("Role")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTime>("HeartbeatAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("KeyEscrowConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("KeyId")
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Problem")
+                        .HasMaxLength(44)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(44)");
+
+                    b.Property<bool>("Ready")
+                        .HasColumnType("bit");
+
+                    b.Property<long?>("StagingFreeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.HasKey("Role");
+
+                    b.ToTable("BackupWorkerHeartbeats", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackupWorkerHeartbeats_Role", "[Role] IN ('backup','restore')");
+                        });
+                });
+
             modelBuilder.Entity("SmartCv.Core.Entities.Candidate", b =>
                 {
                     b.Property<int>("CandidateId")
@@ -2284,6 +2750,21 @@ namespace SmartCv.Infrastructure.Data.Migrations
                         .HasForeignKey("WorkspaceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .HasConstraintName("FK_AuditEvents_Workspaces");
+                });
+
+            modelBuilder.Entity("SmartCv.Core.Entities.BackupPointObject", b =>
+                {
+                    b.HasOne("SmartCv.Core.Entities.BackupPoint", null)
+                        .WithMany()
+                        .HasForeignKey("BackupPointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartCv.Core.Entities.BackupObject", null)
+                        .WithMany()
+                        .HasForeignKey("ObjectKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmartCv.Core.Entities.Candidate", b =>

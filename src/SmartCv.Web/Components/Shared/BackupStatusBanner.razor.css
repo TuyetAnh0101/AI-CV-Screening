@@ -1,0 +1,4 @@
+.backup-banner{display:flex;align-items:center;gap:14px;border:1px solid #d9e5e4;border-left:4px solid #71898d;background:#f5f8f8;padding:17px 19px;border-radius:13px;color:#26454b;min-width:0}
+.backup-banner.ok{border-left-color:#22806a;background:#edf8f1}.backup-banner.warning{border-left-color:#b87b20;background:#fff8ea}.backup-banner.critical{border-left-color:#bf4b53;background:#fff3f3}
+.backup-icon{font-size:1.4rem;font-weight:800}.backup-banner div{flex:1;min-width:0}.backup-banner strong{font-size:.9rem}.backup-banner p{margin:5px 0 0;font-size:.8rem;line-height:1.6;overflow-wrap:anywhere}.backup-banner a{color:#12645e;font-weight:750;white-space:nowrap;font-size:.82rem}.backup-banner a:focus-visible{outline:3px solid #368d83;outline-offset:4px}
+@media(max-width:600px){.backup-banner{flex-wrap:wrap;padding:14px}.backup-banner a{margin-left:27px}.backup-banner div{flex-basis:80%}}

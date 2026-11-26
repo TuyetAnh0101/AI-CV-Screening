@@ -54,6 +54,14 @@ public class SmartCvDbContext : DbContext
     public DbSet<EvaluationSkill> EvaluationSkills => Set<EvaluationSkill>();
 
     public DbSet<AiUsageEntry> AiUsageEntries => Set<AiUsageEntry>();
+    // A62: Google Drive backup catalog and durable job queue (no workspace: system scope only).
+    public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
+    public DbSet<BackupPoint> BackupPoints => Set<BackupPoint>();
+    public DbSet<BackupObject> BackupObjects => Set<BackupObject>();
+    public DbSet<BackupPointObject> BackupPointObjects => Set<BackupPointObject>();
+    public DbSet<BackupSettings> BackupSettings => Set<BackupSettings>();
+    public DbSet<BackupDriveConnection> BackupDriveConnections => Set<BackupDriveConnection>();
+    public DbSet<BackupWorkerHeartbeat> BackupWorkerHeartbeats => Set<BackupWorkerHeartbeat>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {

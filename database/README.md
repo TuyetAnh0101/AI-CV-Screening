@@ -1,5 +1,13 @@
 # Cơ sở dữ liệu SmartCvDb
 
+## A62 — Sao lưu & khôi phục (Google Drive)
+
+Runbook: [docs/van-hanh.md](../docs/van-hanh.md). Migration `20261126023357_A62GoogleDriveBackup` chỉ **thêm** 7 bảng `Backup*` (danh mục, hàng đợi công việc, lịch, kết nối Drive mã hóa, heartbeat); không sửa bảng cũ. Script idempotent: `a62_google_drive_backup.sql`, chạy sau khi được phê duyệt bằng `sqlcmd -I -d SmartCvDb -i database/a62_google_drive_backup.sql`. Backup SQL full COPY_ONLY + CHECKSUM và transaction log được mã hóa trên máy chủ rồi lưu trên Google Drive; restore chỉ vào database mới `SmartCv_Restore_<guid>`. Không đổi recovery model, không shrink log.
+
+Quyền SQL của hai dịch vụ do installer cấp (xem `docs/van-hanh.md`). Tùy chọn `-GrantRestoreClaim` tạo trong `master` thủ tục `SCApp_ClaimRestoredDatabase` ký bằng certificate (login certificate có `CONTROL SERVER`, private key bị xóa sau khi ký); không có nó tài khoản restore không mở được database vừa khôi phục. A62 không cần migration bổ sung.
+
+## Các tệp database
+
 | File | Nội dung |
 |---|---|
 | `SQL.sql` | Thiết kế CSDL gốc (C2): 12 bảng cùng PK, FK, UNIQUE, CHECK, DEFAULT và index. **Chỉ dùng để đối chiếu**, không chạy vào `SmartCvDb`. |

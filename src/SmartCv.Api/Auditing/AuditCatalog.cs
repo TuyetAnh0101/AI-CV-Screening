@@ -76,6 +76,18 @@ public static class AuditCatalog
             "Workspace", "Workspace", "Điều chỉnh hạn mức workspace", required: true);
         Add("POST /api/workspace/sample-job", "workspace.sample_job",
              "Workspace", "Job", "Tạo vị trí mẫu cho không gian cá nhân", null);
+        Add("POST /api/admin/backups/jobs/full", "backup.full_requested", "System", "Backup", "Yêu cầu sao lưu ngay", null);
+        Add("POST /api/admin/backups/jobs/log", "backup.log_requested", "System", "Backup", "Yêu cầu sao lưu transaction log", null);
+        Add("POST /api/admin/backups/jobs/verify", "backup.verify_requested", "System", "Backup", "Yêu cầu kiểm tra toàn vẹn bản sao lưu", null);
+        Add("POST /api/admin/backups/jobs/restore-drill", "backup.restore_drill_requested", "System", "Backup", "Yêu cầu khôi phục thử vào database cách ly", null);
+        Add("POST /api/admin/backups/jobs/catalog-sync", "backup.catalog_sync_requested", "System", "Backup", "Yêu cầu đọc lại danh mục từ Google Drive", null);
+        Add("POST /api/admin/backups/recovery", "backup.recovery_requested", "System", "Backup", "Yêu cầu khôi phục có kiểm soát vào database mới", null, required: true);
+        Add("PUT /api/admin/backups/settings", "backup.settings_changed", "System", "Backup", "Đổi lịch hoặc số điểm khôi phục", null);
+        Add("POST /api/admin/backups/drive/connect", "backup.drive_connect_started", "System", "Backup", "Bắt đầu kết nối Google Drive", null);
+        Add("GET /api/admin/backups/drive/callback", "backup.drive_connected", "System", "Backup", "Hoàn tất kết nối Google Drive", null);
+        Add("POST /api/admin/backups/drive/check", "backup.drive_checked", "System", "Backup", "Kiểm tra kết nối Google Drive", null);
+        Add("DELETE /api/admin/backups/drive", "backup.drive_disconnected", "System", "Backup", "Ngắt kết nối Google Drive", null);
+        Add("GET /api/admin/backups/report/export", "backup.report_exported", "System", "Backup", "Xuất báo cáo sao lưu Excel", null, required: true);
         return entries;
     }
     public static AuditAction? For(HttpContext http)

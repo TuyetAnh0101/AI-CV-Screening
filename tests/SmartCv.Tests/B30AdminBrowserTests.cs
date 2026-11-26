@@ -94,6 +94,8 @@ public class B30AdminBrowserTests
             await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/login");
             Assert.Equal(0, await page.Locator("a[href='users']").CountAsync());
             await Login(page, root, "admin"); await page.WaitForURLAsync(root + "admin/dashboard");
+            // The URL changes before the menu has re-read the signed-in user; wait for it, then count exactly.
+            await page.Locator("#main-navigation a[href='users']").First.WaitForAsync(new() { State = WaitForSelectorState.Attached });
             Assert.Equal(1, await page.Locator("#main-navigation a[href='users']").CountAsync());
 
             foreach (var role in new[] { "hr", "mcp", "candidate", "anonymous" })
