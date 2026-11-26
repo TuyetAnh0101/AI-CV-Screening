@@ -59,7 +59,7 @@
 </div>
 
 @code {
-    [SupplyParameterFromQuery(Name = "linked")] public string? Linked { get; set; }
+    [SupplyParameterFromQuery(Name = "linked")] public string[]? Linked { get; set; }
     [SupplyParameterFromQuery(Name = "external_error")] public string? ExternalError { get; set; }
     private ProfileDto? profile;
     private bool loading = true;
@@ -67,14 +67,10 @@
     private string? notice;
     private readonly CancellationTokenSource lifetime = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
         await Session.EnsureRestoredAsync();
         await LoadAsync();
-        if (Linked is "google" or "github")
-        { hasError = false; notice = "Đã liên kết tài khoản " + (Linked == "google" ? "Google" : "GitHub") + " thành công."; }
-        else if (!string.IsNullOrWhiteSpace(ExternalError))
-        { hasError = true; notice = AuthText.ExternalLoginError(ExternalError); }
     }
 
     private async Task LoadAsync()
@@ -85,7 +81,16 @@
         try
         {
             var result = await AccountApi.GetProfileAsync(lifetime.Token);
-            if (result.IsSuccess && result.Data is not null) profile = result.Data;
+            if (result.IsSuccess && result.Data is not null)
+            {
+                profile = result.Data;
+                hasError = false;
+                if (!string.IsNullOrWhiteSpace(ExternalError))
+                { hasError = true; notice = AuthText.ExternalLoginError(ExternalError); }
+                // The callback query is only a hint; the authenticated profile confirms the link.
+                else if (Linked is ["google"] && profile.Logins.Any(x => x.Provider == "google"))
+                    notice = "Tài khoản Google đã được liên kết.";
+            }
             else { profile = null; notice = "Không lấy được hồ sơ. Hãy thử lại."; hasError = true; }
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

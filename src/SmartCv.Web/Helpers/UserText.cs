@@ -8,7 +8,7 @@ public static class UserText
 {
     public static string Role(string? role) => role switch { UserRoles.Admin => "Quản trị viên", UserRoles.Hr => "Nhân sự (HR)", _ => "Không xác định" };
 
-    /// <summary>Display only the source explicitly supplied by A56; never infer it from email or workspace.</summary>
+    /// <summary>Historical signup labels for Admin lists, not the supported login methods. Never infer from email or workspace.</summary>
     public static string SignupSource(string? source) => source switch
     {
         "Admin" => "Admin tạo",
