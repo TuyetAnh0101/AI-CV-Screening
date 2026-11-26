@@ -46,6 +46,7 @@ public sealed class RoleNavigationExperienceTests
         Assert.Contains("admin/dashboard", admin);
         Assert.Contains("admin/ai-usage", admin);
         Assert.Contains("admin/reports", admin);
+        Assert.Contains("admin/backups", admin);
         Assert.DoesNotContain("account", admin);
         Assert.DoesNotContain("account", hr);
         Assert.DoesNotContain("account", owner);
@@ -56,6 +57,8 @@ public sealed class RoleNavigationExperienceTests
         Assert.Contains("jobs", hr);
         Assert.Contains("results", owner);
         Assert.DoesNotContain("admin/workspaces", hr);
+        Assert.DoesNotContain("admin/backups", hr);
+        Assert.DoesNotContain("admin/backups", owner);
         Assert.DoesNotContain("users", owner);
         Assert.All(RoleBasedNavigation.For(Principal("HR", "Internal", "Member")), group => Assert.NotEmpty(group.Items));
         Assert.Empty(RoleBasedNavigation.For(Principal("HR")));

@@ -14,6 +14,8 @@
         </div>
         <button class="op-button op-button-plain" disabled="@busy" @onclick="ReloadAsync">↻ Làm mới</button>
     </header>
+    <BackupStatusBanner @key='("backup", backupRefresh)' />
+    <AdminHealthSummary @key='("health", backupRefresh)' />
     @if (busy && overview is null)
     {
         <div class="op-loading" role="status">Đang tải thống kê quản trị từ máy chủ…</div>
@@ -30,10 +32,10 @@
     {
         <div class="op-meta"><span>Phạm vi: tất cả workspace · dữ liệu tổng hợp</span><span>Đồng bộ lúc @VnTime(x.CapturedAtUtc)</span></div>
         <section class="op-kpis" aria-label="Chỉ số toàn hệ thống">
-            <div class="op-kpi op-azure"><div class="op-kpi-label">Tài khoản <span>◉</span></div><strong>@Fmt(x.TotalAccounts)</strong><p>@Fmt(x.ActiveAccounts) đang hoạt động</p></div>
-            <div class="op-kpi op-violet"><div class="op-kpi-label">Workspace <span>⬡</span></div><strong>@Fmt(x.ActiveWorkspaces)</strong><p>@Fmt(x.PersonalWorkspaces) workspace cá nhân</p></div>
+            <div class="op-kpi op-azure"><div class="op-kpi-label">Tài khoản <span>◉</span></div><strong>@Fmt(x.TotalAccounts)</strong><p>@Fmt(x.ActiveAccounts) hoạt động · @Fmt(x.TotalAccounts - x.ActiveAccounts) bị khóa</p></div>
+            <div class="op-kpi op-violet"><div class="op-kpi-label">Workspace <span>⬡</span></div><strong>@Fmt(x.TotalWorkspaces)</strong><p>@Fmt(x.ActiveWorkspaces) hoạt động · @Fmt(x.InactiveWorkspaces) bị khóa · @Fmt(x.PersonalWorkspaces) cá nhân</p></div>
             <div class="op-kpi op-amber"><div class="op-kpi-label">CV còn lưu <span>▤</span></div><strong>@Fmt(x.StoredCvs)</strong><p>Số lượng tổng hợp; không mở nội dung</p></div>
-            <div class="op-kpi op-coral"><div class="op-kpi-label">Quota AI hôm nay <span>✧</span></div><strong>@Fmt(x.AiReservedUnitsToday)</strong><p>Đơn vị quota giữ chỗ, không phải token</p></div>
+            <div class="op-kpi op-coral"><div class="op-kpi-label">Quota AI hôm nay <span>✧</span></div><strong>@Fmt(x.AiReservedUnitsToday)</strong><p>Đơn vị giữ chỗ · @Fmt(x.QuotaConfiguredWorkspaces) workspace có hạn mức</p></div>
             <div class="op-kpi op-teal"><div class="op-kpi-label">Vị trí tuyển <span>▣</span></div><strong>@Fmt(x.ActiveJobs)</strong><p>@Fmt(x.TotalJobs) vị trí trong cơ sở dữ liệu</p></div>
             <div class="op-kpi op-rose"><div class="op-kpi-label">Sự kiện bị từ chối/lỗi <span>⚑</span></div><strong>@Fmt(x.RejectedAuditEvents24h)</strong><p>Audit · 24 giờ gần nhất</p></div>
         </section>
@@ -78,6 +80,7 @@
             <div class="op-card-top"><h2>Thao tác quản trị</h2><span class="op-mini-tag">CHUYÊN BIỆT THEO NHIỆM VỤ</span></div>
             <div class="op-shortcuts">
                 <a href="/admin/reports"><span class="op-shortcut-icon op-violet">▤</span><strong>Báo cáo vận hành</strong><small>Xem phạm vi & tính năng đã hỗ trợ</small></a>
+                <a href="/admin/backups"><span class="op-shortcut-icon op-teal">◇</span><strong>Sao lưu hệ thống</strong><small>Cảnh báo, bằng chứng và hướng dẫn phục hồi</small></a>
                 <a href="/admin/system-health"><span class="op-shortcut-icon op-teal">◉</span><strong>Sức khỏe hệ thống</strong><small>SQL, OCR, Email, API</small></a>
                 <a href="/users"><span class="op-shortcut-icon op-azure">♙</span><strong>Tài khoản</strong><small>Vai trò, khóa/mở khóa</small></a>
                 <a href="/admin/workspaces"><span class="op-shortcut-icon op-violet">⬡</span><strong>Workspace & quota</strong><small>Hạn mức, tình trạng</small></a>
@@ -96,6 +99,7 @@
     private string? historyError;
     private string? error;
     private bool busy;
+    private int backupRefresh;
     private bool disposed;
     private readonly CancellationTokenSource lifecycle = new();
     protected override Task OnInitializedAsync() => ReloadAsync();
@@ -103,6 +107,7 @@
     {
         if (busy || disposed) return;
         busy = true; error = null;
+        backupRefresh++;
         try
         {
             var response = await AdminOps.GetOverviewAsync(lifecycle.Token);

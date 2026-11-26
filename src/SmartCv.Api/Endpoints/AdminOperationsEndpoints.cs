@@ -76,7 +76,10 @@ public static class AdminOperationsEndpoints
               (SELECT COALESCE(SUM(CONVERT(bigint, Units - UnitsReleased)), 0)
                FROM dbo.AiUsageEntries WHERE CreatedAtUtc >= @from AND CreatedAtUtc < @to) AS AiToday,
               (SELECT COUNT_BIG(*) FROM dbo.AuditEvents
-               WHERE OccurredAtUtc >= @since AND Outcome IN ('Failed', 'Denied')) AS AuditFailures
+               WHERE OccurredAtUtc >= @since AND Outcome IN ('Failed', 'Denied')) AS AuditFailures,
+              (SELECT COUNT_BIG(*) FROM dbo.Workspaces) AS TotalWorkspaces,
+              (SELECT COUNT_BIG(*) FROM dbo.Workspaces WHERE IsActive = 0) AS InactiveWorkspaces,
+              (SELECT COUNT_BIG(*) FROM dbo.Workspaces WHERE DailyAiEvaluationLimit IS NOT NULL OR MaxCvCount IS NOT NULL) AS QuotaConfiguredWorkspaces
             """;
         var rows = await ReadAsync(db, sql,
             c =>
@@ -85,7 +88,10 @@ public static class AdminOperationsEndpoints
             }, reader => new AdminSystemOverviewDto(now,
                 Long(reader, 0), Long(reader, 1), Long(reader, 2), Long(reader, 3),
                 Long(reader, 4), Long(reader, 5), Long(reader, 6), Long(reader, 7),
-                Long(reader, 8), Long(reader, 9), Long(reader, 10), Long(reader, 11), Long(reader, 12)), ct);
+                Long(reader, 8), Long(reader, 9), Long(reader, 10), Long(reader, 11), Long(reader, 12))
+            {
+                TotalWorkspaces = Long(reader, 13), InactiveWorkspaces = Long(reader, 14), QuotaConfiguredWorkspaces = Long(reader, 15)
+            }, ct);
         return Results.Ok(rows.Single());
     }
 

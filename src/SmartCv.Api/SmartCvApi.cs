@@ -12,6 +12,7 @@ public static class SmartCvApi
         app.MapReadinessEndpoint();
         app.MapAuthEndpoints();
         app.MapAdminOperationsEndpoints();
+        app.MapAdminBackupEndpoints();
         app.MapAdminOperationsReportEndpoints();
         app.MapAdminOperationsReportV2Endpoints();
         app.MapControllers().RequireAuthorization(AuthPolicies.SystemAdmin);

@@ -12,6 +12,7 @@
             <p>Đọc trực tiếp các phép kiểm tra sẵn có; không đánh đồng cấu hình sẵn sàng với kết nối Gemini thành công.</p></div>
         <div class="op-toolbar"><button class="op-button op-button-plain" disabled="@busy" @onclick="ReloadAsync">↻ Kiểm tra lại</button><a class="op-button op-button-plain" href="/admin/dashboard">← Dashboard</a></div>
     </header>
+    <BackupStatusBanner @key="backupRefresh" />
     @if (busy && data is null) { <div class="op-loading" role="status">Đang kiểm tra các phụ thuộc…</div> }
     else if (error is not null) { <div class="op-alert" role="alert"><strong>Không thể xác minh sức khỏe hệ thống.</strong><p>@error</p><button class="op-button" @onclick="ReloadAsync">Thử lại</button></div> }
     else if (data is { } health)
@@ -43,12 +44,14 @@
     private HealthReportDto? data;
     private string? error;
     private bool busy, disposed;
+    private int backupRefresh;
     private readonly CancellationTokenSource lifecycle = new();
     protected override Task OnInitializedAsync() => ReloadAsync();
     private async Task ReloadAsync()
     {
         if (busy || disposed) return;
         busy = true; error = null;
+        backupRefresh++;
         try
         {
             var res = await HealthApi.GetReadinessAsync(lifecycle.Token);

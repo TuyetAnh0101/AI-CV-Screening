@@ -267,6 +267,13 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+# A62: encryption/Data Protection keys and worker settings must never be committed.
+**/key-*.xml
+**/backup-key.*
+**/appsettings.BackupWorker.json
+# A62: source folders, not Visual Studio upgrade backups (the "Backup*/" rule above would hide them).
+!src/**/Backup/
+!scripts/backup-worker/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/

@@ -1,0 +1,1 @@
+.ops-health-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.ops-health-summary strong{font-size:.84rem;color:#12645e}.ops-health-summary p{font-size:.78rem;margin:6px 0;overflow-wrap:anywhere}@media(max-width:1000px){.ops-health-summary{grid-template-columns:1fr 1fr}}@media(max-width:550px){.ops-health-summary{grid-template-columns:1fr}}

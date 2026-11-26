@@ -29,6 +29,10 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         "POST /api/cvs/{id:guid}/anonymize", "POST /api/retention/run",
         "GET /api/health/database", "GET /api/health/gemini",
         "GET /api/admin/audit-events", "GET /api/admin/audit-events/{id:long}",
+        "GET /api/admin/backups/overview", "GET /api/admin/backups/points", "GET /api/admin/backups/report", "GET /api/admin/backups/report/export",
+        "POST /api/admin/backups/jobs/full", "POST /api/admin/backups/jobs/log", "POST /api/admin/backups/jobs/verify",
+        "POST /api/admin/backups/jobs/restore-drill", "POST /api/admin/backups/jobs/catalog-sync", "POST /api/admin/backups/recovery",
+        "PUT /api/admin/backups/settings", "POST /api/admin/backups/drive/connect", "POST /api/admin/backups/drive/check", "DELETE /api/admin/backups/drive",
         "GET /api/exports",
         "GET /api/admin/reports/v2/preview", "GET /api/admin/reports/v2/download",
         "GET /api/users", "POST /api/users", "PUT /api/users/{id:int}",
@@ -45,6 +49,8 @@ public class A29AuthorizationTests(ITestOutputHelper output)
     /// <summary>Anonymous by design (sign-in, sign-up, recovery, external callback); each has its own A56/A57/A58 tests.</summary>
     internal static readonly HashSet<string> PublicRoutes =
     [
+        // A62: Google redirects here without a token; the sealed, single-use state is the authorization.
+        "GET /api/admin/backups/drive/callback",
         "GET /api/health", "POST /api/auth/login", "GET /api/auth/registration-settings", "POST /api/auth/register",
         "POST /api/auth/verify-email", "POST /api/auth/resend-verification", "POST /api/auth/forgot-password", "POST /api/auth/reset-password",
         "GET /api/auth/external/{provider}/start", "GET /api/auth/external/{provider}/complete", "POST /api/auth/external/exchange"
@@ -128,7 +134,8 @@ public class A29AuthorizationTests(ITestOutputHelper output)
         using var factory = A28TestSupport.Factory();
         var admin = await A28TestSupport.Seed(factory, A28TestSupport.Password());
         var hr = await A28TestSupport.Seed(factory, A28TestSupport.Password(), "HR");
-        using var anonymous = factory.CreateClient(); using var hrClient = Client(factory, hr);
+        // No redirect following: each route is judged by its own response (a callback answers 302 to the Web app).
+        using var anonymous = factory.CreateClient(new() { AllowAutoRedirect = false }); using var hrClient = Client(factory, hr);
         var endpoints = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .Where(e => Path(e).StartsWith("/api/")).ToList();
         var auth = factory.Services.GetRequiredService<IAuthorizationService>();

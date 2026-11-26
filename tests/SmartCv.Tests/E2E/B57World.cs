@@ -56,7 +56,7 @@ internal sealed class B57World : IDisposable
 
     internal bool IsSql { get; }
 
-    private B57World(Dictionary<string, string?>? settings, bool faultReports, string? sqlConnection, bool kestrel = false)
+    private B57World(Dictionary<string, string?>? settings, bool faultReports, string? sqlConnection, bool kestrel = false, Action<IServiceCollection>? services = null)
     {
         IsSql = sqlConnection is not null;
         if (faultReports) ReportFault = new B57ReportFault();
@@ -85,13 +85,14 @@ internal sealed class B57World : IDisposable
                 });
             }
         }));
+        if (services is not null) Factory = Factory.WithWebHostBuilder(b => b.ConfigureTestServices(services));
         // Browser tests: a real loopback socket (random port) instead of TestServer.
         if (kestrel) Factory.UseKestrel(o => o.Listen(System.Net.IPAddress.Loopback, 0));
     }
 
-    internal static async Task<B57World> CreateAsync(Dictionary<string, string?>? settings = null, bool faultReports = false, string? sqlConnection = null, bool kestrel = false)
+    internal static async Task<B57World> CreateAsync(Dictionary<string, string?>? settings = null, bool faultReports = false, string? sqlConnection = null, bool kestrel = false, Action<IServiceCollection>? services = null)
     {
-        var world = new B57World(settings, faultReports, sqlConnection, kestrel);
+        var world = new B57World(settings, faultReports, sqlConnection, kestrel, services);
         try { await world.SeedAsync(); return world; }
         catch { world.Dispose(); throw; }
     }

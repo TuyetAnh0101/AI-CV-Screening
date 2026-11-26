@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SmartCv.Api/SmartCv.Api.csproj" />
+    <Project Path="src/SmartCv.BackupWorker/SmartCv.BackupWorker.csproj" />
     <Project Path="src/SmartCv.Core/SmartCv.Core.csproj" />
     <Project Path="src/SmartCv.Infrastructure/SmartCv.Infrastructure.csproj" />
     <Project Path="src/SmartCv.Web/SmartCv.Web.csproj" />

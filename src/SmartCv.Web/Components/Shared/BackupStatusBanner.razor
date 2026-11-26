@@ -1,0 +1,34 @@
+@using SmartCv.Core.Backup
+@inject AdminBackupApiClient BackupApi
+@implements IDisposable
+
+@if (current is { } value)
+{
+    var headline = BackupText.Headline(value);
+    <aside class="backup-banner @BackupText.Tone(headline.Health)" role="status" aria-live="polite" data-backup-health="@BackupText.Tone(headline.Health)">
+        <span class="backup-icon" aria-hidden="true">@(headline.Health == BackupText.Health.Ok ? "✓" : "!")</span>
+        <div><strong>@headline.Title</strong><p>@headline.Detail</p></div>
+        <a href="/admin/backups">Xem sao lưu →</a>
+    </aside>
+}
+else if (error)
+{
+    <aside class="backup-banner critical" role="status"><span aria-hidden="true">!</span><div><strong>Chưa đọc được trạng thái sao lưu</strong><p>Mở trang sao lưu để thử lại.</p></div><a href="/admin/backups">Xem sao lưu →</a></aside>
+}
+else { <div class="op-loading" role="status">Đang đọc trạng thái sao lưu…</div> }
+
+@code {
+    private BackupOverviewDto? current;
+    private bool error, disposed;
+    private readonly CancellationTokenSource lifecycle = new();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await BackupApi.GetOverviewAsync(lifecycle.Token);
+            if (!disposed) { current = result.Data; error = !result.IsSuccess || result.Data is null; }
+        }
+        catch (OperationCanceledException) when (lifecycle.IsCancellationRequested) { }
+    }
+    public void Dispose() { disposed = true; lifecycle.Cancel(); lifecycle.Dispose(); }
+}

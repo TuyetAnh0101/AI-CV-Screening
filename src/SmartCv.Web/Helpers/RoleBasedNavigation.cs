@@ -113,6 +113,7 @@ public static class RoleBasedNavigation
         ]),
         new("Giám sát & tài nguyên", [
             new("Trạng thái hệ thống", "admin/system-health", StatusIcon, AdminOnly: true),
+            new("Sao lưu hệ thống", "admin/backups", ShieldIcon, AdminOnly: true),
             new("Workspace & quota", "admin/workspaces", QuotaIcon, AdminOnly: true),
             new("Giám sát AI", "admin/ai-usage", AiIcon, AdminOnly: true),
             new("Kết nối Google & AI", "admin/integrations", PromptIcon, AdminOnly: true)

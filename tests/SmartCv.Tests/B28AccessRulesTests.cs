@@ -111,6 +111,7 @@ public class B28AccessRulesTests
         typeof(AdminOperationsDashboard),
         typeof(AdminOperationsReport),
         typeof(AdminSystemHealth),
+        typeof(AdminBackups),
         typeof(AdminWorkspaces),
         typeof(AdminAiUsage),
         typeof(AdminIntegrations),
