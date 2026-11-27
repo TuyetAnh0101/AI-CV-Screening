@@ -5,11 +5,11 @@
 | Mục | Nội dung |
 |---|---|
 | Repository | `TuyetAnh0101/AI-CV-Screening` |
-| Nhánh | `feature/landing-page-refinement` (tạo từ `origin/main`, chưa commit, chưa push) |
+| Nhánh | `feature/landing-page-refinement` (tạo từ `origin/main`; commit `17c73d3`, đã merge vào `main` qua PR #126, `ca93fb7`) |
 | BASE_SHA | `66b11039013908f2fb5ef654abef210b36496506` |
 | Mục tiêu | Thiết kế lại Landing Page `/`: gọn, đúng nghiệp vụ, đồng bộ màu với ứng dụng, tương tác nhẹ, responsive |
 | Phạm vi | Giao diện Landing và thay đổi tối thiểu ở `PublicLayout`, `PublicFooter`, một chuỗi CTA |
-| Kết luận | **PASS cho các hạng mục đã kiểm**, còn hạn chế ở mục 8 |
+| Kết luận | **PASS cho các hạng mục đã kiểm** (4 test nhạy thời gian lỗi khi chạy full, đạt khi chạy riêng); hạn chế ở mục 8 |
 
 ## 2. Kết quả rà soát trước khi sửa
 
@@ -103,9 +103,23 @@ Tất cả là ảnh chụp trình duyệt thật với dữ liệu tổng hợp
 | Debug Build (bản sao sạch) | 0 lỗi, 12 warning | 0 lỗi, 12 warning | PASS |
 | Release Build | 0 lỗi, 12 warning | 0 lỗi, 12 warning | PASS |
 | Focused test (B52, B51, B28, B53, B27LoginUi, RoleNavigation, GoogleOnly) | 193/193 | 193/193 | PASS |
-| Browser, khách (script tạm, Chrome) | Không chạy | 101/101 | PASS |
-| Browser, đã đăng nhập (test tạm, API InMemory) | Không chạy | 1/1 | PASS |
-| Full regression (Release) | Không chạy | FULL_RESULT | FULL_VERDICT |
+| Browser, khách (script tạm, Chrome), bản cuối | Không chạy | 101/101 | PASS |
+| Browser, đã đăng nhập (test tạm, API InMemory), bản cuối | Không chạy | 1/1 | PASS |
+| Full regression (Release), chạy một lần | Không chạy | 4092 PASS, 4 FAIL, 162 SKIP (tổng 4258) | Xem ghi chú |
+| Chạy riêng 4 ca lỗi | Không chạy | 4/4 PASS | Lỗi do tải |
+
+**Về 4 ca lỗi khi chạy full:**
+
+| Test | Lỗi |
+|---|---|
+| `B27EndToEndTests.Must_change_password_account_signs_in_but_business_403_does_not_sign_out` | Đăng nhập báo "Máy chủ phản hồi quá lâu" |
+| `B28EndToEndTests.Role_change_by_an_admin_revokes_the_old_session_on_the_next_refresh` | Đăng nhập trong test trả về rỗng |
+| `B29UsersTests.Own_role_cannot_be_changed_from_the_ui` | `NullReferenceException` khi đăng nhập trong phần chuẩn bị |
+| `RunScoringWorkerTests.Idle_worker_polls_on_schedule_not_in_a_tight_loop` | Đếm 22 nhịp, mong đợi 2–5 |
+
+Cả bốn đều nhạy với thời gian (bộ test chạy 1 giờ 7 phút, máy đang chạy thêm tiến trình khác), không đụng file nào của nhánh này và đều đạt khi chạy riêng. Chưa chạy full trên `main` để so sánh trực tiếp.
+
+Full regression chạy trên bản trước đợt chỉnh màu cuối; đợt đó chỉ đổi CSS. Sau đợt đó đã build lại, chạy lại focused test và toàn bộ kiểm tra trình duyệt.
 
 Debug build trong repository bị chặn vì `SmartCv.Api` và `SmartCv.Web` đang chạy từ thư mục Debug, nên được build trên bản sao mã nguồn. Script và test tạm đã được xóa khỏi repository sau khi chạy.
 
@@ -154,6 +168,7 @@ Smoke Dashboard HR, Personal Owner, Admin: mở được từ CTA, không có l�
 - Tương phản chỉ tính cho một số cặp màu chính, chưa quét toàn trang bằng công cụ; chưa thử trình đọc màn hình, chưa thử Firefox/Safari và thiết bị thật. Không tuyên bố đạt WCAG.
 - Chưa đo hiệu năng.
 - Trạng thái đăng ký được kiểm bằng API stub, chưa kiểm với cấu hình triển khai thật.
+- Bảng kết quả test được bổ sung sau khi PR #126 đã merge, vì full regression kết thúc muộn hơn. Mã trên `main` trùng với mã đã kiểm.
 - Trên mobile trang dài (khoảng 9.400px ở 390px, trước đây 6.500px) vì có thêm các mục mới. Nếu muốn ngắn hơn, ứng viên để bỏ là "Đối tượng sử dụng" hoặc "Lợi ích".
 - Style dựa vào CSS `:has()`, cần trình duyệt đời mới.
 - Ngoài phạm vi, chưa sửa: header của Privacy/Terms vẫn ghi "Đăng ký công khai sắp mở"; `PublicCta.SignIn.Note` còn chữ "sắp mở" (test B52 đang kiểm chuỗi này, Landing không hiển thị); hai trang pháp lý vẫn là bản dự thảo; warning CS9113 ở `Helpers/VerificationFlow.cs`.
