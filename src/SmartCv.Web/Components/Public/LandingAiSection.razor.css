@@ -1,0 +1,112 @@
+.ai {
+    background: var(--sc-grad-sidebar);
+    color: #fff;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+    gap: 56px;
+    align-items: center;
+}
+
+.ai .lp-eyebrow { color: var(--sc-sidebar-accent); }
+
+h2 { color: #fff; }
+
+.intro {
+    margin: 0 0 20px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #c9dedc;
+}
+
+.warning {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+    padding: 14px 16px;
+    border-left: 3px solid var(--lp-accent);
+    border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
+    background: rgba(255, 255, 255, .07);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.6;
+    color: #ffe2ad;
+}
+
+.warning ::deep svg {
+    flex: none;
+    margin-top: 2px;
+}
+
+.points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.points li {
+    display: flex;
+    gap: 16px;
+    padding: 18px 0;
+    border-top: 1px solid rgba(255, 255, 255, .14);
+}
+
+.points li:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.points h3 {
+    margin-bottom: 4px;
+    font-size: 16px;
+    color: #fff;
+}
+
+.points p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #c9dedc;
+}
+
+.point-icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--sc-radius-md);
+    background: rgba(255, 255, 255, .09);
+    color: var(--sc-sidebar-accent);
+}
+
+@media (max-width: 899.98px) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .points li { gap: 12px; }
+}
+
+@media (max-width: 767.98px) {
+    .points li { padding: 14px 0; }
+    .point-icon { width: 34px; height: 34px; }
+}
+
+h2 { color: #fff; }
+
+.warning {
+    border: 0;
+    border-radius: var(--sc-radius-md);
+    background: var(--lp-accent);
+    color: var(--lp-primary-dark);
+    font-weight: 700;
+}
+
+.points li:nth-child(3) .point-icon { background: var(--lp-accent); color: var(--lp-primary-dark); }
+.points li:nth-child(4) .point-icon { background: var(--lp-coral); color: #fff; }

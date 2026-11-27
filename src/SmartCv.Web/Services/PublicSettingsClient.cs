@@ -59,7 +59,7 @@ public sealed record PublicCta(PublicCtaKind Kind, string Text, string Href, str
         if (mustChangePassword)
             return new(PublicCtaKind.ChangePassword, "Hoàn tất đổi mật khẩu", "/change-password");
         if (registrationEnabled && registerRouteAvailable)
-            return new(PublicCtaKind.Register, "Bắt đầu miễn phí", "/register");
+            return new(PublicCtaKind.Register, "Đăng ký tài khoản", "/register");
         return SignIn;
     }
 

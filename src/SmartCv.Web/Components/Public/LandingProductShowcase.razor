@@ -1,0 +1,137 @@
+<section id="showcase" class="lp-section showcase" aria-labelledby="showcase-heading">
+    <div class="lp-wrap">
+        <div class="lp-head is-center" data-reveal>
+            <p class="lp-eyebrow">Xem trước trải nghiệm</p>
+            <h2 id="showcase-heading">Mỗi chặng công việc có một góc nhìn riêng</h2>
+            <p class="lp-lead">Chọn từng mục để xem SCApp hỗ trợ gì. Các hình bên dưới là minh họa bằng dữ liệu mẫu.</p>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Các khu vực sản phẩm">
+            @for (var index = 0; index < Tabs.Length; index++)
+            {
+                var i = index;
+                var tab = Tabs[i];
+                <button type="button" role="tab" id="showcase-tab-@tab.Key" class="tab"
+                        aria-selected="@(selected == i ? "true" : "false")"
+                        aria-controls="showcase-panel-@tab.Key"
+                        tabindex="@(selected == i ? "0" : "-1")"
+                        @ref="buttons[i]"
+                        @onclick="() => selected = i"
+                        @onkeydown="OnKeyAsync">
+                    <LandingIcon Name="@tab.Icon" Size="17" />
+                    <span>@tab.Label</span>
+                </button>
+            }
+        </div>
+
+        @for (var index = 0; index < Tabs.Length; index++)
+        {
+            var i = index;
+            var tab = Tabs[i];
+            <div class="panel" role="tabpanel" id="showcase-panel-@tab.Key"
+                 aria-labelledby="showcase-tab-@tab.Key" tabindex="0" hidden="@(selected != i)">
+                <div class="panel-copy">
+                    <h3>@tab.Title</h3>
+                    <p>@tab.Description</p>
+                    <ul>
+                        @foreach (var point in tab.Points)
+                        {
+                            <li><LandingIcon Name="check" Size="16" /> <span>@point</span></li>
+                        }
+                    </ul>
+                </div>
+                <div class="screen" aria-hidden="true">
+                    <div class="screen-head"><strong>@tab.ScreenTitle</strong><span>Dữ liệu mẫu</span></div>
+                    @foreach (var line in tab.Lines)
+                    {
+                        <div class="line">
+                            <span class="line-mark"></span>
+                            <span class="line-main">@line.Main</span>
+                            <span class="line-tag @line.Tone">@line.Tag</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private sealed record Line(string Main, string Tag, string Tone);
+    private sealed record Tab(string Key, string Label, string Icon, string Title, string Description,
+        string[] Points, string ScreenTitle, Line[] Lines);
+
+    private static readonly Tab[] Tabs =
+    [
+        new("cv", "Quản lý CV", "upload",
+            "Hồ sơ vào kho một cách có kiểm soát",
+            "Trước khi tải, bạn chọn nguồn CV và xác nhận đã có sự đồng ý. Sau đó hệ thống đọc chữ và báo tình trạng từng tệp.",
+            ["Nhận tệp PDF, JPG và PNG", "Nhận biết hồ sơ đã có sẵn", "Xem lại chữ đã đọc trước khi chấm"],
+            "Danh sách tệp vừa tải",
+            [
+                new("cv-mau-01.pdf", "Đã đọc chữ", "ok"),
+                new("cv-mau-02.jpg", "Nên kiểm tra OCR", "warn"),
+                new("cv-mau-03.pdf", "Đã có sẵn", "info")
+            ]),
+        new("ai", "Phân tích AI", "spark",
+            "Đối chiếu từng hồ sơ với yêu cầu",
+            "Bạn chọn vị trí và chủ động bắt đầu lượt chấm. Tiến độ được hiển thị cho tới khi hoàn tất.",
+            ["Kết hợp từ khóa và AI", "Che thông tin liên hệ trước khi gửi nội dung tới AI", "Đánh dấu rõ kết quả khi thiếu phần AI"],
+            "Tiến độ lượt phân tích",
+            [
+                new("Hồ sơ mẫu A", "Hoàn tất", "ok"),
+                new("Hồ sơ mẫu B", "Đang phân tích", "info"),
+                new("Hồ sơ mẫu C", "Chỉ theo từ khóa", "warn")
+            ]),
+        new("rank", "Xếp hạng", "ranking",
+            "So sánh có căn cứ, không chỉ nhìn điểm",
+            "Bảng xếp hạng đi kèm mức độ phù hợp, kỹ năng khớp hoặc còn thiếu và phần giải thích.",
+            ["Lọc hồ sơ cần xem kỹ", "Gắn cờ thủ công khi muốn kiểm tra lại", "Bật chế độ ẩn danh khi xem hồ sơ"],
+            "Bảng xếp hạng",
+            [
+                new("1 · Hồ sơ mẫu A", "Rất phù hợp", "ok"),
+                new("2 · Hồ sơ mẫu B", "Phù hợp", "info"),
+                new("3 · Hồ sơ mẫu C", "Cần xem kỹ", "warn")
+            ]),
+        new("track", "Theo dõi", "people",
+            "Mỗi hồ sơ có giai đoạn và lịch sử",
+            "Người tuyển dụng tự cập nhật giai đoạn sau khi xem xét. Hệ thống không tự loại ứng viên.",
+            ["Mới, đang xem, qua vòng CV, phỏng vấn, dự phòng, loại", "Ghi lý do khi loại", "Xem lại dòng thời gian thay đổi"],
+            "Giai đoạn hồ sơ",
+            [
+                new("Hồ sơ mẫu A", "Phỏng vấn", "ok"),
+                new("Hồ sơ mẫu B", "Qua vòng CV", "info"),
+                new("Hồ sơ mẫu C", "Dự phòng", "warn")
+            ]),
+        new("report", "Báo cáo", "report",
+            "Tổng hợp tiến độ để trao đổi và lưu trữ",
+            "Xem số liệu tuyển dụng theo bộ lọc và xuất tệp trong phạm vi workspace bạn được phép.",
+            ["Xuất Excel hoặc PDF", "Có lựa chọn ẩn danh ứng viên", "Hoạt động xuất được ghi nhật ký"],
+            "Báo cáo tuyển dụng",
+            [
+                new("Tổng hợp theo vị trí", "Excel", "ok"),
+                new("Bản in gửi người phụ trách", "PDF", "info"),
+                new("Danh sách ứng viên", "Ẩn danh", "warn")
+            ])
+    ];
+
+    private readonly ElementReference[] buttons = new ElementReference[Tabs.Length];
+    private int selected;
+
+    // Điều hướng bàn phím theo mẫu tab của WAI-ARIA: mũi tên, Home, End.
+    private async Task OnKeyAsync(KeyboardEventArgs args)
+    {
+        var next = args.Key switch
+        {
+            "ArrowRight" => (selected + 1) % Tabs.Length,
+            "ArrowLeft" => (selected + Tabs.Length - 1) % Tabs.Length,
+            "Home" => 0,
+            "End" => Tabs.Length - 1,
+            _ => -1
+        };
+        if (next < 0) return;
+
+        selected = next;
+        await buttons[next].FocusAsync();
+    }
+}

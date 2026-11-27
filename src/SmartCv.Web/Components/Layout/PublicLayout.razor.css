@@ -242,3 +242,88 @@
         scroll-behavior: auto !important;
     }
 }
+
+/* ===== Chỉ áp dụng khi đang ở Landing Page (có .lp-page). Privacy và Terms giữ nguyên giao diện. ===== */
+.public-shell:has(.lp-page) .public-header {
+    transition: box-shadow .2s;
+}
+
+.public-shell:has(.lp-page) .public-header[data-scrolled="true"] {
+    box-shadow: var(--sc-shadow-card);
+}
+
+.public-shell:has(.lp-page) .public-bar {
+    width: min(1160px, calc(100% - 48px));
+    min-height: 66px;
+}
+
+.public-shell:has(.lp-page) .public-nav a {
+    position: relative;
+    padding-block: 8px;
+    white-space: nowrap;
+}
+
+.public-shell:has(.lp-page) .public-nav a[aria-current="true"] {
+    color: var(--sc-teal);
+}
+
+.public-shell:has(.lp-page) .public-nav a[aria-current="true"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: #f6a62d;
+}
+
+.public-shell:has(.lp-page) .public-button {
+    background: #f6a62d;
+    color: var(--sc-deep-teal);
+}
+
+.public-shell:has(.lp-page) .public-button:hover {
+    background: #ffb94a;
+    color: var(--sc-deep-teal);
+}
+
+/* Landing đã giải thích trạng thái đăng ký ngay cạnh CTA chính. */
+.public-shell:has(.lp-page) .public-pending {
+    display: none;
+}
+
+@media (max-width: 767.98px) {
+    .public-shell:has(.lp-page) .public-bar {
+        width: calc(100% - 32px);
+        min-height: 60px;
+    }
+
+    .public-shell:has(.lp-page) .public-menu-toggle,
+    .public-shell:has(.lp-page) .public-button {
+        min-height: 44px;
+    }
+
+    .public-shell:has(.lp-page) .public-nav a {
+        padding-block: 11px;
+    }
+
+    .public-shell:has(.lp-page) .public-nav a[aria-current="true"]::after {
+        right: auto;
+        left: 8px;
+        width: 24px;
+    }
+
+    /* Chỉ có một nút CTA thì đặt cùng hàng với logo và nút menu để đỡ tốn chiều cao. */
+    .public-shell:has(.lp-page) .public-actions:not(:has(.public-login)) {
+        order: 1;
+        width: auto;
+        margin-left: auto;
+        padding-bottom: 0;
+    }
+
+    .public-shell:has(.lp-page) .public-bar:not(:has(.public-login)) .public-menu-toggle {
+        order: 2;
+        margin-left: 0;
+    }
+}

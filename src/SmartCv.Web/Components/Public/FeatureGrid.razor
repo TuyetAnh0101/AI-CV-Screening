@@ -1,19 +1,68 @@
-<section id="features" class="section" aria-labelledby="features-heading">
-    <div class="heading"><p class="eyebrow">TÍNH NĂNG</p><h2 id="features-heading">Các công cụ kết nối thành một quy trình</h2><p>Giảm thao tác chuyển đổi giữa danh sách hồ sơ, bảng đánh giá và ghi chú tuyển dụng.</p></div>
-    <div class="features">
-        @foreach (var item in Items)
-        {
-            <article class="feature"><span class="icon" aria-hidden="true">@item.Icon</span><h3>@item.Title</h3><p>@item.Description</p></article>
-        }
+<section id="features" class="lp-section" aria-labelledby="features-heading">
+    <div class="lp-wrap">
+        <div class="lp-head" data-reveal>
+            <p class="lp-eyebrow">Tính năng</p>
+            <h2 id="features-heading">Từ yêu cầu công việc đến quyết định, trong cùng một nơi</h2>
+            <p class="lp-lead">Mỗi công cụ nhận tiếp kết quả của bước trước, hạn chế việc chép qua lại giữa thư mục hồ sơ, bảng tính và ghi chú.</p>
+        </div>
+
+        <div class="bento">
+            <article class="tile tile-analysis" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="spark" /></span>
+                <h3>Phân tích bằng từ khóa và AI</h3>
+                <p>Nội dung CV được đối chiếu với yêu cầu của từng vị trí. Nếu phần AI không chạy được, kết quả chỉ theo từ khóa được đánh dấu rõ.</p>
+                <div class="mini-match" aria-hidden="true">
+                    <div class="match-source">
+                        <small>Yêu cầu vị trí</small>
+                        <span>Kỹ năng bắt buộc</span>
+                        <span>Kỹ năng ưu tiên</span>
+                        <span>Kinh nghiệm</span>
+                    </div>
+                    <div class="match-link"><i></i><i></i><i></i></div>
+                    <div class="match-source">
+                        <small>Nội dung CV</small>
+                        <span>Dự án đã làm</span>
+                        <span>Công nghệ sử dụng</span>
+                        <span>Quá trình làm việc</span>
+                    </div>
+                </div>
+            </article>
+
+            <article class="tile tile-job" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="briefcase" /></span>
+                <h3>Quản lý vị trí tuyển dụng</h3>
+                <p>Khai báo mô tả, kỹ năng bắt buộc, kỹ năng ưu tiên và tiêu chí đánh giá.</p>
+            </article>
+
+            <article class="tile tile-cv" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="upload" /></span>
+                <h3>Tiếp nhận và quản lý CV</h3>
+                <p>Tải PDF hoặc ảnh, kiểm tra tệp, nhận biết tệp trùng, trích xuất chữ (kể cả OCR) và lưu vào kho hồ sơ.</p>
+            </article>
+
+            <article class="tile tile-rank" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="ranking" /></span>
+                <h3>Xếp hạng có giải thích</h3>
+                <p>Xem điểm, mức độ phù hợp, kỹ năng khớp hoặc còn thiếu và lý do cần xem xét.</p>
+            </article>
+
+            <article class="tile tile-decision" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="people" /></span>
+                <h3>Theo dõi quyết định tuyển dụng</h3>
+                <p>Cập nhật giai đoạn từng hồ sơ, ghi lý do khi loại và xem lại lịch sử thay đổi.</p>
+            </article>
+
+            <article class="tile tile-prompt" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="layers" /></span>
+                <h3>System Prompt và bộ đánh giá</h3>
+                <p>Lưu nhiều phiên bản hướng dẫn AI, chạy thử trên bộ hồ sơ đã gán nhãn và so sánh kết quả trước khi áp dụng.</p>
+            </article>
+
+            <article class="tile tile-report" data-reveal>
+                <span class="tile-icon"><LandingIcon Name="report" /></span>
+                <h3>Báo cáo tuyển dụng</h3>
+                <p>Tổng hợp kết quả và tiến độ, xuất báo cáo Excel hoặc PDF trong đúng phạm vi quyền của bạn.</p>
+            </article>
+        </div>
     </div>
 </section>
-@code {
-    private sealed record Item(string Icon, string Title, string Description);
-    private static readonly Item[] Items = [
-        new("01", "Quản lý vị trí", "Tạo vị trí tuyển dụng và thiết lập bộ tiêu chí phù hợp từng công việc."),
-        new("02", "Phân tích CV", "Kết hợp từ khóa và AI để hỗ trợ đối chiếu hồ sơ với yêu cầu tuyển dụng."),
-        new("03", "Xếp hạng có giải thích", "Xem điểm, mức độ phù hợp và các lý do cần được người tuyển dụng xem xét."),
-        new("04", "System Prompt phiên bản", "Lưu và thử nhiều phiên bản hướng dẫn AI để so sánh kết quả đánh giá."),
-        new("05", "Dashboard tuyển dụng", "Theo dõi lượt xử lý, trạng thái và thông tin tổng hợp trong một giao diện.")
-    ];
-}

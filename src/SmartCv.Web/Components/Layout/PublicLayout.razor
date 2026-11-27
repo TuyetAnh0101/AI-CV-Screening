@@ -16,7 +16,7 @@
         Bỏ qua điều hướng
     </a>
 
-    <header class="public-header">
+    <header class="public-header" @onkeydown="OnHeaderKeyDown">
         <div class="public-bar">
 
             @* Logo *@
@@ -63,6 +63,11 @@
                 <a href="/#how-it-works"
                    @onclick="CloseMenu">
                     Cách hoạt động
+                </a>
+
+                <a href="/#data-protection"
+                   @onclick="CloseMenu">
+                    Bảo vệ dữ liệu
                 </a>
 
                 <a href="/#faq"
@@ -168,6 +173,11 @@
     private void ToggleMenu()
     {
         menuOpen = !menuOpen;
+    }
+
+    private void OnHeaderKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") menuOpen = false;
     }
 
     private void CloseMenu()

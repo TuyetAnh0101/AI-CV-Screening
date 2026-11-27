@@ -1,41 +1,73 @@
 <section class="hero" aria-labelledby="landing-title">
-    <div class="hero-grid">
+    <div class="lp-wrap hero-grid">
         <div class="hero-copy">
-            <p class="hero-kicker"><span aria-hidden="true">●</span> HỖ TRỢ TUYỂN DỤNG BẰNG AI</p>
-            <h1 id="landing-title">Sàng lọc CV rõ ràng.<span> Quyết định tự tin hơn.</span></h1>
-            <p class="hero-lead">Từ vị trí tuyển dụng đến kết quả xếp hạng: SCApp giúp đội ngũ nhân sự quản lý CV, đối chiếu tiêu chí và xem lý do đánh giá tại một nơi.</p>
+            <p class="hero-badge">
+                <LandingIcon Name="spark" Size="15" />
+                Sàng lọc CV có AI hỗ trợ
+            </p>
+            <h1 id="landing-title">Sàng lọc thông minh. <span>Tuyển dụng <em>có căn cứ.</em></span></h1>
+            <p class="hero-lead">
+                SCApp gom việc quản lý hồ sơ, đối chiếu yêu cầu công việc, phân tích bằng từ khóa và AI
+                cùng xếp hạng ứng viên vào một quy trình, để bạn quyết định dựa trên thông tin rõ ràng hơn.
+            </p>
             <div class="hero-actions">
-                <a class="hero-primary" href="@Cta.Href">@Cta.Text <span aria-hidden="true">↗</span></a>
-                <a class="hero-secondary" href="#how-it-works">Xem cách hoạt động</a>
+                <a class="lp-btn lp-btn-primary" href="@Cta.Href">
+                    @Cta.Text <LandingIcon Name="arrow-right" Size="17" />
+                </a>
+                <a class="lp-btn lp-btn-ghost" href="/#how-it-works">Xem cách hoạt động</a>
             </div>
-            @if (!string.IsNullOrWhiteSpace(Cta.Note))
-            { <p class="hero-note" role="status">@Cta.Note</p> }
-            <p class="hero-disclaimer">AI đề xuất và giải thích. Người tuyển dụng đưa ra quyết định cuối cùng.</p>
-        </div>
-        <div class="hero-media">
-            @if (HasScreenshot)
+            @if (Cta.Kind == PublicCtaKind.SignIn)
             {
-                <img src="/img/landing/scapp-dashboard-demo.webp" width="1280" height="800"
-                     alt="Ảnh chụp Dashboard SCApp bằng dữ liệu CV mẫu tổng hợp đã ẩn danh"
-                     class="hero-shot" loading="eager" fetchpriority="high" />
+                <p class="hero-note">Đăng ký công khai hiện chưa mở — hãy dùng tài khoản đã được cấp.</p>
             }
-            else
-            {
-                <div class="hero-fallback" role="img" aria-label="Minh họa bố cục Dashboard SCApp, không phải dữ liệu ứng viên thật">
-                    <div class="fallback-top"><span class="fallback-brand">SCApp</span><span class="fallback-demo">MINH HỌA GIAO DIỆN</span></div>
-                    <div class="fallback-header"><strong>Tổng quan sàng lọc</strong><span>Vị trí • Hồ sơ • Đánh giá</span></div>
-                    <div class="fallback-cards"><span></span><span></span><span></span></div>
-                    <div class="fallback-columns"><div><i></i><i></i><i></i></div><div><i></i><i></i><i></i></div></div>
-                    <div class="fallback-caption">Thay minh họa bằng ảnh chụp SCApp với dữ liệu tổng hợp trước khi nghiệm thu B52</div>
+            <p class="hero-promise">
+                <LandingIcon Name="user" Size="17" />
+                AI đề xuất và giải thích. Người tuyển dụng đưa ra quyết định cuối cùng.
+            </p>
+        </div>
+
+        <figure class="hero-visual">
+            <div class="window" role="img"
+                 aria-label="Hình minh họa giao diện: bảng xếp hạng ba hồ sơ mẫu kèm mức phù hợp và kỹ năng đối chiếu">
+                <div class="window-bar">
+                    <strong>Xếp hạng ứng viên</strong>
+                    <span>Vị trí mẫu: Lập trình viên .NET</span>
                 </div>
-            }
-            <p class="hero-media-label">Giao diện minh họa · Không chứa hồ sơ ứng viên thật</p>
-        </div>
+                <div class="window-body">
+                    @foreach (var row in Rows)
+                    {
+                        <div class="rank @(row.Order == 1 ? "is-top" : "")">
+                            <span class="rank-order">@row.Order</span>
+                            <span class="rank-name">
+                                <strong>@row.Name</strong>
+                                <small>@row.Note</small>
+                            </span>
+                            <span class="rank-score">@row.Score</span>
+                            <span class="rank-fit @row.Tone">@row.Fit</span>
+                        </div>
+                    }
+                    <div class="skills">
+                        <span class="skills-title">Hồ sơ mẫu A</span>
+                        <span class="chip">✓ C#</span>
+                        <span class="chip">✓ SQL Server</span>
+                        <span class="chip warn">! Chưa thấy: Docker</span>
+                    </div>
+                </div>
+            </div>
+            <figcaption>Giao diện minh họa bằng dữ liệu mẫu, không phải ảnh chụp hệ thống.</figcaption>
+        </figure>
     </div>
 </section>
 
 @code {
     [Parameter, EditorRequired] public PublicCta Cta { get; set; } = PublicCta.SignIn;
-    // Bật true sau khi đã chụp & đặt ảnh SCApp mẫu đúng đường dẫn.
-    [Parameter] public bool HasScreenshot { get; set; }
+
+    // Dữ liệu hoàn toàn giả lập, chỉ để minh họa bố cục.
+    private sealed record Row(int Order, string Name, string Note, int Score, string Fit, string Tone);
+    private static readonly Row[] Rows =
+    [
+        new(1, "Hồ sơ mẫu A", "Đủ kỹ năng bắt buộc", 88, "Rất phù hợp", "fit-high"),
+        new(2, "Hồ sơ mẫu B", "Cần xem thêm kinh nghiệm", 74, "Phù hợp", "fit-mid"),
+        new(3, "Hồ sơ mẫu C", "Thiếu một kỹ năng bắt buộc", 61, "Tiềm năng", "fit-low")
+    ];
 }
