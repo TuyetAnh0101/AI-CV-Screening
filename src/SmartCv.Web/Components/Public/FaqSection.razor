@@ -1,15 +1,68 @@
-<section id="faq" class="section" aria-labelledby="faq-heading">
-    <div class="container">
-        <div class="heading"><p class="eyebrow">CÂU HỎI THƯỜNG GẶP</p><h2 id="faq-heading">Những điều cần biết trước khi bắt đầu</h2></div>
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+
+<section id="faq" class="lp-section faq" aria-labelledby="faq-heading">
+    <div class="lp-wrap layout">
+        <div class="heading">
+            <p class="lp-eyebrow">Câu hỏi thường gặp</p>
+            <h2 id="faq-heading">Những điều cần biết trước khi bắt đầu</h2>
+            <p class="lp-lead">Xem thêm <a href="/privacy">chính sách dữ liệu</a> và <a href="/terms">điều khoản sử dụng</a>.</p>
+        </div>
+
         <div class="questions">
-            <details><summary>SCApp có mất phí không?</summary><p>Đây là sản phẩm thử nghiệm phục vụ đồ án. Chưa công bố bảng giá; việc sử dụng có thể bị giới hạn theo cấu hình của hệ thống.</p></details>
-            <details><summary>AI có tự động loại ứng viên không?</summary><p>SCApp đưa ra điểm và gợi ý theo tiêu chí; đội ngũ tuyển dụng cần kiểm tra kết quả và chịu trách nhiệm quyết định cuối cùng.</p></details>
-            <details><summary>Có thể tải những định dạng CV nào?</summary><p>Hệ thống hỗ trợ các định dạng CV phổ biến như PDF và ảnh JPG/PNG, trong giới hạn kích thước do ứng dụng quy định.</p></details>
-            <details><summary>CV và dữ liệu ứng viên được lưu ở đâu?</summary><p>CV được quản lý trong hệ thống SCApp theo cấu hình lưu trữ của đơn vị triển khai. Thông tin cần phân tích có thể được chuyển đến dịch vụ AI; xem thêm chính sách dữ liệu.</p></details>
-            <details><summary>Có thể xuất hoặc yêu cầu xóa dữ liệu ứng viên không?</summary><p>SCApp có chức năng hỗ trợ xử lý yêu cầu dữ liệu ứng viên theo quyền truy cập. Người sử dụng cần kiểm tra quyền và quy trình áp dụng.</p></details>
-            <details><summary>Giới hạn lượt phân tích AI mỗi ngày là bao nhiêu?</summary><p>Giới hạn sử dụng phụ thuộc phiên bản và cấu hình đang triển khai. Trang này không hiển thị hạn mức khi chức năng quota chưa được xác nhận hoạt động.</p></details>
-            <details><summary>Làm sao đăng ký tài khoản?</summary><p>Khi đăng ký công khai được mở và có trang đăng ký, nút bắt đầu sẽ dẫn tới biểu mẫu. Trước thời điểm đó, bạn có thể đăng nhập bằng tài khoản được cấp.</p></details>
-            <details><summary>Làm sao yêu cầu xóa tài khoản?</summary><p>Liên hệ quản trị viên hoặc đầu mối phụ trách dự án. SCApp chưa quảng bá khả năng tự xóa tài khoản từ Landing Page.</p></details>
+            <details>
+                <summary>SCApp hoạt động như thế nào?</summary>
+                <p>Bạn tạo vị trí tuyển dụng, tải CV, kiểm tra chữ đã đọc, chọn vị trí rồi bắt đầu lượt phân tích. Kết quả gồm điểm, giải thích và xếp hạng để người tuyển dụng xem xét.</p>
+            </details>
+            <details>
+                <summary>AI có tự động loại ứng viên không?</summary>
+                <p>Không. SCApp đưa ra điểm và gợi ý theo tiêu chí; người tuyển dụng kiểm tra kết quả, cập nhật giai đoạn và chịu trách nhiệm quyết định cuối cùng.</p>
+            </details>
+            <details>
+                <summary>Hỗ trợ những định dạng CV nào?</summary>
+                <p>PDF, JPG và PNG@(MaxFileSizeMB is { } size ? $", mỗi tệp tối đa {size} MB theo cấu hình hiện tại" : ", trong giới hạn kích thước do hệ thống cấu hình"). PDF dạng quét và ảnh được đọc bằng OCR.</p>
+            </details>
+            <details>
+                <summary>CV không đọc được nội dung thì sao?</summary>
+                <p>Hệ thống báo “Không đọc được chữ” và AI không chấm được hồ sơ đó. Hãy tải lại tệp rõ hơn, ví dụ PDF có chữ chọn được hoặc ảnh chụp thẳng, đủ sáng. Nếu đọc được nhưng có thể sai, bạn sẽ thấy cảnh báo.</p>
+            </details>
+            <details>
+                <summary>Nếu dịch vụ AI gặp lỗi thì sao?</summary>
+                <p>Hồ sơ có thể nhận kết quả dự phòng chỉ tính theo từ khóa, kèm lý do và dấu hiệu cho biết chưa có phần đánh giá của AI. Nên xem lại hoặc chấm lại trước khi dựa vào kết quả đó.</p>
+            </details>
+            <details>
+                <summary>Có xuất được báo cáo tuyển dụng không?</summary>
+                <p>Có. Người có quyền xuất được báo cáo và kết quả xếp hạng trong phạm vi workspace của mình, ở định dạng Excel hoặc PDF tùy cấu hình máy chủ.</p>
+            </details>
+            <details>
+                <summary>Dữ liệu CV được quản lý như thế nào?</summary>
+                <p>CV được lưu theo cấu hình của đơn vị triển khai và truy cập theo workspace, vai trò. Nội dung cần phân tích có thể được chuyển tới dịch vụ AI sau bước che thông tin liên hệ. Yêu cầu xuất hoặc xóa dữ liệu ứng viên được xử lý theo quyền được cấp.</p>
+            </details>
+            <details>
+                <summary>Hạn mức sử dụng AI được xác định ra sao?</summary>
+                <p>Workspace cá nhân có hạn mức lượt đánh giá AI theo ngày và số CV lưu trữ. Con số do hệ thống cấp và quản trị viên có thể điều chỉnh; xem hạn mức hiện tại trong trang Tài khoản.</p>
+            </details>
+            <details>
+                <summary>Làm thế nào để đăng ký tài khoản?</summary>
+                <p>Khi đăng ký công khai được mở, nút “Đăng ký tài khoản” xuất hiện và bạn cần xác minh email trước khi sử dụng. Khi đang đóng, hãy đăng nhập bằng tài khoản được cấp.</p>
+            </details>
+            <details>
+                <summary>Có đăng nhập bằng Google được không?</summary>
+                <p>Được, nếu quản trị viên đã bật: trang đăng nhập sẽ có nút “Tiếp tục với Google”. Tài khoản mới chỉ được tạo khi đăng ký công khai đang mở; tài khoản email đã có cần liên kết Google trong trang Tài khoản. Quản trị viên hệ thống không đăng nhập bằng Google.</p>
+            </details>
+            <details>
+                <summary>SCApp có mất phí không?</summary>
+                <p>Đây là sản phẩm thử nghiệm phục vụ đồ án và chưa công bố bảng giá. Việc sử dụng có thể bị giới hạn theo cấu hình hệ thống.</p>
+            </details>
+            <details>
+                <summary>Làm sao yêu cầu xóa tài khoản?</summary>
+                <p>Hãy liên hệ quản trị viên hoặc đầu mối phụ trách dự án.</p>
+            </details>
         </div>
     </div>
 </section>
+
+@code {
+    // Chỉ nêu con số khi cấu hình thật sự có; không tự đặt giới hạn.
+    private int? MaxFileSizeMB =>
+        int.TryParse(Configuration["CvUpload:MaxFileSizeMB"], out var value) && value > 0 ? value : null;
+}

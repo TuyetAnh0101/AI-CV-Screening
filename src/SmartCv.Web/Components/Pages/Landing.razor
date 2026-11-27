@@ -6,6 +6,8 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject PublicSettingsClient PublicSettings
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>
     SCApp — Sàng lọc CV bằng AI cho người tuyển dụng
@@ -18,35 +20,47 @@
 
 @if (!ready || redirecting)
 {
-    <div class="b52-loading" role="status">
+    <div class="lp-loading" role="status">
         Đang chuẩn bị trang giới thiệu…
     </div>
 }
 else
 {
-    <div class="b52-page">
+    <div class="lp-page" @ref="pageRoot">
 
-        @* 1. Banner giới thiệu và CTA *@
-        <LandingHero Cta="cta"
-                     HasScreenshot="false" />
+        @* 1. Banner giới thiệu, minh họa sản phẩm và CTA *@
+        <LandingHero Cta="cta" />
 
-        @* 2. Những tính năng chính *@
+        @* 2. Tính năng (Bento Grid) *@
         <FeatureGrid />
 
-        @* 3. Các bước sử dụng SCApp *@
+        @* 3. Xem trước trải nghiệm sản phẩm theo tab *@
+        <LandingProductShowcase />
+
+        @* 4. Quy trình sử dụng *@
         <HowItWorks />
 
-        @* 4. Lợi ích dành cho đội tuyển dụng *@
+        @* 5. Vai trò của AI *@
+        <LandingAiSection />
+
+        @* 6. Đối tượng sử dụng *@
+        <LandingAudienceSection />
+
+        @* 7. Lợi ích dành cho người tuyển dụng *@
         <BenefitList />
 
-        @* 5. Bảo vệ dữ liệu ứng viên *@
+        @* 8. Bảo vệ dữ liệu ứng viên *@
         <DataProtectionSection />
 
-        @* 6. Câu hỏi thường gặp *@
+        @* 9. Câu hỏi thường gặp *@
         <FaqSection />
 
-        @* 7. Kêu gọi hành động cuối trang *@
+        @* 10. Kêu gọi hành động cuối trang *@
         <CtaBand Cta="cta" />
+
+        <a class="lp-to-top" href="/#main-content" data-lp-top aria-label="Quay lại đầu trang">
+            <LandingIcon Name="arrow-up" Size="18" />
+        </a>
 
     </div>
 }
@@ -54,6 +68,13 @@ else
 @code {
     private bool ready;
     private bool redirecting;
+
+    // JavaScript chỉ phục vụ hiệu ứng giao diện; nội dung vẫn đọc được nếu module không tải được.
+    private ElementReference pageRoot;
+    private IJSObjectReference? module;
+    private IJSObjectReference? effects;
+    private bool effectsRequested;
+    private bool disposed;
 
     // CTA mặc định an toàn khi chưa có cấu hình.
     private PublicCta cta = PublicCta.SignIn;
@@ -125,5 +146,41 @@ else
 
         // 5. Hiển thị trang giới thiệu.
         ready = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!ready || redirecting || effectsRequested || disposed) return;
+        effectsRequested = true;   // chỉ khởi tạo một lần
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/landing-refinement.js");
+            if (disposed || module is null) return;
+            effects = await module.InvokeAsync<IJSObjectReference>("init", pageRoot);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException
+            or InvalidOperationException or TaskCanceledException)
+        {
+            // Không có hiệu ứng thì trang vẫn dùng được đầy đủ.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        try
+        {
+            if (effects is not null)
+            {
+                await effects.InvokeVoidAsync("dispose");
+                await effects.DisposeAsync();
+            }
+            if (module is not null) await module.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException or TaskCanceledException)
+        {
+            // Circuit đã đóng: trình duyệt tự dọn dẹp.
+        }
     }
 }

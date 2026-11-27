@@ -1,22 +1,39 @@
-<section id="how-it-works" class="section" aria-labelledby="how-heading">
-    <div class="container">
-        <div class="heading"><p class="eyebrow">QUY TRÌNH</p><h2 id="how-heading">5 bước từ vị trí tuyển dụng đến quyết định</h2><p>SCApp tổ chức luồng làm việc theo thứ tự dễ hiểu, không thay thế trách nhiệm đánh giá của nhân sự.</p></div>
+<section id="how-it-works" class="lp-section" aria-labelledby="how-heading">
+    <div class="lp-wrap">
+        <div class="lp-head" data-reveal>
+            <p class="lp-eyebrow">Cách hoạt động</p>
+            <h2 id="how-heading">6 bước từ vị trí tuyển dụng đến quyết định</h2>
+            <p class="lp-lead">Tải CV lên chưa phải là chấm điểm: bạn kiểm tra chữ đã đọc, chọn vị trí rồi mới bắt đầu lượt phân tích.</p>
+        </div>
+
         <ol class="steps">
-            @foreach (var step in Steps)
+            @for (var index = 0; index < Steps.Length; index++)
             {
-                <li><span class="number">@step.Number</span><h3>@step.Title</h3><p>@step.Description</p></li>
+                var step = Steps[index];
+                <li data-lp-step>
+                    <span class="marker">
+                        <LandingIcon Name="@step.Icon" Size="19" />
+                    </span>
+                    <span class="number">Bước @(index + 1)</span>
+                    <h3>@step.Title</h3>
+                    <p>@step.Description</p>
+                </li>
             }
         </ol>
-        <p class="note">Khi đăng ký công khai chưa mở, người dùng cần tài khoản được quản trị viên cấp để bắt đầu.</p>
     </div>
 </section>
+
 @code {
-    private sealed record Step(string Number, string Title, string Description);
-    private static readonly Step[] Steps = [
-        new("01", "Đăng ký", "Tạo tài khoản khi được mở hoặc đăng nhập tài khoản đã cấp."),
-        new("02", "Tạo vị trí", "Khai báo yêu cầu và tiêu chí đánh giá."),
-        new("03", "Tải CV", "Nộp hồ sơ được phép xử lý, chọn vị trí phù hợp."),
-        new("04", "AI phân tích", "Hệ thống hỗ trợ đối chiếu và tổng hợp kết quả."),
-        new("05", "HR quyết định", "Xem giải thích, kiểm tra và cập nhật trạng thái.")
+    private sealed record Step(string Icon, string Title, string Description);
+
+    // Thứ tự theo trang Tải lên & Phân tích: nguồn và đồng ý → tải → kiểm tra chữ → chọn công việc → phân tích.
+    private static readonly Step[] Steps =
+    [
+        new("briefcase", "Tạo vị trí", "Khai báo yêu cầu, kỹ năng và tiêu chí đánh giá."),
+        new("upload", "Tải hồ sơ", "Chọn nguồn CV, xác nhận đồng ý rồi tải tệp."),
+        new("text", "Kiểm tra chữ", "Xem tình trạng trích xuất và cảnh báo nếu có."),
+        new("spark", "Chạy đánh giá", "Chọn vị trí và chủ động bắt đầu lượt phân tích."),
+        new("ranking", "Xem kết quả", "Đọc điểm, giải thích và thứ hạng."),
+        new("user", "Quyết định", "Người tuyển dụng xem xét và cập nhật giai đoạn.")
     ];
 }

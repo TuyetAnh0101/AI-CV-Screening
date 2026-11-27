@@ -1,12 +1,38 @@
-<section id="data-protection" class="section" aria-labelledby="privacy-heading">
-    <div class="container">
-        <div class="intro"><p class="eyebrow">BẢO VỆ DỮ LIỆU</p><h2 id="privacy-heading">Quyền riêng tư cần được tính đến trong từng bước</h2><p>Những cơ chế dưới đây gắn với các chức năng đã triển khai; người sử dụng vẫn cần quyền xử lý CV hợp lệ.</p></div>
-        <div class="cards">
-            <article><span aria-hidden="true">01</span><h3>Dữ liệu theo không gian</h3><p>API nghiệp vụ được giới hạn theo workspace của người dùng.</p></article>
-            <article><span aria-hidden="true">02</span><h3>Che thông tin liên hệ</h3><p>Hệ thống có bước che thông tin nhận dạng/liên hệ trước khi chuyển nội dung cần phân tích tới AI.</p></article>
-            <article><span aria-hidden="true">03</span><h3>Quyền dữ liệu ứng viên</h3><p>Hỗ trợ xử lý yêu cầu xuất hoặc xóa dữ liệu ứng viên theo quyền được cấp.</p></article>
-            <article><span aria-hidden="true">04</span><h3>Không có chức năng mua bán CV</h3><p>SCApp được xây dựng phục vụ sàng lọc, không triển khai tính năng kinh doanh dữ liệu hồ sơ.</p></article>
+<section id="data-protection" class="lp-section" aria-labelledby="privacy-heading">
+    <div class="lp-wrap">
+        <div class="lp-head" data-reveal>
+            <p class="lp-eyebrow">Bảo vệ dữ liệu</p>
+            <h2 id="privacy-heading">Dữ liệu ứng viên được cân nhắc ở từng bước</h2>
+            <p class="lp-lead">Các cơ chế dưới đây giúp giảm rủi ro nhưng không phải cam kết tuyệt đối. Người sử dụng vẫn cần có quyền xử lý CV hợp lệ.</p>
         </div>
-        <a class="privacy-link" href="/privacy">Đọc chính sách dữ liệu <span aria-hidden="true">↗</span></a>
+
+        <div class="grid">
+            @foreach (var item in Items)
+            {
+                <article>
+                    <span class="item-icon"><LandingIcon Name="@item.Icon" /></span>
+                    <div><h3>@item.Title</h3><p>@item.Description</p></div>
+                </article>
+            }
+        </div>
+
+        <div class="foot">
+            <p>SCApp không có chức năng mua bán hồ sơ. Nội dung cần phân tích có thể được chuyển tới dịch vụ AI bên ngoài.</p>
+            <a href="/privacy">Đọc chính sách dữ liệu <LandingIcon Name="arrow-right" Size="16" /></a>
+        </div>
     </div>
 </section>
+
+@code {
+    private sealed record Item(string Icon, string Title, string Description);
+    private static readonly Item[] Items =
+    [
+        new("key", "Phân quyền và tách workspace", "API nghiệp vụ được giới hạn theo vai trò và workspace của người dùng."),
+        new("mask", "Che thông tin liên hệ", "Có bước che thông tin nhận dạng và liên hệ trước khi gửi nội dung cần thiết tới AI."),
+        new("shield", "Đồng ý và nguồn hồ sơ", "Khi tải CV, nguồn hồ sơ và xác nhận đồng ý được ghi lại cùng tệp."),
+        new("user", "Yêu cầu của ứng viên", "Hỗ trợ xuất hoặc xóa dữ liệu ứng viên theo quyền được cấp."),
+        new("clock", "Lưu giữ và ẩn danh hóa", "Thời hạn lưu giữ được cấu hình; quản trị viên có công cụ ẩn danh hóa CV."),
+        new("log", "Nhật ký hoạt động", "Các thao tác quan trọng được ghi lại để quản trị viên kiểm tra."),
+        new("database", "Sao lưu hệ thống", "Quản trị viên vận hành sao lưu cho toàn hệ thống; đây không phải tính năng tự xuất dữ liệu workspace.")
+    ];
+}
